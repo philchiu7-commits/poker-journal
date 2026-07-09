@@ -2,9 +2,12 @@
 
 const POSITIONS = ["U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
-const ACTS = ["fold", "check", "call", "bet", "raise", "limp", "jam"];
-const SIZES_PRE = ["min", "2.5x", "3x", "4x+", "jam"];
-const SIZES_POST = ["33%", "50%", "66%", "75%", "pot", "over", "jam"];
+const ACTS = ["fold", "check", "call", "bet", "raise", "3bet", "limp", "jam"];
+const ACTS_PRE = ["fold", "check", "call", "limp", "raise", "3bet"];
+const ACTS_POST = ["fold", "check", "call", "bet", "raise"];
+const SIZED_ACTS = ["bet", "raise", "3bet"];
+const SIZES_PRE = ["30k", "40k", "50k", "60k", "Jam"];
+const SIZES_POST = ["33%", "50%", "66%", "75%", "pot", "over", "Jam"];
 
 const RANKS = "AKQJT98765432";
 const SUITS = [

@@ -71,30 +71,46 @@ function oppStats() {
   return m;
 }
 
+function updateGroupsDatalist() {
+  $("groups").innerHTML = [...new Set(OPP.map((o) => o.group).filter(Boolean))]
+    .map((g) => `<option value="${esc(g)}">`).join("");
+}
+
+function oppRowHTML(o, st) {
+  const tags = (o.tags || []).slice(0, 3)
+    .map((t) => `<span class="chip mini on">${esc(TAG_BY_ID[t]?.label || t)}</span>`).join("");
+  const sub = [st ? `${st.count} hand${st.count > 1 ? "s" : ""}` : "", o.physical]
+    .filter(Boolean).join(" · ");
+  return `<div class="lrow" data-opp="${o.id}">
+    <div class="t">${esc(o.name)}<span class="when">${st ? fmtWhen(st.last) : ""}</span></div>
+    ${sub ? `<div class="s">${esc(sub)}</div>` : ""}
+    ${tags ? `<div class="chiprow" style="margin-top:6px">${tags}</div>` : ""}
+  </div>`;
+}
+
 function renderOpponents() {
   const q = $("opp-search").value.trim().toLowerCase();
   const stats = oppStats();
   let list = OPP.filter((o) => !o.archived);
   if (q) list = list.filter((o) =>
-    [o.name, o.physical].join(" ").toLowerCase().includes(q));
+    [o.name, o.physical, o.group].join(" ").toLowerCase().includes(q));
   list.sort((a, b) =>
     (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
-  $("opp-list").innerHTML = list.map((o) => {
-    const st = stats[o.id];
-    const tags = (o.tags || []).slice(0, 3)
-      .map((t) => `<span class="chip mini on">${esc(TAG_BY_ID[t]?.label || t)}</span>`).join("");
-    const sub = [st ? `${st.count} hand${st.count > 1 ? "s" : ""}` : "", o.physical]
-      .filter(Boolean).join(" · ");
-    return `<div class="lrow" data-opp="${o.id}">
-      <div class="t">${esc(o.name)}<span class="when">${st ? fmtWhen(st.last) : ""}</span></div>
-      ${sub ? `<div class="s">${esc(sub)}</div>` : ""}
-      ${tags ? `<div class="chiprow" style="margin-top:6px">${tags}</div>` : ""}
-    </div>`;
-  }).join("") || `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
+  // section by group (groups alphabetical, ungrouped last)
+  const groups = [...new Set(list.map((o) => o.group || ""))]
+    .sort((a, b) => (a === "") - (b === "") || a.localeCompare(b));
+  $("opp-list").innerHTML = list.length ? groups.map((g) => {
+    const rows = list.filter((o) => (o.group || "") === g)
+      .map((o) => oppRowHTML(o, stats[o.id])).join("");
+    const head = groups.length > 1 || g
+      ? `<div class="tagcat">${esc(g || "ungrouped")}</div>` : "";
+    return head + rows;
+  }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
+  updateGroupsDatalist();
 }
 
-async function createOpponent(name) {
-  const o = { id: uid(), name, tags: [], physical: "", notes: [],
+async function createOpponent(name, group) {
+  const o = { id: uid(), name, group: group || "", tags: [], physical: "", notes: [],
     createdAt: Date.now(), updatedAt: Date.now(), archived: false };
   OPP.push(o);
   await dbPut("opponents", o);
@@ -108,9 +124,10 @@ function renderOppDetail(id) {
   if (!o) { location.hash = "#opponents"; return; }
   curOppId = id;
   $("od-name").textContent = o.name;
-  $("od-meta").textContent = o.physical || "";
+  $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
+  $("od-e-group").value = o.group || "";
   $("od-e-physical").value = o.physical || "";
 
   $("od-tags").innerHTML = TAG_CATS.map((cat) =>
@@ -170,6 +187,13 @@ function handText(h) {
       `${actorLabel(h, "v" + i)}${seat(v.pos)}${v.cards ? " " + cardsStr(v.cards) : ""}`),
   ];
   L.push(players.join("  vs  "));
+  if (h.blinds) {
+    const b = [];
+    if (h.blinds.sb) b.push(h.blinds.sb);
+    if (h.blinds.bb) b.push(h.blinds.bb);
+    const line = b.join("/") + (h.blinds.std ? ` (${h.blinds.std} straddle)` : "");
+    if (line) L.push(`Blinds: ${line}`);
+  }
   if (h.effStack) L.push(`Eff. stack: $${h.effStack}`);
   for (const st of STREETS) {
     const acts = (h.actions || []).filter((a) => a.street === st);
@@ -219,6 +243,7 @@ function newDraft(keep) {
     board: [null, null, null, null, null],
     actions: [], street: "pre", actor: null, lastV: "v0",
     note: "", effStack: "",
+    sb: keep ? keep.sb : "", bb: keep ? keep.bb : "", std: keep ? keep.std : "",
   };
 }
 let draft = newDraft();
@@ -304,13 +329,14 @@ function renderHandEntry() {
   $("he-actor").innerHTML =
     `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` + vBtns;
 
-  // action buttons
-  $("he-acts").innerHTML = ["fold", "check", "call", "limp", "bet", "raise", "jam"].map((a) =>
-    `<button data-act="${a}">${a[0].toUpperCase() + a.slice(1)}</button>`).join("");
+  // action buttons — street-aware: no Bet preflop (3bet instead), no Limp postflop
+  const acts = d.street === "pre" ? ACTS_PRE : ACTS_POST;
+  $("he-acts").innerHTML = acts.map((a) =>
+    `<button data-act="${a}">${a === "3bet" ? "3bet" : a[0].toUpperCase() + a.slice(1)}</button>`).join("");
 
-  // size strip (when last action is a sizeable bet/raise without a size yet)
+  // size strip (when last action is a sizeable bet/raise/3bet without a size yet)
   const last = d.actions[d.actions.length - 1];
-  const needSize = last && ["bet", "raise"].includes(last.act) && !last.size;
+  const needSize = last && SIZED_ACTS.includes(last.act) && !last.size;
   $("he-sizes").classList.toggle("hidden", !needSize);
   if (needSize) {
     const sizes = last.street === "pre" ? SIZES_PRE : SIZES_POST;
@@ -332,9 +358,10 @@ function renderHandEntry() {
   });
   $("he-cards").innerHTML = ch;
 
-  // note + eff stack (don't clobber focused inputs)
-  if (document.activeElement !== $("he-note")) $("he-note").value = d.note;
-  if (document.activeElement !== $("he-effstack")) $("he-effstack").value = d.effStack;
+  // note + blinds + eff stack (don't clobber focused inputs)
+  for (const [id, val] of [["he-note", d.note], ["he-sb", d.sb], ["he-bb", d.bb],
+                           ["he-std", d.std], ["he-effstack", d.effStack]])
+    if (document.activeElement !== $(id)) $(id).value = val;
 }
 
 /* --- hand-entry interactions (delegated, bound once) --- */
@@ -392,8 +419,12 @@ function bindHandEntry() {
   });
 
   $("he-undo").onclick = undo;
-  $("he-note").oninput = () => { draft.note = $("he-note").value; metaSet("draftHand", JSON.parse(JSON.stringify(draft))); };
-  $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; metaSet("draftHand", JSON.parse(JSON.stringify(draft))); };
+  const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+  $("he-note").oninput = () => { draft.note = $("he-note").value; persistDraft(); };
+  $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
+  $("he-sb").oninput = () => { draft.sb = $("he-sb").value; persistDraft(); };
+  $("he-bb").oninput = () => { draft.bb = $("he-bb").value; persistDraft(); };
+  $("he-std").oninput = () => { draft.std = $("he-std").value; persistDraft(); };
   $("he-save").onclick = () => saveHand(false);
   $("he-savenext").onclick = () => saveHand(true);
 }
@@ -488,6 +519,9 @@ async function saveHand(nextHand) {
     villainIds: d.villains.map((v) => v.opponentId).filter(Boolean),
     board: d.board, actions: d.actions,
     effStack: d.effStack ? Number(d.effStack) : null,
+    blinds: (d.sb || d.bb || d.std)
+      ? { sb: d.sb ? Number(d.sb) : null, bb: d.bb ? Number(d.bb) : null, std: d.std ? Number(d.std) : null }
+      : null,
     note: d.note.trim(),
   };
   await dbPut("hands", rec);
@@ -518,6 +552,9 @@ function loadHandIntoDraft(h) {
     actor: null, lastV: "v0",
     note: h.note || "",
     effStack: h.effStack != null ? String(h.effStack) : "",
+    sb: h.blinds?.sb != null ? String(h.blinds.sb) : "",
+    bb: h.blinds?.bb != null ? String(h.blinds.bb) : "",
+    std: h.blinds?.std != null ? String(h.blinds.std) : "",
   };
   undoStack = [];
 }
@@ -536,8 +573,8 @@ function bindStatic() {
   $("opp-new-save").onclick = async () => {
     const name = $("opp-new-name").value.trim();
     if (!name) return;
-    const o = await createOpponent(name);
-    $("opp-new-name").value = "";
+    const o = await createOpponent(name, $("opp-new-group").value.trim());
+    $("opp-new-name").value = ""; $("opp-new-group").value = "";
     $("opp-new").classList.add("hidden");
     location.hash = "#opp/" + o.id;
   };
@@ -551,6 +588,7 @@ function bindStatic() {
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);
     o.name = $("od-e-name").value.trim() || o.name;
+    o.group = $("od-e-group").value.trim();
     o.physical = $("od-e-physical").value.trim();
     o.updatedAt = Date.now();
     await dbPut("opponents", o);

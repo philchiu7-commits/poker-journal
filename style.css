@@ -113,12 +113,11 @@ button.danger {
   font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .seg button.on { background: var(--accent); color: #0a0d12; }
-.actgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.actgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .actgrid button {
   background: var(--panel); color: var(--text); border: 1px solid var(--line);
   border-radius: 12px; padding: 0; height: 56px; font-size: 15px; font-weight: 600; cursor: pointer;
 }
-.actgrid button:last-child { grid-column: span 2; }
 .actgrid button:active { border-color: var(--accent); }
 #he-sizes { margin-top: 8px; }
 #he-sizes input { width: 76px; margin: 0; padding: 8px; }
@@ -134,9 +133,9 @@ button.danger {
 .cdiv { color: var(--muted); font-size: 10px; text-transform: uppercase; margin: 0 3px; flex: none; }
 .cs { color: #e6e8ec; } .ch { color: var(--red); } .cd { color: var(--blue); } .cc { color: var(--green); }
 
-.stackrow { display: flex; gap: 10px; align-items: center; }
-.stackrow .glabel { margin: 0; }
-.stackrow input { width: 110px; margin: 0; }
+.stackrow { display: flex; gap: 8px; align-items: center; }
+.stackrow .glabel { margin: 0; width: 64px; flex: none; }
+.stackrow input { flex: 1; min-width: 0; margin: 0; }
 
 .savebar {
   position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom));

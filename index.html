@@ -24,6 +24,7 @@
   <input id="opp-search" type="search" placeholder="Search name, look…" autocomplete="off">
   <div id="opp-new" class="panel hidden">
     <input id="opp-new-name" placeholder="Name / nickname" autocomplete="off">
+    <input id="opp-new-group" placeholder="Group (e.g. Friday game)" list="groups" autocomplete="off">
     <button id="opp-new-save" class="primary">Add opponent</button>
   </div>
   <div id="opp-list" class="list"></div>
@@ -39,6 +40,7 @@
   <div id="od-meta" class="muted sub2"></div>
   <div id="od-editform" class="panel hidden">
     <input id="od-e-name" placeholder="Name" autocomplete="off">
+    <input id="od-e-group" placeholder="Group" list="groups" autocomplete="off">
     <input id="od-e-physical" placeholder="Looks like… (for re-identifying)" autocomplete="off">
     <div class="row">
       <button id="od-e-save" class="primary">Save</button>
@@ -97,6 +99,13 @@
   </div>
 
   <div class="hgroup stackrow">
+    <span class="glabel">Blinds</span>
+    <input id="he-sb" type="number" placeholder="SB" inputmode="numeric">
+    <input id="he-bb" type="number" placeholder="BB" inputmode="numeric">
+    <input id="he-std" type="number" placeholder="STD" inputmode="numeric">
+  </div>
+
+  <div class="hgroup stackrow">
     <span class="glabel">Eff. stack</span>
     <input id="he-effstack" type="number" placeholder="$" inputmode="numeric">
   </div>
@@ -140,6 +149,8 @@
 </section>
 
 </main>
+
+<datalist id="groups"></datalist>
 
 <nav id="tabbar">
   <button data-tab="opponents"><span class="ticon">☺</span>Opponents</button>
