@@ -244,7 +244,84 @@ function newDraft(keep) {
     actions: [], street: "pre", actor: null, lastV: "v0",
     note: "", effStack: "",
     sb: keep ? keep.sb : "", bb: keep ? keep.bb : "", std: keep ? keep.std : "",
+    mode: keep ? keep.mode : "chips", focusPos: null,
   };
+}
+
+/* ---- seat model (table mode) — positions ARE the seats ---- */
+function seatOccupant(pos) {
+  if (draft.heroPos === pos) return { type: "hero" };
+  const idx = draft.villains.findIndex((v) => v.pos === pos);
+  if (idx >= 0) return { type: "villain", idx };
+  return { type: "empty" };
+}
+function actorForPos(pos) {
+  const o = seatOccupant(pos);
+  return o.type === "hero" ? "hero" : o.type === "villain" ? "v" + o.idx : null;
+}
+/* Screen slots around the oval, slot 0 = bottom-centre (hero's seat). */
+const SEAT_SLOTS = [
+  [50, 94], [19, 84], [13, 49], [25, 14], [50, 7], [75, 14], [87, 49], [81, 84],
+];
+/* Rotate POSITIONS so hero's seat is at the bottom; else default order. */
+function seatOrder() {
+  const hi = draft.heroPos ? POSITIONS.indexOf(draft.heroPos) : 0;
+  return SEAT_SLOTS.map((slot, i) => ({ slot, pos: POSITIONS[(hi + i) % POSITIONS.length] }));
+}
+
+function renderTable() {
+  const d = draft;
+  // center board mirror
+  const board = d.board.map((c) => c ? cardHTML(c) : "").filter(Boolean).join(" ");
+  let felt = `<div class="feltoval"></div>
+    <div class="feltcenter">${board ? `<div class="feltboard">${board}</div>` : ""}</div>`;
+
+  felt += seatOrder().map(({ slot, pos }) => {
+    const occ = seatOccupant(pos);
+    const focused = d.focusPos === pos;
+    let inner, cls = "tseat";
+    if (occ.type === "hero") {
+      cls += " hero";
+      const cards = d.heroCards.some(Boolean)
+        ? `<div class="theroc">${d.heroCards.map((c) => c ? cardHTML(c) : "").join("")}</div>` : "";
+      inner = `${cards}<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">You</span></div>`;
+    } else if (occ.type === "villain") {
+      cls += " vill";
+      const v = d.villains[occ.idx];
+      const o = oppById(v.opponentId);
+      const tag = o?.tags?.[0] ? `<span class="ttag">${esc(TAG_BY_ID[o.tags[0]]?.label || o.tags[0])}</span>` : "";
+      inner = `<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">${esc(o?.name || "?")}</span></div>${tag}`;
+    } else {
+      cls += " empty";
+      inner = `<div class="tpill add"><span class="tpos">${pos}</span><span class="tnm">＋</span></div>`;
+    }
+    if (focused) cls += " focus";
+    return `<button class="${cls}" data-seat="${pos}" style="left:${slot[0]}%;top:${slot[1]}%">${inner}</button>`;
+  }).join("");
+  $("he-felt").innerHTML = felt;
+
+  // assignment strip for the focused seat
+  const el = $("he-seatassign");
+  if (!d.focusPos) {
+    el.innerHTML = `<div class="assignhint">Tap a seat to place yourself or a villain.</div>`;
+    return;
+  }
+  const occ = seatOccupant(d.focusPos);
+  const stats = oppStats();
+  const opps = OPP.filter((o) => !o.archived).sort((a, b) =>
+    (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
+  const seatedIds = d.villains.filter((v) => v.pos && v.pos !== d.focusPos).map((v) => v.opponentId);
+  el.innerHTML =
+    `<div class="assignhead"><span class="tpos">${d.focusPos}</span>` +
+    (occ.type === "empty" ? `<span class="muted">— place a player</span>`
+      : `<span>${occ.type === "hero" ? "You" : esc(oppById(d.villains[occ.idx].opponentId)?.name || "?")}</span>
+         <button class="chip mini" data-seatclear>Clear</button>`) +
+    `</div>
+    <div class="chiprow scroll">
+      <button class="chip${occ.type === "hero" ? " on" : ""}" data-assign-hero>You</button>` +
+    opps.map((o) => `<button class="chip${occ.type === "villain" && d.villains[occ.idx].opponentId === o.id ? " on" : ""}`
+      + `${seatedIds.includes(o.id) ? " seated" : ""}" data-assign-opp="${o.id}">${esc(o.name)}</button>`).join("") +
+    `</div>`;
 }
 let draft = newDraft();
 let undoStack = [];
@@ -264,6 +341,8 @@ function draftChanged() {
   renderHandEntry();
 }
 function currentActor() {
+  if (draft.mode === "table")
+    return draft.focusPos ? actorForPos(draft.focusPos) : null;
   return draft.actor || (draft.villains.length ? "v0" : "hero");
 }
 function ensureVillainSlot() {
@@ -294,11 +373,21 @@ function lineText(d) {
 
 function renderHandEntry() {
   const d = draft;
+  const table = d.mode === "table";
 
   // hand line
   const lt = lineText(d);
-  $("he-line").textContent = lt || "New hand — tap a villain";
+  $("he-line").textContent = lt || (table ? "New hand — tap a seat" : "New hand — tap a villain");
   $("he-line").classList.toggle("muted", !lt);
+
+  // mode toggle + show/hide the two entry styles
+  $("he-mode").innerHTML =
+    `<button class="${!table ? "on" : ""}" data-mode="chips">Chips</button>` +
+    `<button class="${table ? "on" : ""}" data-mode="table">Table</button>`;
+  $("he-chipsonly").classList.toggle("hidden", table);
+  $("he-table").classList.toggle("hidden", !table);
+  $("he-actor").classList.toggle("hidden", table);   // seat replaces the actor toggle
+  if (table) renderTable();
 
   // villain chips (existing opponents only — add new ones in the Opponents tab)
   const stats = oppStats();
@@ -371,7 +460,32 @@ function bindHandEntry() {
     const b = e.target.closest("button, input");
     if (!b) return;
 
-    if (b.dataset.vopp !== undefined) {          // toggle villain selection
+    if (b.dataset.mode) {
+      mutate(() => { draft.mode = b.dataset.mode; });
+    } else if (b.dataset.seat) {                 // table: focus a seat
+      mutate(() => { draft.focusPos = draft.focusPos === b.dataset.seat ? null : b.dataset.seat; });
+    } else if (b.dataset.assignHero !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; }); // bump villain off
+        draft.heroPos = pos;
+      });
+    } else if (b.dataset.assignOpp !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos, id = b.dataset.assignOpp;
+        if (draft.heroPos === pos) draft.heroPos = null;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; }); // clear the seat
+        let v = draft.villains.find((x) => x.opponentId === id);
+        if (v) v.pos = pos;                                                  // move existing
+        else draft.villains.push({ opponentId: id, pos, cards: [null, null] });
+      });
+    } else if (b.dataset.seatclear !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos;
+        if (draft.heroPos === pos) draft.heroPos = null;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
+      });
+    } else if (b.dataset.vopp !== undefined) {   // toggle villain selection
       mutate(() => {
         const i = draft.villains.findIndex((v) => v.opponentId === b.dataset.vopp);
         if (i >= 0) draft.villains.splice(i, 1);
@@ -392,11 +506,13 @@ function bindHandEntry() {
         if (b.dataset.actor.startsWith("v")) draft.lastV = b.dataset.actor;
       });
     } else if (b.dataset.act) {
+      const actor = currentActor();
+      if (!actor) { toast("Tap a seated player first"); return; }
       mutate(() => {
-        const actor = currentActor();
-        if (actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
+        if (draft.mode !== "table" && actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
         draft.actions.push({ street: draft.street, actor, act: b.dataset.act, size: null });
-        draft.actor = actor === "hero" ? draft.lastV : "hero";   // auto-alternate
+        if (draft.mode !== "table")
+          draft.actor = actor === "hero" ? draft.lastV : "hero";   // auto-alternate (chips mode)
       });
     } else if (b.dataset.size) {
       mutate(() => {

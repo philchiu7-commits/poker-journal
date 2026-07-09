@@ -72,14 +72,23 @@
     <button id="he-undo" class="undobtn">Undo</button>
   </div>
 
-  <div class="hgroup">
-    <div class="glabel">Villains</div>
-    <div id="he-villains" class="chiprow scroll"></div>
+  <div class="hgroup"><div id="he-mode" class="seg"></div></div>
+
+  <div id="he-chipsonly">
+    <div class="hgroup">
+      <div class="glabel">Villains</div>
+      <div id="he-villains" class="chiprow scroll"></div>
+    </div>
+
+    <div class="hgroup">
+      <div class="posrow"><span class="poslabel">Hero</span><div id="he-heropos" class="chiprow tight"></div></div>
+      <div class="posrow"><span class="poslabel">Vill</span><div id="he-vpos" class="chiprow tight"></div></div>
+    </div>
   </div>
 
-  <div class="hgroup">
-    <div class="posrow"><span class="poslabel">Hero</span><div id="he-heropos" class="chiprow tight"></div></div>
-    <div class="posrow"><span class="poslabel">Vill</span><div id="he-vpos" class="chiprow tight"></div></div>
+  <div id="he-table" class="hidden">
+    <div id="he-felt"></div>
+    <div id="he-seatassign"></div>
   </div>
 
   <div class="hgroup actionpad">

@@ -122,6 +122,31 @@ button.danger {
 #he-sizes { margin-top: 8px; }
 #he-sizes input { width: 76px; margin: 0; padding: 8px; }
 
+/* ---- table mode ---- */
+#he-felt { position: relative; height: 300px; margin: 4px 0 10px; }
+.feltoval { position: absolute; inset: 20px 6px; background: #15412f; border: 6px solid #0c2c20; border-radius: 50%; }
+.feltcenter { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; }
+.feltboard { display: flex; gap: 3px; }
+.feltboard span { background: #1e222b; border-radius: 3px; padding: 2px 5px; font-size: 13px; font-weight: 700; }
+.tseat { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; padding: 0; cursor: pointer; text-align: center; }
+.tpill { background: var(--panel2); border: 1px solid #3a4150; border-radius: 10px; padding: 4px 6px;
+  min-width: 46px; display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.tpill .tpos { font-size: 9px; color: var(--muted); }
+.tpill .tnm { font-size: 11px; font-weight: 500; color: var(--text); max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tseat.hero .tpill { background: #1c2c47; border-color: var(--accent); }
+.tseat.empty .tpill { border-style: dashed; }
+.tseat.empty .tnm { color: var(--accent); }
+.tseat.focus .tpill { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,156,255,.4); }
+.ttag { display: inline-block; margin-top: 2px; font-size: 9px; color: var(--accent); background: #1c2c47; border-radius: 6px; padding: 0 5px; }
+.theroc { display: flex; gap: 2px; justify-content: center; margin-bottom: 2px; }
+.theroc span { background: #1e222b; border-radius: 3px; padding: 1px 3px; font-size: 10px; font-weight: 700; }
+#he-seatassign { margin-bottom: 4px; }
+.assignhint { color: var(--muted); font-size: 13px; text-align: center; padding: 6px 0; }
+.assignhead { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 8px; }
+.assignhead .tpos { color: var(--accent); font-weight: 600; }
+.assignhead button { width: auto; margin-left: auto; }
+.chip.seated { opacity: .5; }
+
 .cardsrow { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .cslot {
   width: 40px; height: 54px; border-radius: 8px; border: 1px dashed var(--line);
