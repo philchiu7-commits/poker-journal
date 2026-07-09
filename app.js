@@ -7,6 +7,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 /* ---------- in-memory caches (source of truth is IndexedDB) ---------- */
 let OPP = [], HANDS = [];
 let curOppId = null, curHandId = null;
+let storageDurable = false;
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
@@ -195,6 +196,12 @@ function handText(h) {
     if (line) L.push(`Blinds: ${line}`);
   }
   if (h.effStack) L.push(`Eff. stack: $${h.effStack}`);
+  if (h.squid) {
+    const s = [];
+    if (h.squid.have != null) s.push(`${h.squid.have} have`);
+    if (h.squid.left != null) s.push(`${h.squid.left} left`);
+    if (s.length) L.push(`Squid: ${s.join(", ")}`);
+  }
   for (const st of STREETS) {
     const acts = (h.actions || []).filter((a) => a.street === st);
     const board = boardFor(h, st);
@@ -230,6 +237,14 @@ function renderData() {
       ? (days === 0 ? "Backed up today." : `Last backup ${days} day${days > 1 ? "s" : ""} ago.`)
       : "Never backed up — data lives only on this phone.";
   });
+  const store = $("data-storage");
+  if (storageDurable) {
+    store.textContent = "✓ Storage is protected — your data won't be auto-cleared.";
+    store.className = "muted sub2 ok";
+  } else {
+    store.textContent = "⚠ Storage not protected. Install to Home Screen (Share → Add to Home Screen) and reopen so iOS keeps your data.";
+    store.className = "sub2 warn";
+  }
   $("data-stats").textContent = `${OPP.length} opponents · ${HANDS.length} hands`;
 }
 
@@ -244,6 +259,7 @@ function newDraft(keep) {
     actions: [], street: "pre", actor: null, lastV: "v0",
     note: "", effStack: "",
     sb: keep ? keep.sb : "", bb: keep ? keep.bb : "", std: keep ? keep.std : "",
+    squidHave: keep ? keep.squidHave : "", squidLeft: keep ? keep.squidLeft : "",
     mode: keep ? keep.mode : "chips", focusPos: null,
   };
 }
@@ -360,6 +376,8 @@ function lineText(d) {
     parts.push("Hero" + (d.heroPos ? " " + d.heroPos : "") +
       (d.heroCards.some(Boolean) ? " " + cardsStr(d.heroCards) : ""));
   if (d.effStack) parts.push("eff $" + d.effStack);
+  if (d.squidHave || d.squidLeft)
+    parts.push("squid " + (d.squidHave || "?") + "/" + (d.squidLeft || "?"));
   for (const st of STREETS) {
     const acts = d.actions.filter((a) => a.street === st);
     const b = boardFor(d, st);
@@ -447,9 +465,10 @@ function renderHandEntry() {
   });
   $("he-cards").innerHTML = ch;
 
-  // note + blinds + eff stack (don't clobber focused inputs)
+  // note + blinds + eff stack + squid (don't clobber focused inputs)
   for (const [id, val] of [["he-note", d.note], ["he-sb", d.sb], ["he-bb", d.bb],
-                           ["he-std", d.std], ["he-effstack", d.effStack]])
+                           ["he-std", d.std], ["he-effstack", d.effStack],
+                           ["he-squidhave", d.squidHave], ["he-squidleft", d.squidLeft]])
     if (document.activeElement !== $(id)) $(id).value = val;
 }
 
@@ -541,6 +560,8 @@ function bindHandEntry() {
   $("he-sb").oninput = () => { draft.sb = $("he-sb").value; persistDraft(); };
   $("he-bb").oninput = () => { draft.bb = $("he-bb").value; persistDraft(); };
   $("he-std").oninput = () => { draft.std = $("he-std").value; persistDraft(); };
+  $("he-squidhave").oninput = () => { draft.squidHave = $("he-squidhave").value; persistDraft(); };
+  $("he-squidleft").oninput = () => { draft.squidLeft = $("he-squidleft").value; persistDraft(); };
   $("he-save").onclick = () => saveHand(false);
   $("he-savenext").onclick = () => saveHand(true);
 }
@@ -638,6 +659,9 @@ async function saveHand(nextHand) {
     blinds: (d.sb || d.bb || d.std)
       ? { sb: d.sb ? Number(d.sb) : null, bb: d.bb ? Number(d.bb) : null, std: d.std ? Number(d.std) : null }
       : null,
+    squid: (d.squidHave || d.squidLeft)
+      ? { have: d.squidHave ? Number(d.squidHave) : null, left: d.squidLeft ? Number(d.squidLeft) : null }
+      : null,
     note: d.note.trim(),
   };
   await dbPut("hands", rec);
@@ -671,6 +695,8 @@ function loadHandIntoDraft(h) {
     sb: h.blinds?.sb != null ? String(h.blinds.sb) : "",
     bb: h.blinds?.bb != null ? String(h.blinds.bb) : "",
     std: h.blinds?.std != null ? String(h.blinds.std) : "",
+    squidHave: h.squid?.have != null ? String(h.squid.have) : "",
+    squidLeft: h.squid?.left != null ? String(h.squid.left) : "",
   };
   undoStack = [];
 }
@@ -784,8 +810,18 @@ function handListClick(e) {
   if (r) location.hash = "#handview/" + r.dataset.hand;
 }
 
+async function requestDurableStorage() {
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      storageDurable = await navigator.storage.persisted();
+      if (!storageDurable) storageDurable = await navigator.storage.persist();
+    }
+  } catch (e) { /* storage API unavailable — nothing we can do */ }
+}
+
 async function boot() {
   await openDB();
+  await requestDurableStorage();
   await refreshCache();
   const saved = await metaGet("draftHand");
   if (saved) draft = Object.assign(newDraft(), saved);

@@ -17,6 +17,8 @@ main {
 }
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
+.ok { color: var(--good); }
+.warn { color: #f0b849; }
 .sub2 { font-size: 13px; margin: 2px 2px 10px; }
 
 /* ---- headers ---- */

@@ -119,6 +119,12 @@
     <input id="he-effstack" type="number" placeholder="$" inputmode="numeric">
   </div>
 
+  <div class="hgroup stackrow">
+    <span class="glabel">Squid</span>
+    <input id="he-squidhave" type="number" placeholder="Have" inputmode="numeric">
+    <input id="he-squidleft" type="number" placeholder="Left" inputmode="numeric">
+  </div>
+
   <div class="savebar">
     <button id="he-save" class="primary">Save</button>
     <button id="he-savenext" class="secondary">Save &amp; next</button>
@@ -145,6 +151,10 @@
 <!-- ===== Data / backup ===== -->
 <section id="view-data" class="hidden">
   <header class="vhead"><h1>Data</h1></header>
+  <div class="panel">
+    <div class="ptitle">Storage</div>
+    <div id="data-storage" class="muted sub2"></div>
+  </div>
   <div class="panel">
     <div class="ptitle">Backup</div>
     <div id="data-backupnag" class="muted sub2"></div>
