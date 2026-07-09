@@ -5,17 +5,13 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 /* ---------- in-memory caches (source of truth is IndexedDB) ---------- */
-let OPP = [], HANDS = [], SESSIONS = [];
-let activeSession = null;
+let OPP = [], HANDS = [];
 let curOppId = null, curHandId = null;
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
 async function refreshCache() {
-  [OPP, HANDS, SESSIONS] = await Promise.all(
-    ["opponents", "hands", "sessions"].map(dbAll));
-  const sid = await metaGet("activeSessionId");
-  activeSession = sid ? SESSIONS.find((s) => s.id === sid) || null : null;
+  [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
 }
 
 /* ---------- small utils ---------- */
@@ -25,9 +21,6 @@ function fmtWhen(ts) {
   if (d.toDateString() === new Date().toDateString())
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-function fmtDur(mins) {
-  return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 function toast(msg) {
   const t = $("toast");
@@ -39,7 +32,6 @@ function toast(msg) {
 const suitOf = (c) => SUITS.find((s) => s.id === c[c.length - 1]);
 const cardHTML = (c) => c ? `<span class="${suitOf(c).cls}">${c.slice(0, -1)}${suitOf(c).sym}</span>` : "";
 const cardsStr = (cs) => (cs || []).filter(Boolean).join("");
-function tableSize() { return activeSession?.tableSize || 9; }
 
 /* ---------- bottom sheet ---------- */
 function showSheet(html) {
@@ -53,8 +45,8 @@ function hideSheet() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["opponents", "opp", "hand", "hands", "handview", "session"];
-const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", hands: "hands", handview: "hands", session: "session" };
+const VIEWS = ["opponents", "opp", "hand", "hands", "handview", "data"];
+const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", hands: "hands", handview: "hands", data: "data" };
 
 function route() {
   const [view, arg] = (location.hash || "#opponents").slice(1).split("/");
@@ -64,7 +56,7 @@ function route() {
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
   hideSheet();
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
-     hands: renderHandsFeed, handview: () => renderHandView(arg), session: renderSession })[v]();
+     hands: renderHandsFeed, handview: () => renderHandView(arg), data: renderData })[v]();
   window.scrollTo(0, 0);
 }
 
@@ -78,27 +70,20 @@ function oppStats() {
   }
   return m;
 }
-function sessionOppIds() {
-  const ids = new Set();
-  if (activeSession)
-    for (const h of HANDS) if (h.sessionId === activeSession.id)
-      (h.villainIds || []).forEach((v) => ids.add(v));
-  return ids;
-}
 
 function renderOpponents() {
   const q = $("opp-search").value.trim().toLowerCase();
-  const stats = oppStats(), sess = sessionOppIds();
+  const stats = oppStats();
   let list = OPP.filter((o) => !o.archived);
   if (q) list = list.filter((o) =>
-    [o.name, o.room, o.physical].join(" ").toLowerCase().includes(q));
-  list.sort((a, b) => (sess.has(b.id) - sess.has(a.id)) ||
-    ((stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0)));
+    [o.name, o.physical].join(" ").toLowerCase().includes(q));
+  list.sort((a, b) =>
+    (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
   $("opp-list").innerHTML = list.map((o) => {
     const st = stats[o.id];
     const tags = (o.tags || []).slice(0, 3)
       .map((t) => `<span class="chip mini on">${esc(TAG_BY_ID[t]?.label || t)}</span>`).join("");
-    const sub = [o.room, st ? `${st.count} hand${st.count > 1 ? "s" : ""}` : "", o.physical]
+    const sub = [st ? `${st.count} hand${st.count > 1 ? "s" : ""}` : "", o.physical]
       .filter(Boolean).join(" · ");
     return `<div class="lrow" data-opp="${o.id}">
       <div class="t">${esc(o.name)}<span class="when">${st ? fmtWhen(st.last) : ""}</span></div>
@@ -108,9 +93,9 @@ function renderOpponents() {
   }).join("") || `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
 }
 
-async function createOpponent(name, room) {
-  const o = { id: uid(), name, room: room || activeSession?.room || "", tags: [],
-    physical: "", notes: [], createdAt: Date.now(), updatedAt: Date.now(), archived: false };
+async function createOpponent(name) {
+  const o = { id: uid(), name, tags: [], physical: "", notes: [],
+    createdAt: Date.now(), updatedAt: Date.now(), archived: false };
   OPP.push(o);
   await dbPut("opponents", o);
   return o;
@@ -123,9 +108,9 @@ function renderOppDetail(id) {
   if (!o) { location.hash = "#opponents"; return; }
   curOppId = id;
   $("od-name").textContent = o.name;
-  $("od-meta").textContent = [o.room, o.physical].filter(Boolean).join(" · ");
+  $("od-meta").textContent = o.physical || "";
   $("od-editform").classList.add("hidden");
-  $("od-e-name").value = o.name; $("od-e-room").value = o.room || "";
+  $("od-e-name").value = o.name;
   $("od-e-physical").value = o.physical || "";
 
   $("od-tags").innerHTML = TAG_CATS.map((cat) =>
@@ -147,7 +132,6 @@ function renderOppDetail(id) {
 
 function actorLabel(h, actor) {
   if (actor === "hero") return "Hero";
-  if (actor === "other") return "Other";
   const i = Number(actor.slice(1));
   return oppById(h.villains?.[i]?.opponentId)?.name || `V${i + 1}`;
 }
@@ -161,9 +145,8 @@ function handSummary(h) {
 }
 function handRowHTML(h) {
   const names = (h.villains || []).map((v) => oppById(v.opponentId)?.name).filter(Boolean).join(", ");
-  const dot = h.result ? `<span class="dot ${h.result}"></span> ` : "";
   return `<div class="lrow" data-hand="${h.id}">
-    <div class="t">${dot}${esc(names || "Hand")}<span class="when">${fmtWhen(h.ts)}</span></div>
+    <div class="t">${esc(names || "Hand")}<span class="when">${fmtWhen(h.ts)}</span></div>
     <div class="s">${esc(handSummary(h))}</div>
   </div>`;
 }
@@ -179,9 +162,7 @@ function boardFor(h, street) {
 /* Plain-text hand render — also the future LLM serialization format. */
 function handText(h) {
   const L = [];
-  const ses = SESSIONS.find((s) => s.id === h.sessionId);
-  L.push(new Date(h.ts).toLocaleString() +
-    (ses ? ` — ${[ses.stakes, ses.room].filter(Boolean).join(" ")}` : ""));
+  L.push(new Date(h.ts).toLocaleString());
   const seat = (pos) => (pos ? ` (${pos})` : "");
   const players = [
     `Hero${seat(h.heroPos)}${h.heroCards ? " " + cardsStr(h.heroCards) : ""}`,
@@ -189,6 +170,7 @@ function handText(h) {
       `${actorLabel(h, "v" + i)}${seat(v.pos)}${v.cards ? " " + cardsStr(v.cards) : ""}`),
   ];
   L.push(players.join("  vs  "));
+  if (h.effStack) L.push(`Eff. stack: $${h.effStack}`);
   for (const st of STREETS) {
     const acts = (h.actions || []).filter((a) => a.street === st);
     const board = boardFor(h, st);
@@ -196,9 +178,6 @@ function handText(h) {
     L.push(`${st.toUpperCase()}${board ? " [" + board + "]" : ""}:  ` +
       (acts.map((a) => actionStr(h, a)).join(", ") || "—"));
   }
-  if (h.result) L.push(`Result: ${h.result}${h.amount ? ` $${h.amount}` : ""}${h.showdown ? " (showdown)" : ""}`);
-  if (h.tagVillain?.length)
-    L.push(`Tags: ${h.tagVillain.map((t) => TAG_BY_ID[t]?.label || t).join(", ")}`);
   if (h.note) L.push(`Note: ${h.note}`);
   return L.join("\n");
 }
@@ -218,66 +197,16 @@ function renderHandView(id) {
   $("hv-text").textContent = handText(h);
 }
 
-/* ================= Session ================= */
+/* ================= Data / backup ================= */
 
-function updateRoomsDatalist() {
-  const rooms = [...new Set([...OPP.map((o) => o.room), ...SESSIONS.map((s) => s.room)]
-    .filter(Boolean))];
-  $("rooms").innerHTML = rooms.map((r) => `<option value="${esc(r)}">`).join("");
-}
-
-function renderSession() {
-  const el = $("ses-active");
-  if (activeSession) {
-    const hands = HANDS.filter((h) => h.sessionId === activeSession.id);
-    const opps = new Set();
-    hands.forEach((h) => (h.villainIds || []).forEach((v) => opps.add(v)));
-    const mins = Math.max(0, Math.round((Date.now() - activeSession.startedAt) / 60000));
-    el.innerHTML = `<div class="ptitle">Active session</div>
-      <div>${esc([activeSession.stakes, activeSession.room].filter(Boolean).join(" · ") || "Session")}
-        · ${activeSession.tableSize}-max</div>
-      <div class="muted sub2">${fmtDur(mins)} · ${hands.length} hands · ${opps.size} opponents seen</div>
-      <button id="ses-end" class="danger">End session</button>`;
-    $("ses-end").onclick = endSession;
-  } else {
-    el.innerHTML = `<div class="ptitle">Start session</div>
-      <input id="ses-room" placeholder="Room" list="rooms" autocomplete="off">
-      <input id="ses-stakes" placeholder="Stakes (e.g. 2/3)" autocomplete="off">
-      <select id="ses-size"><option value="9">9-max</option><option value="6">6-max</option></select>
-      <button id="ses-start" class="primary">Start session</button>`;
-    $("ses-start").onclick = startSession;
-  }
+function renderData() {
   metaGet("lastExportAt").then((ts) => {
     const days = ts ? Math.floor((Date.now() - ts) / 86400000) : null;
-    $("ses-backupnag").textContent = ts
+    $("data-backupnag").textContent = ts
       ? (days === 0 ? "Backed up today." : `Last backup ${days} day${days > 1 ? "s" : ""} ago.`)
       : "Never backed up — data lives only on this phone.";
   });
-  $("ses-stats").textContent =
-    `${OPP.length} opponents · ${HANDS.length} hands · ${SESSIONS.length} sessions`;
-  updateRoomsDatalist();
-}
-
-async function startSession() {
-  const s = { id: uid(), startedAt: Date.now(), endedAt: null, updatedAt: Date.now(),
-    room: $("ses-room").value.trim(), stakes: $("ses-stakes").value.trim(),
-    tableSize: Number($("ses-size").value), note: "" };
-  SESSIONS.push(s);
-  await dbPut("sessions", s);
-  await metaSet("activeSessionId", s.id);
-  activeSession = s;
-  toast("Session started");
-  renderSession();
-}
-
-async function endSession() {
-  activeSession.endedAt = Date.now();
-  activeSession.updatedAt = Date.now();
-  await dbPut("sessions", activeSession);
-  await metaSet("activeSessionId", null);
-  activeSession = null;
-  toast("Session ended");
-  renderSession();
+  $("data-stats").textContent = `${OPP.length} opponents · ${HANDS.length} hands`;
 }
 
 /* ================= Hand entry ================= */
@@ -289,7 +218,7 @@ function newDraft(keep) {
     heroPos: keep ? keep.heroPos : null, heroCards: [null, null],
     board: [null, null, null, null, null],
     actions: [], street: "pre", actor: null, lastV: "v0",
-    tags: [], note: "", result: null, showdown: false, amount: "",
+    note: "", effStack: "",
   };
 }
 let draft = newDraft();
@@ -326,6 +255,7 @@ function lineText(d) {
   if (d.heroPos || d.heroCards.some(Boolean))
     parts.push("Hero" + (d.heroPos ? " " + d.heroPos : "") +
       (d.heroCards.some(Boolean) ? " " + cardsStr(d.heroCards) : ""));
+  if (d.effStack) parts.push("eff $" + d.effStack);
   for (const st of STREETS) {
     const acts = d.actions.filter((a) => a.street === st);
     const b = boardFor(d, st);
@@ -334,7 +264,6 @@ function lineText(d) {
     acts.forEach((a) =>
       parts.push(actorLabel(d, a.actor) + " " + a.act + (a.size ? " " + a.size : "")));
   }
-  if (d.result) parts.push(d.result.toUpperCase() + (d.amount ? " $" + d.amount : ""));
   return parts.join(" · ");
 }
 
@@ -346,37 +275,34 @@ function renderHandEntry() {
   $("he-line").textContent = lt || "New hand — tap a villain";
   $("he-line").classList.toggle("muted", !lt);
 
-  // villain chips: session opponents first, then recent
-  const stats = oppStats(), sess = sessionOppIds();
+  // villain chips (existing opponents only — add new ones in the Opponents tab)
+  const stats = oppStats();
   const sorted = OPP.filter((o) => !o.archived).sort((a, b) =>
-    (sess.has(b.id) - sess.has(a.id)) ||
-    ((stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0)));
+    (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
   const selIds = d.villains.map((v) => v.opponentId);
   $("he-villains").innerHTML = sorted.map((o) =>
     `<button class="chip${selIds.includes(o.id) ? " on" : ""}" data-vopp="${o.id}">${esc(o.name)}</button>`
-  ).join("") + `<button class="chip" data-newv>＋ new</button>`;
+  ).join("") || `<div class="empty" style="padding:6px">Add opponents in the Opponents tab first.</div>`;
 
   // position rows
-  const order = POSITIONS[tableSize()];
-  $("he-heropos").innerHTML = order.map((p) =>
+  $("he-heropos").innerHTML = POSITIONS.map((p) =>
     `<button class="chip mini${d.heroPos === p ? " on" : ""}" data-hpos="${p}">${p}</button>`).join("");
   const vpos = d.villains[0]?.pos || null;
-  $("he-vpos").innerHTML = order.map((p) =>
+  $("he-vpos").innerHTML = POSITIONS.map((p) =>
     `<button class="chip mini${vpos === p ? " on" : ""}" data-vpos="${p}">${p}</button>`).join("");
 
   // street segment
   $("he-street").innerHTML = STREETS.map((s) =>
     `<button class="${d.street === s ? "on" : ""}" data-street="${s}">${s.toUpperCase()}</button>`).join("");
 
-  // actor segment: HERO, one per villain, OTH
+  // actor segment: HERO + one per villain
   const cur = currentActor();
   const vBtns = d.villains.map((v, i) => {
-    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 7) : "V" + (i + 1);
+    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 9) : "V" + (i + 1);
     return `<button class="${cur === "v" + i ? "on" : ""}" data-actor="v${i}">${esc(nm)}</button>`;
   }).join("") || `<button class="${cur === "v0" ? "on" : ""}" data-actor="v0">VILLAIN</button>`;
   $("he-actor").innerHTML =
-    `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` + vBtns +
-    `<button class="${cur === "other" ? "on" : ""}" data-actor="other">OTH</button>`;
+    `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` + vBtns;
 
   // action buttons
   $("he-acts").innerHTML = ["fold", "check", "call", "limp", "bet", "raise", "jam"].map((a) =>
@@ -406,22 +332,9 @@ function renderHandEntry() {
   });
   $("he-cards").innerHTML = ch;
 
-  // quick tags
-  const freq = {};
-  OPP.forEach((o) => (o.tags || []).forEach((t) => { freq[t] = (freq[t] || 0) + 1; }));
-  const quick = [...new Set([
-    ...Object.keys(freq).sort((a, b) => freq[b] - freq[a]),
-    ...DEFAULT_QUICK_TAGS])].slice(0, 6);
-  $("he-quicktags").innerHTML = quick.map((t) =>
-    `<button class="chip mini${d.tags.includes(t) ? " on" : ""}" data-qtag="${t}">${TAG_BY_ID[t]?.label || t}</button>`
-  ).join("") + `<button class="chip mini" data-alltags>⋯</button>`;
-
-  // result segment + showdown + amount + note (don't clobber focused inputs)
-  $("he-result").innerHTML = ["won", "lost", "chop"].map((r) =>
-    `<button class="${d.result === r ? "on" : ""}" data-result="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join("");
-  $("he-showdown").classList.toggle("on", d.showdown);
+  // note + eff stack (don't clobber focused inputs)
   if (document.activeElement !== $("he-note")) $("he-note").value = d.note;
-  if (document.activeElement !== $("he-amount")) $("he-amount").value = d.amount;
+  if (document.activeElement !== $("he-effstack")) $("he-effstack").value = d.effStack;
 }
 
 /* --- hand-entry interactions (delegated, bound once) --- */
@@ -437,9 +350,6 @@ function bindHandEntry() {
         if (i >= 0) draft.villains.splice(i, 1);
         else draft.villains.push({ opponentId: b.dataset.vopp, pos: null, cards: [null, null] });
       });
-    } else if (b.dataset.newv !== undefined) {
-      $("he-newvillain").classList.toggle("hidden");
-      $("he-nv-name").focus();
     } else if (b.dataset.hpos) {
       mutate(() => { draft.heroPos = draft.heroPos === b.dataset.hpos ? null : b.dataset.hpos; });
     } else if (b.dataset.vpos) {
@@ -468,17 +378,6 @@ function bindHandEntry() {
       });
     } else if (b.dataset.slot) {
       openCardSheet(b.dataset.slot);
-    } else if (b.dataset.qtag) {
-      mutate(() => {
-        const i = draft.tags.indexOf(b.dataset.qtag);
-        i >= 0 ? draft.tags.splice(i, 1) : draft.tags.push(b.dataset.qtag);
-      });
-    } else if (b.dataset.alltags !== undefined) {
-      openTagSheet();
-    } else if (b.dataset.result) {
-      mutate(() => { draft.result = draft.result === b.dataset.result ? null : b.dataset.result; });
-    } else if (b.id === "he-showdown") {
-      mutate(() => { draft.showdown = !draft.showdown; });
     }
   });
 
@@ -494,21 +393,9 @@ function bindHandEntry() {
 
   $("he-undo").onclick = undo;
   $("he-note").oninput = () => { draft.note = $("he-note").value; metaSet("draftHand", JSON.parse(JSON.stringify(draft))); };
-  $("he-amount").oninput = () => { draft.amount = $("he-amount").value; metaSet("draftHand", JSON.parse(JSON.stringify(draft))); };
+  $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; metaSet("draftHand", JSON.parse(JSON.stringify(draft))); };
   $("he-save").onclick = () => saveHand(false);
   $("he-savenext").onclick = () => saveHand(true);
-
-  $("he-nv-add").onclick = addInlineVillain;
-  $("he-nv-name").addEventListener("keydown", (e) => { if (e.key === "Enter") addInlineVillain(); });
-}
-
-async function addInlineVillain() {
-  const name = $("he-nv-name").value.trim();
-  if (!name) return;
-  const o = await createOpponent(name);
-  $("he-nv-name").value = "";
-  $("he-newvillain").classList.add("hidden");
-  mutate(() => { draft.villains.push({ opponentId: o.id, pos: null, cards: [null, null] }); });
 }
 
 /* --- card picker sheet --- */
@@ -517,7 +404,7 @@ function usedCards() {
   return new Set([...draft.board, ...draft.heroCards,
     ...draft.villains.flatMap((v) => v.cards || [])].filter(Boolean));
 }
-function slotRef(key) {          // "board:2" -> {get, set, nextEmpty}
+function slotRef(key) {          // "board:2" -> {zone, i, arr}
   const [zone, iS] = key.split(":");
   const i = Number(iS);
   const arr = zone === "board" ? draft.board
@@ -569,13 +456,6 @@ function sheetClick(e) {
     const key = sheetSlot;
     mutate(() => { const { i, arr } = slotRef(key); arr[i] = null; });
     openCardSheet(key);
-  } else if (b.dataset.sheettag) {
-    mutate(() => {
-      const t = b.dataset.sheettag;
-      const i = draft.tags.indexOf(t);
-      i >= 0 ? draft.tags.splice(i, 1) : draft.tags.push(t);
-    });
-    openTagSheet();     // re-render sheet with toggled state
   }
 }
 
@@ -589,21 +469,11 @@ function advanceStreetFromBoard() {
     draft.street = target;
 }
 
-function openTagSheet() {
-  const body = TAG_CATS.map((cat) =>
-    `<div class="tagcat">${cat}</div><div class="chiprow">` +
-    TENDENCY_TAGS.filter((t) => t.cat === cat).map((t) =>
-      `<button class="chip mini${draft.tags.includes(t.id) ? " on" : ""}" data-sheettag="${t.id}">${t.label}</button>`
-    ).join("") + `</div>`).join("");
-  showSheet(`<div class="sheethead"><span class="t">Tag villain</span>
-    <button data-closesheet>Done</button></div>${body}`);
-}
-
 /* --- save --- */
 
 function draftHasContent(d) {
   return d.villains.some((v) => v.opponentId) || d.actions.length || d.note.trim() ||
-    d.board.some(Boolean) || d.heroCards.some(Boolean) || d.tags.length || d.result;
+    d.board.some(Boolean) || d.heroCards.some(Boolean);
 }
 
 async function saveHand(nextHand) {
@@ -611,30 +481,18 @@ async function saveHand(nextHand) {
   if (!draftHasContent(d)) { toast("Nothing to save"); return; }
   const rec = {
     id: d.id || uid(), ts: d.ts || Date.now(), updatedAt: Date.now(),
-    sessionId: d.id ? (HANDS.find((h) => h.id === d.id)?.sessionId ?? null) : (activeSession?.id || null),
-    tableSize: tableSize(),
     heroPos: d.heroPos,
     heroCards: d.heroCards.some(Boolean) ? d.heroCards : null,
     villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
       cards: (v.cards || []).some(Boolean) ? v.cards : null })),
     villainIds: d.villains.map((v) => v.opponentId).filter(Boolean),
     board: d.board, actions: d.actions,
-    result: d.result, amount: d.amount ? Number(d.amount) : null,
-    showdown: d.showdown, note: d.note.trim(), tagVillain: d.tags,
+    effStack: d.effStack ? Number(d.effStack) : null,
+    note: d.note.trim(),
   };
   await dbPut("hands", rec);
   const i = HANDS.findIndex((h) => h.id === rec.id);
   if (i >= 0) HANDS[i] = rec; else HANDS.push(rec);
-
-  // merge tapped tags into the primary villain's profile
-  if (d.tags.length && rec.villainIds[0]) {
-    const o = oppById(rec.villainIds[0]);
-    if (o) {
-      o.tags = [...new Set([...(o.tags || []), ...d.tags])];
-      o.updatedAt = Date.now();
-      await dbPut("opponents", o);
-    }
-  }
 
   undoStack = [];
   const primary = oppById(rec.villainIds[0]);
@@ -658,9 +516,8 @@ function loadHandIntoDraft(h) {
     actions: (h.actions || []).map((a) => ({ ...a })),
     street: STREETS[Math.max(0, ...streets)] || "pre",
     actor: null, lastV: "v0",
-    tags: [...(h.tagVillain || [])], note: h.note || "",
-    result: h.result || null, showdown: !!h.showdown,
-    amount: h.amount != null ? String(h.amount) : "",
+    note: h.note || "",
+    effStack: h.effStack != null ? String(h.effStack) : "",
   };
   undoStack = [];
 }
@@ -679,8 +536,8 @@ function bindStatic() {
   $("opp-new-save").onclick = async () => {
     const name = $("opp-new-name").value.trim();
     if (!name) return;
-    const o = await createOpponent(name, $("opp-new-room").value.trim());
-    $("opp-new-name").value = ""; $("opp-new-room").value = "";
+    const o = await createOpponent(name);
+    $("opp-new-name").value = "";
     $("opp-new").classList.add("hidden");
     location.hash = "#opp/" + o.id;
   };
@@ -694,7 +551,6 @@ function bindStatic() {
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);
     o.name = $("od-e-name").value.trim() || o.name;
-    o.room = $("od-e-room").value.trim();
     o.physical = $("od-e-physical").value.trim();
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
@@ -722,8 +578,7 @@ function bindStatic() {
     const text = $("od-note").value.trim();
     if (!text) return;
     const o = oppById(curOppId);
-    (o.notes = o.notes || []).unshift({ id: uid(), ts: Date.now(), text,
-      sessionId: activeSession?.id || null, handId: null });
+    (o.notes = o.notes || []).unshift({ id: uid(), ts: Date.now(), text, handId: null });
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     $("od-note").value = "";
@@ -744,21 +599,21 @@ function bindStatic() {
     history.back();
   };
 
-  // session
-  $("ses-export").onclick = async () => {
+  // data / backup
+  $("data-export").onclick = async () => {
     try {
-      if (await exportJSON()) { toast("Exported"); renderSession(); }
+      if (await exportJSON()) { toast("Exported"); renderData(); }
     } catch (e) { toast("Export failed: " + e.message); }
   };
-  $("ses-import").onclick = () => $("ses-importfile").click();
-  $("ses-importfile").onchange = async (e) => {
+  $("data-import").onclick = () => $("data-importfile").click();
+  $("data-importfile").onchange = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
     try {
       const counts = await importJSON(JSON.parse(await f.text()));
       await refreshCache();
       toast(`Imported ${counts.opponents} opp · ${counts.hands} hands`);
-      renderSession();
+      renderData();
     } catch (err) { toast("Import failed: " + err.message); }
     e.target.value = "";
   };

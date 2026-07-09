@@ -29,19 +29,18 @@ python3 -m http.server 8002
 
 ## Using it
 
-- **Session tab** — start a session (room / stakes / table size); hands logged
-  while it's active attach to it automatically.
 - **Opponents tab** — add villains (nicknames are fine), toggle tendency-tag
   chips, add timestamped notes (use the keyboard mic to dictate), see every
   hand you've logged against them.
-- **Hand tab** — tap a villain chip, then tap out the action (actor
-  auto-alternates hero ↔ villain), tap board/hole cards on the 52-card grid,
-  add a one-line note, Save. Every field is optional — "villain checked back
-  top pair" + one tag is a perfectly good hand record. **Undo** pops the last
-  input. **Save & next** keeps the villain/positions for the next hand.
-- **Backup** — Session tab → Export JSON (AirDrop/Files via the share sheet).
-  Data lives only on the phone, so export regularly. Import merges by id and
-  never wipes — it's also the phone-migration path.
+- **Hand tab** — tap a villain chip (added via the Opponents tab), then tap
+  out the action (actor auto-alternates hero ↔ villain), tap board/hole cards
+  on the 52-card grid, add a one-line note and eff. stack, Save. Every field
+  is optional — "villain checked back top pair" is a perfectly good hand
+  record. **Undo** pops the last input. **Save & next** keeps the
+  villain/positions for the next hand.
+- **Data tab** — Export JSON (AirDrop/Files via the share sheet). Data lives
+  only on the phone, so export regularly. Import merges by id and never
+  wipes — it's also the phone-migration path.
 
 ## Files
 

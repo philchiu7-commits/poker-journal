@@ -134,10 +134,9 @@ button.danger {
 .cdiv { color: var(--muted); font-size: 10px; text-transform: uppercase; margin: 0 3px; flex: none; }
 .cs { color: #e6e8ec; } .ch { color: var(--red); } .cd { color: var(--blue); } .cc { color: var(--green); }
 
-.resultrow { display: flex; gap: 8px; align-items: stretch; }
-.resultrow .seg { flex: 1; margin: 0; }
-.resultrow .chip { align-self: center; }
-.resultrow input { width: 74px; margin: 0; }
+.stackrow { display: flex; gap: 10px; align-items: center; }
+.stackrow .glabel { margin: 0; }
+.stackrow input { width: 110px; margin: 0; }
 
 .savebar {
   position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom));

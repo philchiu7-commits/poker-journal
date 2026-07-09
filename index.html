@@ -21,10 +21,9 @@
     <h1>Opponents</h1>
     <button id="opp-add" class="iconbtn" title="New opponent">＋</button>
   </header>
-  <input id="opp-search" type="search" placeholder="Search name, room, look…" autocomplete="off">
+  <input id="opp-search" type="search" placeholder="Search name, look…" autocomplete="off">
   <div id="opp-new" class="panel hidden">
     <input id="opp-new-name" placeholder="Name / nickname" autocomplete="off">
-    <input id="opp-new-room" placeholder="Room" list="rooms" autocomplete="off">
     <button id="opp-new-save" class="primary">Add opponent</button>
   </div>
   <div id="opp-list" class="list"></div>
@@ -40,7 +39,6 @@
   <div id="od-meta" class="muted sub2"></div>
   <div id="od-editform" class="panel hidden">
     <input id="od-e-name" placeholder="Name" autocomplete="off">
-    <input id="od-e-room" placeholder="Room" list="rooms" autocomplete="off">
     <input id="od-e-physical" placeholder="Looks like… (for re-identifying)" autocomplete="off">
     <div class="row">
       <button id="od-e-save" class="primary">Save</button>
@@ -75,10 +73,6 @@
   <div class="hgroup">
     <div class="glabel">Villains</div>
     <div id="he-villains" class="chiprow scroll"></div>
-    <div id="he-newvillain" class="noterow hidden">
-      <input id="he-nv-name" placeholder="Villain name" autocomplete="off">
-      <button id="he-nv-add" class="secondary">Add</button>
-    </div>
   </div>
 
   <div class="hgroup">
@@ -99,17 +93,12 @@
   </div>
 
   <div class="hgroup">
-    <div id="he-quicktags" class="chiprow"></div>
-  </div>
-
-  <div class="hgroup">
     <textarea id="he-note" rows="1" placeholder="What happened…"></textarea>
   </div>
 
-  <div class="hgroup resultrow">
-    <div id="he-result" class="seg"></div>
-    <button id="he-showdown" class="chip">Showdown</button>
-    <input id="he-amount" type="number" placeholder="$" inputmode="numeric">
+  <div class="hgroup stackrow">
+    <span class="glabel">Eff. stack</span>
+    <input id="he-effstack" type="number" placeholder="$" inputmode="numeric">
   </div>
 
   <div class="savebar">
@@ -135,31 +124,28 @@
   <button id="hv-delete" class="danger">Delete hand</button>
 </section>
 
-<!-- ===== Session / settings ===== -->
-<section id="view-session" class="hidden">
-  <header class="vhead"><h1>Session</h1></header>
-  <div id="ses-active" class="panel"></div>
+<!-- ===== Data / backup ===== -->
+<section id="view-data" class="hidden">
+  <header class="vhead"><h1>Data</h1></header>
   <div class="panel">
     <div class="ptitle">Backup</div>
-    <div id="ses-backupnag" class="muted sub2"></div>
+    <div id="data-backupnag" class="muted sub2"></div>
     <div class="row">
-      <button id="ses-export" class="secondary">Export JSON</button>
-      <button id="ses-import" class="secondary">Import JSON</button>
+      <button id="data-export" class="secondary">Export JSON</button>
+      <button id="data-import" class="secondary">Import JSON</button>
     </div>
-    <input id="ses-importfile" type="file" accept=".json,application/json" class="hidden">
+    <input id="data-importfile" type="file" accept=".json,application/json" class="hidden">
   </div>
-  <div id="ses-stats" class="panel muted sub2"></div>
+  <div id="data-stats" class="panel muted sub2"></div>
 </section>
 
 </main>
-
-<datalist id="rooms"></datalist>
 
 <nav id="tabbar">
   <button data-tab="opponents"><span class="ticon">☺</span>Opponents</button>
   <button data-tab="hand" class="bigtab"><span class="ticon">＋</span>Hand</button>
   <button data-tab="hands"><span class="ticon">≡</span>Hands</button>
-  <button data-tab="session"><span class="ticon">◷</span>Session</button>
+  <button data-tab="data"><span class="ticon">⇅</span>Data</button>
 </nav>
 
 <div id="sheet-backdrop" class="hidden"></div>

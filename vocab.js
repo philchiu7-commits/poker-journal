@@ -1,9 +1,6 @@
 /* Shared vocabulary — stable ids; the future exploit engine aggregates these. */
 
-const POSITIONS = {
-  6: ["UTG", "HJ", "CO", "BTN", "SB", "BB"],
-  9: ["UTG", "UTG1", "UTG2", "LJ", "HJ", "CO", "BTN", "SB", "BB"],
-};
+const POSITIONS = ["U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
 const ACTS = ["fold", "check", "call", "bet", "raise", "limp", "jam"];
 const SIZES_PRE = ["min", "2.5x", "3x", "4x+", "jam"];
@@ -46,8 +43,3 @@ const TENDENCY_TAGS = [
 ];
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
-
-/* Default quick-tags shown on the hand-entry screen before usage data exists. */
-const DEFAULT_QUICK_TAGS = [
-  "station", "over-folds-cbet", "bluffs-rivers", "never-bluffs", "limp-caller", "tilts",
-];
