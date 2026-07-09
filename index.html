@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Poker Journal</title>
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Journal">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+
+<!-- ===== Opponents list ===== -->
+<section id="view-opponents">
+  <header class="vhead">
+    <h1>Opponents</h1>
+    <button id="opp-add" class="iconbtn" title="New opponent">＋</button>
+  </header>
+  <input id="opp-search" type="search" placeholder="Search name, room, look…" autocomplete="off">
+  <div id="opp-new" class="panel hidden">
+    <input id="opp-new-name" placeholder="Name / nickname" autocomplete="off">
+    <input id="opp-new-room" placeholder="Room" list="rooms" autocomplete="off">
+    <button id="opp-new-save" class="primary">Add opponent</button>
+  </div>
+  <div id="opp-list" class="list"></div>
+</section>
+
+<!-- ===== Opponent detail ===== -->
+<section id="view-opp" class="hidden">
+  <header class="vhead">
+    <button class="backbtn" data-back>‹</button>
+    <h1 id="od-name"></h1>
+    <button id="od-edit" class="iconbtn" title="Edit">✎</button>
+  </header>
+  <div id="od-meta" class="muted sub2"></div>
+  <div id="od-editform" class="panel hidden">
+    <input id="od-e-name" placeholder="Name" autocomplete="off">
+    <input id="od-e-room" placeholder="Room" list="rooms" autocomplete="off">
+    <input id="od-e-physical" placeholder="Looks like… (for re-identifying)" autocomplete="off">
+    <div class="row">
+      <button id="od-e-save" class="primary">Save</button>
+      <button id="od-e-del" class="danger">Delete</button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Reads</div>
+    <div id="od-tags"></div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Notes</div>
+    <div class="noterow">
+      <textarea id="od-note" rows="1" placeholder="Add a note…"></textarea>
+      <button id="od-note-add" class="secondary">Add</button>
+    </div>
+    <div id="od-notes" class="list"></div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Hands</div>
+    <div id="od-hands" class="list"></div>
+  </div>
+</section>
+
+<!-- ===== Hand entry ===== -->
+<section id="view-hand" class="hidden">
+  <div class="handline">
+    <div id="he-line" class="linetext muted">New hand — tap a villain</div>
+    <button id="he-undo" class="undobtn">Undo</button>
+  </div>
+
+  <div class="hgroup">
+    <div class="glabel">Villains</div>
+    <div id="he-villains" class="chiprow scroll"></div>
+    <div id="he-newvillain" class="noterow hidden">
+      <input id="he-nv-name" placeholder="Villain name" autocomplete="off">
+      <button id="he-nv-add" class="secondary">Add</button>
+    </div>
+  </div>
+
+  <div class="hgroup">
+    <div class="posrow"><span class="poslabel">Hero</span><div id="he-heropos" class="chiprow tight"></div></div>
+    <div class="posrow"><span class="poslabel">Vill</span><div id="he-vpos" class="chiprow tight"></div></div>
+  </div>
+
+  <div class="hgroup actionpad">
+    <div id="he-street" class="seg"></div>
+    <div id="he-actor" class="seg"></div>
+    <div id="he-acts" class="actgrid"></div>
+    <div id="he-sizes" class="chiprow hidden"></div>
+  </div>
+
+  <div class="hgroup">
+    <div class="glabel">Board &amp; cards</div>
+    <div id="he-cards" class="cardsrow"></div>
+  </div>
+
+  <div class="hgroup">
+    <div id="he-quicktags" class="chiprow"></div>
+  </div>
+
+  <div class="hgroup">
+    <textarea id="he-note" rows="1" placeholder="What happened…"></textarea>
+  </div>
+
+  <div class="hgroup resultrow">
+    <div id="he-result" class="seg"></div>
+    <button id="he-showdown" class="chip">Showdown</button>
+    <input id="he-amount" type="number" placeholder="$" inputmode="numeric">
+  </div>
+
+  <div class="savebar">
+    <button id="he-save" class="primary">Save</button>
+    <button id="he-savenext" class="secondary">Save &amp; next</button>
+  </div>
+</section>
+
+<!-- ===== Hands feed ===== -->
+<section id="view-hands" class="hidden">
+  <header class="vhead"><h1>Hands</h1></header>
+  <div id="hands-list" class="list"></div>
+</section>
+
+<!-- ===== Hand detail ===== -->
+<section id="view-handview" class="hidden">
+  <header class="vhead">
+    <button class="backbtn" data-back>‹</button>
+    <h1>Hand</h1>
+    <button id="hv-edit" class="iconbtn" title="Edit">✎</button>
+  </header>
+  <pre id="hv-text" class="handtext"></pre>
+  <button id="hv-delete" class="danger">Delete hand</button>
+</section>
+
+<!-- ===== Session / settings ===== -->
+<section id="view-session" class="hidden">
+  <header class="vhead"><h1>Session</h1></header>
+  <div id="ses-active" class="panel"></div>
+  <div class="panel">
+    <div class="ptitle">Backup</div>
+    <div id="ses-backupnag" class="muted sub2"></div>
+    <div class="row">
+      <button id="ses-export" class="secondary">Export JSON</button>
+      <button id="ses-import" class="secondary">Import JSON</button>
+    </div>
+    <input id="ses-importfile" type="file" accept=".json,application/json" class="hidden">
+  </div>
+  <div id="ses-stats" class="panel muted sub2"></div>
+</section>
+
+</main>
+
+<datalist id="rooms"></datalist>
+
+<nav id="tabbar">
+  <button data-tab="opponents"><span class="ticon">☺</span>Opponents</button>
+  <button data-tab="hand" class="bigtab"><span class="ticon">＋</span>Hand</button>
+  <button data-tab="hands"><span class="ticon">≡</span>Hands</button>
+  <button data-tab="session"><span class="ticon">◷</span>Session</button>
+</nav>
+
+<div id="sheet-backdrop" class="hidden"></div>
+<div id="sheet" class="hidden"></div>
+<div id="toast" class="hidden"></div>
+
+<script src="vocab.js"></script>
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
