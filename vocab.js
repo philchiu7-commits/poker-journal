@@ -3,10 +3,11 @@
 const POSITIONS = ["U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
 const ACTS = ["fold", "check", "call", "bet", "raise", "3bet", "limp", "jam"];
-const ACTS_PRE = ["fold", "check", "call", "limp", "raise", "3bet"];
 const ACTS_POST = ["fold", "check", "call", "bet", "raise"];
-const SIZED_ACTS = ["bet", "raise", "3bet"];
-const SIZES_PRE = ["30k", "40k", "50k", "60k", "Jam"];
+const SIZED_ACTS = ["bet", "raise", "3bet", "4bet", "5bet"];
+const SIZES_OPEN = ["30k", "40k", "50k", "60k", "Jam"];   // open raise: chip amounts
+const SIZES_3BET = ["3x", "4x", "5x", "Jam"];              // 3bet: multipliers
+const SIZES_4BET = ["2x", "2.5x", "3x", "Jam"];            // 4bet/5bet: multipliers
 const SIZES_POST = ["33%", "50%", "66%", "75%", "pot", "over", "Jam"];
 
 const RANKS = "AKQJT98765432";

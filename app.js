@@ -7,7 +7,9 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 /* ---------- in-memory caches (source of truth is IndexedDB) ---------- */
 let OPP = [], HANDS = [];
 let curOppId = null, curHandId = null;
+let editNoteId = null;
 let storageDurable = false;
+let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
@@ -33,6 +35,42 @@ function toast(msg) {
 const suitOf = (c) => SUITS.find((s) => s.id === c[c.length - 1]);
 const cardHTML = (c) => c ? `<span class="${suitOf(c).cls}">${c.slice(0, -1)}${suitOf(c).sym}</span>` : "";
 const cardsStr = (cs) => (cs || []).filter(Boolean).join("");
+/* Card as a little tile (hand view + rows). `prev` = earlier-street board card, dimmed. */
+const tileHTML = (c, prev) => c
+  ? `<span class="ctile${prev ? " prev" : ""} ${suitOf(c).cls}">${c.slice(0, -1)}<i>${suitOf(c).sym}</i></span>` : "";
+const tilesHTML = (cs) => (cs || []).filter(Boolean).map((c) => tileHTML(c)).join("");
+
+/* ---------- action phrasing (hand-history style: "opens to 40K") ---------- */
+const sizeLabel = (s) => !s ? "" :
+  /^\$\d/.test(s) ? s.slice(1) + "K" :
+  /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
+function actVerb(a) {
+  switch (a.act) {
+    case "fold":  return "folds";
+    case "check": return "checks";
+    case "call":  return "calls";
+    case "limp":  return "limps";
+    case "jam":   return "jams";
+    case "bet":   return "bets";
+    case "raise": return a.street === "pre" ? "opens" : "raises";
+    case "3bet":  return "3-bets";
+    case "4bet":  return "4-bets";
+    case "5bet":  return "5-bets";
+    default:      return a.act;
+  }
+}
+/* Verb + size split for rendering; "bet/raise sized Jam" reads as "jams".
+   "to" only fits absolute sizes ("opens to 40K", "3-bets to 4x") — not
+   pot-relative ones ("raises pot", "bets 50%"). */
+function actParts(a) {
+  let verb = actVerb(a), sz = a.size ? sizeLabel(a.size) : null;
+  if (sz === "Jam") { verb = "jams"; sz = null; }
+  return { verb, sz, to: !!sz && verb !== "bets" && !/%|pot|over/i.test(sz) };
+}
+function actPhrase(a) {
+  const { verb, sz, to } = actParts(a);
+  return verb + (sz ? (to ? " to " : " ") + sz : "");
+}
 
 /* ---------- bottom sheet ---------- */
 function showSheet(html) {
@@ -123,6 +161,7 @@ async function createOpponent(name, group) {
 function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
+  if (curOppId !== id) editNoteId = null;
   curOppId = id;
   $("od-name").textContent = o.name;
   $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
@@ -138,11 +177,24 @@ function renderOppDetail(id) {
     ).join("") + `</div>`).join("");
 
   $("od-notes").innerHTML = (o.notes || []).map((n) =>
-    `<div class="noteitem">${esc(n.text)}<div class="when">${fmtWhen(n.ts)}</div></div>`
+    n.id === editNoteId
+      ? `<div class="noteitem" data-note="${n.id}">
+          <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
+          <div class="noterowbtns">
+            <button class="chip mini" data-notecancel>Cancel</button>
+            <button class="chip mini on" data-notesave>Save</button>
+          </div></div>`
+      : `<div class="noteitem" data-note="${n.id}">
+          <div class="notetext">${esc(n.text)}</div>
+          <div class="noterowbtns">
+            <span class="when">${fmtWhen(n.ts)}</span>
+            <button class="chip mini" data-noteedit>Edit</button>
+            <button class="chip mini" data-notedel>Delete</button>
+          </div></div>`
   ).join("") || `<div class="empty">No notes yet.</div>`;
 
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
-  $("od-hands").innerHTML = hands.map(handRowHTML).join("") ||
+  $("od-hands").innerHTML = hands.map((h) => handRowHTML(h, id)).join("") ||
     `<div class="empty">No hands logged.</div>`;
 }
 
@@ -158,14 +210,53 @@ function actionStr(h, a) {
 }
 function handSummary(h) {
   if (h.note) return h.note;
-  const acts = (h.actions || []).map((a) => actionStr(h, a)).join(", ");
-  return acts || cardsStr(h.board) || "—";
+  const bits = [];
+  for (const st of STREETS) {
+    const acts = (h.actions || []).filter((a) => a.street === st);
+    if (!acts.length) continue;
+    const s = acts.map((a) => `${actorLabel(h, a.actor)} ${actPhrase(a)}`).join(", ");
+    bits.push(st === "pre" ? s : st.toUpperCase() + ": " + s);
+  }
+  return bits.join("  ·  ") || cardsStr(h.board) || "—";
 }
-function handRowHTML(h) {
+/* A villain's defining action in a hand: their most aggressive one, later
+   streets breaking ties — "raises pot (flop)" beats a preflop "calls". */
+const ACT_RANK = { jam: 6, "5bet": 5, "4bet": 5, "3bet": 4, raise: 3, bet: 2, call: 1, limp: 1, check: 0, fold: 0 };
+function definingAct(h, actor) {
+  let best = null;
+  for (const a of (h.actions || []).filter((x) => x.actor === actor)) {
+    const r = (ACT_RANK[a.act] ?? 0) + (a.size === "Jam" ? 4 : 0);
+    if (!best || r >= best.r) best = { a, r };
+  }
+  if (!best) return null;
+  return actPhrase(best.a) + (best.a.street !== "pre" ? ` (${best.a.street})` : "");
+}
+/* Row in a hands list. With `oppId`, lead with THAT villain's position,
+   hole cards, and defining action instead of just names. */
+function handRowHTML(h, oppId) {
+  const when = `<span class="when">${fmtWhen(h.ts)}</span>`;
+  const res = heroResult(h);
+  const dot = res ? `<span class="dot ${res}"></span>` : "";
+  const boardH = (h.board || []).some(Boolean) ? tilesHTML(h.board) + " " : "";
+  const sub = `<div class="s">${boardH}${esc(handSummary(h))}</div>`;
+  if (oppId) {
+    const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+    if (i >= 0) {
+      const v = h.villains[i];
+      const def = definingAct(h, "v" + i);
+      const bits = [
+        v.pos ? `<span class="hv-pos">${esc(v.pos)}</span>` : "",
+        v.cards && v.cards.some(Boolean) ? tilesHTML(v.cards) : "",
+        def ? `<span class="hr-act">${esc(def)}</span>` : "",
+      ].filter(Boolean).join("");
+      if (bits) return `<div class="lrow" data-hand="${h.id}">
+        <div class="t hr-t">${dot}${bits}${when}</div>${sub}
+      </div>`;
+    }
+  }
   const names = (h.villains || []).map((v) => oppById(v.opponentId)?.name).filter(Boolean).join(", ");
   return `<div class="lrow" data-hand="${h.id}">
-    <div class="t">${esc(names || "Hand")}<span class="when">${fmtWhen(h.ts)}</span></div>
-    <div class="s">${esc(handSummary(h))}</div>
+    <div class="t">${dot}${esc(names || "Hand")}${when}</div>${sub}
   </div>`;
 }
 
@@ -178,46 +269,134 @@ function boardFor(h, street) {
 }
 
 /* Plain-text hand render — also the future LLM serialization format. */
+const kAmt = (n) => n + "K";
 function handText(h) {
   const L = [];
-  L.push(new Date(h.ts).toLocaleString());
   const seat = (pos) => (pos ? ` (${pos})` : "");
   const players = [
-    `Hero${seat(h.heroPos)}${h.heroCards ? " " + cardsStr(h.heroCards) : ""}`,
+    ...(h.hero === false ? [] : [`Hero${seat(h.heroPos)}${h.heroCards ? " " + cardsStr(h.heroCards) : ""}`]),
     ...(h.villains || []).map((v, i) =>
       `${actorLabel(h, "v" + i)}${seat(v.pos)}${v.cards ? " " + cardsStr(v.cards) : ""}`),
   ];
   L.push(players.join("  vs  "));
+
+  const ctx = [];
   if (h.blinds) {
     const b = [];
-    if (h.blinds.sb) b.push(h.blinds.sb);
-    if (h.blinds.bb) b.push(h.blinds.bb);
-    const line = b.join("/") + (h.blinds.std ? ` (${h.blinds.std} straddle)` : "");
-    if (line) L.push(`Blinds: ${line}`);
+    if (h.blinds.sb) b.push(kAmt(h.blinds.sb));
+    if (h.blinds.bb) b.push(kAmt(h.blinds.bb));
+    let bl = b.join("/");
+    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std)} straddle)`;
+    if (bl) ctx.push(bl);
   }
-  if (h.effStack) L.push(`Eff. stack: $${h.effStack}`);
+  if (h.effStack) ctx.push(`${kAmt(h.effStack)} eff`);
   if (h.squid) {
     const s = [];
     if (h.squid.have != null) s.push(`${h.squid.have} have`);
     if (h.squid.left != null) s.push(`${h.squid.left} left`);
-    if (s.length) L.push(`Squid: ${s.join(", ")}`);
+    if (s.length) ctx.push(`squid ${s.join(", ")}`);
   }
+  if (ctx.length) L.push(ctx.join("   ·   "));
+
+  const streetLines = [];
   for (const st of STREETS) {
     const acts = (h.actions || []).filter((a) => a.street === st);
     const board = boardFor(h, st);
     if (!acts.length && !board) continue;
-    L.push(`${st.toUpperCase()}${board ? " [" + board + "]" : ""}:  ` +
-      (acts.map((a) => actionStr(h, a)).join(", ") || "—"));
+    streetLines.push(`${st.toUpperCase().padEnd(5)}${board ? "[" + board + "] " : ""} ` +
+      (acts.map((a) => actionStr(h, a)).join(",  ") || "—"));
   }
-  if (h.note) L.push(`Note: ${h.note}`);
+  if (streetLines.length) L.push("", ...streetLines);
+  if (h.note) L.push("", h.note);
   return L.join("\n");
+}
+
+/* Rich hand-view render — classic hand-history layout: a matchup header,
+   then one block per street (board so far, new cards bright), then one
+   line per action: position · name · (hole cards on first preflop line)
+   · "opens to 40K". */
+function handHTML(h) {
+  const posOf = (actor) => actor === "hero" ? h.heroPos : h.villains?.[Number(actor.slice(1))]?.pos;
+  const cardsOf = (actor) => actor === "hero" ? h.heroCards : h.villains?.[Number(actor.slice(1))]?.cards;
+  const posB = (actor) => posOf(actor) ? `<span class="hv-pos">${esc(posOf(actor))}</span>` : "";
+  const hole = (cs) => cs && cs.some(Boolean) ? `<span class="hv-hole">${tilesHTML(cs)}</span>` : "";
+
+  const seatH = (actor) =>
+    `<div class="hv-seat">${posB(actor)}<b>${esc(actorLabel(h, actor))}</b>${hole(cardsOf(actor))}</div>`;
+  const seats = [];
+  if (h.hero !== false) seats.push(seatH("hero"));
+  (h.villains || []).forEach((_, i) => seats.push(seatH("v" + i)));
+  let html = `<div class="hv-seats">${seats.join("")}</div>`;
+
+  const ctx = [];
+  if (h.blinds) {
+    const b = [];
+    if (h.blinds.sb) b.push(kAmt(h.blinds.sb));
+    if (h.blinds.bb) b.push(kAmt(h.blinds.bb));
+    let bl = b.join("/");
+    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std)} straddle)`;
+    if (bl) ctx.push(bl);
+  }
+  if (h.effStack) ctx.push(`${kAmt(h.effStack)} eff`);
+  if (h.squid) {
+    const s = [];
+    if (h.squid.have != null) s.push(`${h.squid.have} have`);
+    if (h.squid.left != null) s.push(`${h.squid.left} left`);
+    if (s.length) ctx.push(`squid ${s.join(", ")}`);
+  }
+  if (ctx.length) html += `<div class="hv-ctx">${esc(ctx.join("  ·  "))}</div>`;
+  const win = handWinner(h);
+  if (win) {
+    const names = win.winners.map((p) => actorLabel(h, p)).join(" & ");
+    const txt = win.winners.length > 1
+      ? `Chop — ${names}`
+      : `${names} wins` + (win.how === "showdown" ? " at showdown" : " — everyone folded");
+    const cls = h.hero !== false
+      ? (win.winners.includes("hero") ? (win.winners.length > 1 ? "chop" : "won") : "lost") : "";
+    html += `<div class="hv-result ${cls}">${esc(txt)}</div>`;
+  } else if (h.result) {                        // legacy manually-tagged hands
+    html += `<div class="hv-result ${h.result}">${esc("Hero " + h.result)}</div>`;
+  }
+
+  const pe = estimatePot(h, h.actions);
+  const b = h.board || [];
+  const upTo = { flop: 3, turn: 4, river: 5 };   // board shown cumulatively per street
+  const newAt = { pre: 0, flop: 0, turn: 3, river: 4 };
+  const shownCards = new Set();                   // hole cards once per actor, on first pre line
+  const blocks = [];
+  for (const st of STREETS) {
+    const acts = (h.actions || []).map((a, i) => ({ a, i })).filter((x) => x.a.street === st);
+    const hasNew = st !== "pre" && b.slice(newAt[st], upTo[st]).some(Boolean);
+    if (!acts.length && !hasNew) continue;
+    const boardH = st === "pre" ? "" :
+      b.slice(0, upTo[st]).filter(Boolean).map((c, i) => tileHTML(c, i < newAt[st])).join("");
+    const lines = acts.map(({ a, i }) => {
+      const cs = st === "pre" && !shownCards.has(a.actor) ? cardsOf(a.actor) : null;
+      if (st === "pre") shownCards.add(a.actor);
+      const { verb, sz, to } = actParts(a);
+      // relative sizes (%, pot, x) also show the resolved chip amount
+      const amt = sz && /%|pot|over|x$/i.test(a.size || "") && pe.perAct[i]
+        ? ` <span class="hv-amt">${potStr(pe.perAct[i])}</span>` : "";
+      return `<div class="hv-line">${posB(a.actor)}<b>${esc(actorLabel(h, a.actor))}</b>${hole(cs)}` +
+        `<span class="hv-verb">${esc(verb)}${to ? " to" : ""}</span>` +
+        (sz ? `<b class="hv-size">${esc(sz)}</b>` : "") + amt + `</div>`;
+    }).join("");
+    const potH = st !== "pre" && pe.atStart[st] > 0
+      ? `<span class="hv-pot">${potStr(pe.atStart[st])}</span>` : "";
+    blocks.push(`<div class="hv-block">
+      <div class="hv-sthead"><span class="hv-st">${st === "pre" ? "PREFLOP" : st.toUpperCase()}</span>` +
+      (boardH ? `<span class="hv-board">${boardH}</span>` : "") + potH + `</div>${lines}</div>`);
+  }
+  if (blocks.length) html += `<div class="hv-streets">${blocks.join("")}</div>`;
+  if (h.note) html += `<div class="hv-note">${esc(h.note)}</div>`;
+  return html;
 }
 
 /* ================= Hands feed + detail ================= */
 
 function renderHandsFeed() {
   const hands = [...HANDS].sort((a, b) => b.ts - a.ts);
-  $("hands-list").innerHTML = hands.map(handRowHTML).join("") ||
+  $("hands-list").innerHTML = hands.map((h) => handRowHTML(h)).join("") ||
     `<div class="empty">No hands yet — log one from the Hand tab.</div>`;
 }
 
@@ -225,7 +404,7 @@ function renderHandView(id) {
   const h = HANDS.find((x) => x.id === id);
   if (!h) { location.hash = "#hands"; return; }
   curHandId = id;
-  $("hv-text").textContent = handText(h);
+  $("hv-text").innerHTML = handHTML(h);
 }
 
 /* ================= Data / backup ================= */
@@ -255,10 +434,11 @@ function newDraft(keep) {
     id: null, ts: null,
     villains: keep ? keep.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos, cards: [null, null] })) : [],
     heroPos: keep ? keep.heroPos : null, heroCards: [null, null],
+    heroIn: keep ? keep.heroIn : true,
     board: [null, null, null, null, null],
     actions: [], street: "pre", actor: null, lastV: "v0",
     note: "", effStack: "",
-    sb: keep ? keep.sb : "", bb: keep ? keep.bb : "", std: keep ? keep.std : "",
+    sb: keep ? keep.sb : blindsDefault.sb, bb: keep ? keep.bb : blindsDefault.bb, std: keep ? keep.std : blindsDefault.std,
     squidHave: keep ? keep.squidHave : "", squidLeft: keep ? keep.squidLeft : "",
     mode: keep ? keep.mode : "chips", focusPos: null,
   };
@@ -356,14 +536,36 @@ function draftChanged() {
   metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   renderHandEntry();
 }
+/* Is Hero part of this hand? Table mode: only if seated. Chips mode: the "You" toggle. */
+function heroPresent(d) {
+  return d.mode === "table" ? d.heroPos != null : d.heroIn;
+}
 function currentActor() {
   if (draft.mode === "table")
     return draft.focusPos ? actorForPos(draft.focusPos) : null;
-  return draft.actor || (draft.villains.length ? "v0" : "hero");
+  let a = draft.actor;
+  if (!draft.heroIn && a === "hero") a = null;
+  return a || (draft.villains.length ? "v0" : (draft.heroIn ? "hero" : null));
+}
+/* Chips-mode auto-alternate: hero↔villain, or cycle villains when hero is out. */
+function nextActorChips(actor) {
+  if (draft.heroIn) return actor === "hero" ? draft.lastV : "hero";
+  const n = draft.villains.length;
+  if (n <= 1) return actor;
+  return "v" + ((Number(actor.slice(1)) + 1) % n);
 }
 function ensureVillainSlot() {
   if (!draft.villains.length)
     draft.villains.push({ opponentId: null, pos: null, cards: [null, null] });
+}
+/* Everyone in the hand needs a seat before board cards go in. */
+function positionsMissing() {
+  const need = [];
+  if (heroPresent(draft) && !draft.heroPos) need.push("You");
+  draft.villains.forEach((v, i) => {
+    if (!v.pos) need.push(oppById(v.opponentId)?.name || "V" + (i + 1));
+  });
+  return need;
 }
 
 function lineText(d) {
@@ -372,10 +574,10 @@ function lineText(d) {
     const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
     parts.push(nm + (v.pos ? " " + v.pos : ""));
   });
-  if (d.heroPos || d.heroCards.some(Boolean))
+  if (heroPresent(d) && (d.heroPos || d.heroCards.some(Boolean)))
     parts.push("Hero" + (d.heroPos ? " " + d.heroPos : "") +
       (d.heroCards.some(Boolean) ? " " + cardsStr(d.heroCards) : ""));
-  if (d.effStack) parts.push("eff $" + d.effStack);
+  if (d.effStack) parts.push("eff " + d.effStack + "K");
   if (d.squidHave || d.squidLeft)
     parts.push("squid " + (d.squidHave || "?") + "/" + (d.squidLeft || "?"));
   for (const st of STREETS) {
@@ -387,6 +589,231 @@ function lineText(d) {
       parts.push(actorLabel(d, a.actor) + " " + a.act + (a.size ? " " + a.size : "")));
   }
   return parts.join(" · ");
+}
+
+/* ---- turn order + street completion (positions drive who's next) ---- */
+/* Acting order: preflop = UTG→…→blinds→straddle (POSITIONS as listed);
+   postflop = blinds first, button last. */
+const ORDER_POST = ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"];
+const actOrderFor = (street) => street === "pre" ? POSITIONS : ORDER_POST;
+const AGG_ACTS = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
+
+function draftActorPos(actor) {
+  return actor === "hero" ? draft.heroPos : draft.villains[Number(actor.slice(1))]?.pos;
+}
+function draftParticipants() {
+  const p = draft.villains.map((_, i) => "v" + i);
+  if (heroPresent(draft)) p.unshift("hero");
+  return p;
+}
+function liveActors() {                       // folds are terminal
+  const folded = new Set(draft.actions.filter((a) => a.act === "fold").map((a) => a.actor));
+  return draftParticipants().filter((p) => !folded.has(p));
+}
+/* Next to act after `actor`, walking seat order among live positioned players. */
+function nextActorByPos(actor) {
+  const myPos = draftActorPos(actor);
+  if (!myPos) return null;
+  const order = actOrderFor(draft.street);
+  const live = liveActors().map((p) => ({ p, pos: draftActorPos(p) })).filter((x) => x.pos);
+  const i = order.indexOf(myPos);
+  for (let k = 1; k <= order.length; k++) {
+    const hit = live.find((x) => x.pos === order[(i + k) % order.length] && x.p !== actor);
+    if (hit) return hit.p;
+  }
+  return null;
+}
+/* First to act on a street, or null when positions are unknown. */
+function firstToAct(street) {
+  const order = actOrderFor(street);
+  const live = liveActors().map((p) => ({ p, pos: draftActorPos(p) })).filter((x) => x.pos);
+  live.sort((a, b) => order.indexOf(a.pos) - order.indexOf(b.pos));
+  return live[0]?.p || null;
+}
+/* Betting on `street` is closed: everyone live has responded to the last
+   aggression (or everyone has checked/limped through). */
+function streetClosed(street) {
+  const acts = draft.actions.filter((a) => a.street === street);
+  if (!acts.length) return false;
+  const live = liveActors();
+  if (live.length < 2) return false;          // hand is over, nothing to advance
+  let lastAgg = -1;
+  acts.forEach((a, i) => { if (AGG_ACTS.includes(a.act)) lastAgg = i; });
+  if (lastAgg >= 0) {
+    const aggr = acts[lastAgg].actor;
+    const after = new Set(acts.slice(lastAgg + 1).map((a) => a.actor));
+    return live.every((p) => p === aggr || after.has(p));
+  }
+  const acted = new Set(acts.map((a) => a.actor));
+  return live.every((p) => acted.has(p));
+}
+
+/* How many raises have gone in preflop (open=1, 3bet=2, 4bet=3 …). */
+function preRaiseLevel() {
+  return draft.actions.filter((a) => a.street === "pre" &&
+    ["raise", "3bet", "4bet", "5bet"].includes(a.act)).length;
+}
+/* Facing an all-in on this street? (act "jam" or any aggression sized "Jam") */
+function facingJam(street) {
+  const agg = draft.actions.filter((a) => a.street === street && AGG_ACTS.includes(a.act));
+  const last = agg[agg.length - 1];
+  return !!last && (last.act === "jam" || last.size === "Jam");
+}
+/* Preflop buttons depend on what's already happened. */
+function preflopActs() {
+  if (facingJam("pre")) return ["fold", "call"];   // can't raise an all-in
+  const lvl = preRaiseLevel();
+  if (lvl === 0) {
+    // the BB (or the straddler, when there's a straddle) has the option: check, not limp
+    const optionSeat = draft.std ? "STD" : "BB";
+    const cur = currentActor();
+    if (cur && draftActorPos(cur) === optionSeat) return ["fold", "check", "raise"];
+    return ["fold", "limp", "raise"];
+  }
+  return [
+    null,
+    ["fold", "call", "3bet"],    // facing a raise
+    ["fold", "call", "4bet"],    // facing a 3bet
+    ["fold", "call", "5bet"],    // facing a 4bet
+  ][lvl] || ["fold", "call", "jam"];   // facing a 4bet+ / all-in
+}
+/* Postflop buttons depend on the betting on the CURRENT street. */
+function postflopActs() {
+  const st = draft.street;
+  if (facingJam(st)) return ["fold", "call"];      // can't raise an all-in
+  const bets = draft.actions.filter((a) => a.street === st &&
+    ["bet", "raise", "jam"].includes(a.act)).length;
+  return [
+    ["check", "bet"],            // checked to you / first in
+    ["fold", "call", "raise"],   // facing a bet
+    ["fold", "call", "raise"],   // facing a raise (re-raise)
+  ][bets] || ["fold", "call", "jam"];   // facing a re-raise+ / all-in
+}
+function actLabel(a) {
+  if (["3bet", "4bet", "5bet"].includes(a)) return a;
+  return a[0].toUpperCase() + a.slice(1);
+}
+/* ---------- hand evaluator + auto result ----------
+   Result is never entered by hand: if everyone folds to one player they
+   win; if 2+ reach the end with a full board and known hole cards, the
+   evaluator settles it (ties = chop). Anything else stays unknown. */
+const RVAL = Object.fromEntries("23456789TJQKA".split("").map((r, i) => [r, i + 2]));
+function score5(cs) {                       // 5 cards → comparable score array
+  const vs = cs.map((c) => RVAL[c[0]]).sort((a, b) => b - a);
+  const flush = cs.every((c) => c[1] === cs[0][1]);
+  const counts = {};
+  vs.forEach((v) => counts[v] = (counts[v] || 0) + 1);
+  const groups = Object.entries(counts).map(([v, n]) => [n, Number(v)])
+    .sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  let straight = 0;
+  if (groups.length === 5) {
+    if (vs[0] - vs[4] === 4) straight = vs[0];
+    else if (vs[0] === 14 && vs[1] === 5 && vs[4] === 2) straight = 5;   // wheel
+  }
+  const rest = groups.map((g) => g[1]);
+  if (flush && straight) return [8, straight];
+  if (groups[0][0] === 4) return [7, ...rest];
+  if (groups[0][0] === 3 && groups[1]?.[0] === 2) return [6, ...rest];
+  if (flush) return [5, ...vs];
+  if (straight) return [4, straight];
+  if (groups[0][0] === 3) return [3, ...rest];
+  if (groups[0][0] === 2 && groups[1]?.[0] === 2) return [2, ...rest];
+  if (groups[0][0] === 2) return [1, ...rest];
+  return [0, ...vs];
+}
+function cmpScore(x, y) {
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+function best7(cs) {                        // best 5 of up to 7
+  let best = null;
+  const n = cs.length;
+  for (let a = 0; a < n - 4; a++) for (let b = a + 1; b < n - 3; b++)
+    for (let c = b + 1; c < n - 2; c++) for (let d = c + 1; d < n - 1; d++)
+      for (let e = d + 1; e < n; e++) {
+        const s = score5([cs[a], cs[b], cs[c], cs[d], cs[e]]);
+        if (!best || cmpScore(s, best) > 0) best = s;
+      }
+  return best;
+}
+/* Who won this hand, if it's determinable. → { winners:[actors], how } | null */
+function handWinner(h) {
+  const parts = (h.villains || []).map((_, i) => "v" + i);
+  if (h.hero !== false) parts.unshift("hero");
+  const folded = new Set((h.actions || []).filter((a) => a.act === "fold").map((a) => a.actor));
+  const live = parts.filter((p) => !folded.has(p));
+  if (live.length === 1 && folded.size) return { winners: live, how: "folds" };
+  if (live.length < 2) return null;
+  const board = (h.board || []).filter(Boolean);
+  const cardsOf = (p) => p === "hero" ? h.heroCards : h.villains?.[Number(p.slice(1))]?.cards;
+  if (board.length !== 5 || !live.every((p) => (cardsOf(p) || []).filter(Boolean).length === 2)) return null;
+  let best = null, winners = [];
+  for (const p of live) {
+    const s = best7(board.concat(cardsOf(p)));
+    const d = best ? cmpScore(s, best) : 1;
+    if (d > 0) { best = s; winners = [p]; }
+    else if (d === 0) winners.push(p);
+  }
+  return { winners, how: "showdown" };
+}
+/* Hero-relative outcome for dots/records: "won" | "lost" | "chop" | null. */
+function heroResult(h) {
+  const win = handWinner(h);
+  if (!win) return h.result || null;        // legacy hands with manually set result
+  if (h.hero === false) return null;
+  if (!win.winners.includes("hero")) return "lost";
+  return win.winners.length > 1 ? "chop" : "won";
+}
+
+/* ---------- rough pot tracking (in K) ----------
+   Sizes are shorthand ("4x", "50%", "Jam"), so this is a deliberate
+   approximation: multipliers apply to the last bet, percentages to the
+   current pot, jams to the effective stack, unsized aggression to
+   typical defaults. Good enough for "how big was that turn jam". */
+function estimatePot(src, actions) {
+  const num = (v) => { const n = Number(v); return isFinite(n) && n > 0 ? n : 0; };
+  const sb = num(src.sb ?? src.blinds?.sb), bb = num(src.bb ?? src.blinds?.bb), std = num(src.std ?? src.blinds?.std);
+  const eff = num(src.effStack);
+  const unit = std || bb;                        // price of entry preflop
+  let pot = sb + bb + std;
+  const atStart = { pre: pot };                  // pot as each street begins
+  const perAct = [];                             // resolved "to" amount per action
+  let street = "pre", contrib = {}, curBet = unit;
+  const potNow = () => pot + Object.values(contrib).reduce((a, x) => a + x, 0);
+  for (const a of actions || []) {
+    if (a.street !== street) { pot = potNow(); contrib = {}; street = a.street; curBet = 0; atStart[street] = pot; }
+    if (a.act === "fold" || a.act === "check") { perAct.push(0); continue; }
+    if (a.act === "limp") { contrib[a.actor] = unit; curBet = Math.max(curBet, unit); perAct.push(unit); continue; }
+    if (a.act === "call") { if (curBet) contrib[a.actor] = curBet; perAct.push(curBet); continue; }
+    let lvl = 0;                                 // aggression → a new "to" level this street
+    const s = a.size;
+    if (s && /^\d+(\.\d+)?k$/i.test(s)) lvl = parseFloat(s);
+    else if (s && /^\$/.test(s)) lvl = parseFloat(s.slice(1));
+    else if (s && /^\d+(\.\d+)?x$/i.test(s)) lvl = parseFloat(s) * (curBet || unit);
+    else if (s && /%$/.test(s)) lvl = (parseFloat(s) / 100) * potNow() + curBet;
+    else if (s === "pot") lvl = potNow() + curBet;
+    else if (s === "over") lvl = 1.3 * potNow() + curBet;
+    else if (s === "Jam" || a.act === "jam") lvl = eff || (curBet ? 2.5 * curBet : potNow());
+    else lvl = curBet ? 2.5 * curBet : 0.66 * potNow();
+    if (!isFinite(lvl) || lvl <= 0) { perAct.push(0); continue; }
+    if (eff) lvl = Math.min(lvl, eff);
+    contrib[a.actor] = Math.max(contrib[a.actor] || 0, lvl);
+    curBet = Math.max(curBet, lvl);
+    perAct.push(lvl);
+  }
+  return { atStart, now: potNow(), curBet, perAct };
+}
+const potStr = (n) => !n ? "" : "≈" + (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + "K";
+
+/* Size options depend on the action: open raise = chip amounts, 3bet+ = multipliers. */
+function sizesFor(a) {
+  if (a.street !== "pre") return SIZES_POST;
+  if (a.act === "3bet") return SIZES_3BET;
+  if (a.act === "4bet" || a.act === "5bet") return SIZES_4BET;
+  return SIZES_OPEN;
 }
 
 function renderHandEntry() {
@@ -412,16 +839,22 @@ function renderHandEntry() {
   const sorted = OPP.filter((o) => !o.archived).sort((a, b) =>
     (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
   const selIds = d.villains.map((v) => v.opponentId);
-  $("he-villains").innerHTML = sorted.map((o) =>
+  const heroChip = `<button class="chip heroic${d.heroIn ? " on" : ""}" data-heroin>You</button>`;
+  $("he-villains").innerHTML = heroChip + sorted.map((o) =>
     `<button class="chip${selIds.includes(o.id) ? " on" : ""}" data-vopp="${o.id}">${esc(o.name)}</button>`
-  ).join("") || `<div class="empty" style="padding:6px">Add opponents in the Opponents tab first.</div>`;
+  ).join("");
 
-  // position rows
+  // position rows (hide Hero's row when Hero isn't in the hand)
+  $("he-heropos").closest(".posrow").classList.toggle("hidden", !d.heroIn);
   $("he-heropos").innerHTML = POSITIONS.map((p) =>
     `<button class="chip mini${d.heroPos === p ? " on" : ""}" data-hpos="${p}">${p}</button>`).join("");
-  const vpos = d.villains[0]?.pos || null;
-  $("he-vpos").innerHTML = POSITIONS.map((p) =>
-    `<button class="chip mini${vpos === p ? " on" : ""}" data-vpos="${p}">${p}</button>`).join("");
+  // one position row per selected villain, labelled by name
+  $("he-vposrows").innerHTML = d.villains.map((v, i) => {
+    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
+    const chips = POSITIONS.map((p) =>
+      `<button class="chip mini${v.pos === p ? " on" : ""}" data-vposi="${i}" data-vpos="${p}">${p}</button>`).join("");
+    return `<div class="posrow"><span class="poslabel">${esc(nm.slice(0, 9))}</span><div class="chiprow tight">${chips}</div></div>`;
+  }).join("");
 
   // street segment
   $("he-street").innerHTML = STREETS.map((s) =>
@@ -434,35 +867,60 @@ function renderHandEntry() {
     return `<button class="${cur === "v" + i ? "on" : ""}" data-actor="v${i}">${esc(nm)}</button>`;
   }).join("") || `<button class="${cur === "v0" ? "on" : ""}" data-actor="v0">VILLAIN</button>`;
   $("he-actor").innerHTML =
-    `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` + vBtns;
+    (d.heroIn ? `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` : "") + vBtns;
 
-  // action buttons — street-aware: no Bet preflop (3bet instead), no Limp postflop
-  const acts = d.street === "pre" ? ACTS_PRE : ACTS_POST;
+  // running pot estimate (rough — see estimatePot)
+  const pe = estimatePot(d, d.actions);
+  const showPot = d.actions.length > 0 && pe.now > 0;
+  $("he-pot").classList.toggle("hidden", !showPot);
+  if (showPot) $("he-pot").textContent = "Pot " + potStr(pe.now);
+
+  // action buttons — situational: options depend on the betting so far this street
+  const acts = d.street === "pre" ? preflopActs() : postflopActs();
   $("he-acts").innerHTML = acts.map((a) =>
-    `<button data-act="${a}">${a === "3bet" ? "3bet" : a[0].toUpperCase() + a.slice(1)}</button>`).join("");
+    `<button data-act="${a}">${actLabel(a)}</button>`).join("");
+
 
   // size strip (when last action is a sizeable bet/raise/3bet without a size yet)
   const last = d.actions[d.actions.length - 1];
   const needSize = last && SIZED_ACTS.includes(last.act) && !last.size;
   $("he-sizes").classList.toggle("hidden", !needSize);
   if (needSize) {
-    const sizes = last.street === "pre" ? SIZES_PRE : SIZES_POST;
-    $("he-sizes").innerHTML = sizes.map((s) =>
-      `<button class="chip" data-size="${s}">${s}</button>`).join("") +
-      `<input data-sizenum type="number" placeholder="$" inputmode="numeric">`;
+    // resolve relative sizes to chips: pot/bet-so-far BEFORE this pending action
+    const prev = d.actions.slice(0, -1);
+    const base = estimatePot(d, prev);
+    const facing = prev.length && prev[prev.length - 1].street === last.street ? base.curBet : 0;
+    const chipAmt = (s) => {
+      if (/%$/.test(s)) return (parseFloat(s) / 100) * base.now + facing;
+      if (s === "pot") return base.now + facing;
+      if (s === "over") return 1.3 * base.now + facing;
+      if (/^\d+(\.\d+)?x$/i.test(s)) return facing ? parseFloat(s) * facing : 0;
+      return 0;
+    };
+    $("he-sizes").innerHTML =
+      `<span class="sizehint">${actLabel(last.act)} size</span>` +
+      sizesFor(last).map((s) => {
+        const amt = base.now > 0 ? chipAmt(s) : 0;
+        return `<button class="chip" data-size="${s}">${s}${amt ? `<i>${potStr(amt)}</i>` : ""}</button>`;
+      }).join("") +
+      `<input data-sizenum type="number" placeholder="custom" inputmode="numeric">`;
   }
 
   // card slots
   const slotBtn = (zone, i, card, lbl) =>
     `<button class="cslot${card ? " filled" : ""}" data-slot="${zone}:${i}">` +
     (card ? cardHTML(card) : `<span class="lbl">${lbl}</span>`) + `</button>`;
-  let ch = d.board.map((c, i) => slotBtn("board", i, c, ["F", "F", "F", "T", "R"][i])).join("");
-  ch += `<span class="cdiv">hero</span>` + d.heroCards.map((c, i) => slotBtn("hero", i, c, "?")).join("");
+  let ch = `<div class="crow">` +
+    d.board.map((c, i) => slotBtn("board", i, c, ["F", "F", "F", "T", "R"][i])).join("") +
+    `</div><div class="crow">`;
+  if (d.heroIn)
+    ch += `<span class="cdiv">hero</span>` + d.heroCards.map((c, i) => slotBtn("hero", i, c, "?")).join("");
   d.villains.forEach((v, i) => {
     const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 6) : "V" + (i + 1);
     ch += `<span class="cdiv">${esc(nm)}</span>` +
       (v.cards || [null, null]).map((c, j) => slotBtn("v" + i, j, c, "?")).join("");
   });
+  ch += `</div>`;
   $("he-cards").innerHTML = ch;
 
   // note + blinds + eff stack + squid (don't clobber focused inputs)
@@ -504,6 +962,16 @@ function bindHandEntry() {
         if (draft.heroPos === pos) draft.heroPos = null;
         draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
       });
+    } else if (b.dataset.heroin !== undefined) { // toggle Hero in/out of the hand
+      mutate(() => {
+        draft.heroIn = !draft.heroIn;
+        if (!draft.heroIn) {                      // pull Hero out cleanly
+          draft.heroPos = null;
+          draft.heroCards = [null, null];
+          draft.actions = draft.actions.filter((a) => a.actor !== "hero");
+          if (draft.actor === "hero") draft.actor = draft.villains.length ? "v0" : null;
+        }
+      });
     } else if (b.dataset.vopp !== undefined) {   // toggle villain selection
       mutate(() => {
         const i = draft.villains.findIndex((v) => v.opponentId === b.dataset.vopp);
@@ -511,14 +979,31 @@ function bindHandEntry() {
         else draft.villains.push({ opponentId: b.dataset.vopp, pos: null, cards: [null, null] });
       });
     } else if (b.dataset.hpos) {
-      mutate(() => { draft.heroPos = draft.heroPos === b.dataset.hpos ? null : b.dataset.hpos; });
-    } else if (b.dataset.vpos) {
       mutate(() => {
-        ensureVillainSlot();
-        draft.villains[0].pos = draft.villains[0].pos === b.dataset.vpos ? null : b.dataset.vpos;
+        const p = b.dataset.hpos;
+        if (draft.heroPos === p) { draft.heroPos = null; return; }
+        draft.villains.forEach((x) => { if (x.pos === p) x.pos = null; });   // seat is unique
+        draft.heroPos = p;
+        if (!draft.actions.length) draft.actor = firstToAct(draft.street) || draft.actor;
+      });
+    } else if (b.dataset.vpos) {
+      const i = Number(b.dataset.vposi);
+      mutate(() => {
+        const v = draft.villains[i];
+        if (!v) return;
+        const p = b.dataset.vpos;
+        if (v.pos === p) { v.pos = null; return; }
+        draft.villains.forEach((x, j) => { if (j !== i && x.pos === p) x.pos = null; });
+        if (draft.heroPos === p) draft.heroPos = null;                       // seat is unique
+        v.pos = p;
+        if (!draft.actions.length) draft.actor = firstToAct(draft.street) || draft.actor;
       });
     } else if (b.dataset.street) {
-      mutate(() => { draft.street = b.dataset.street; });
+      mutate(() => {
+        draft.street = b.dataset.street;
+        const f = firstToAct(draft.street);
+        if (f) draft.actor = f;
+      });
     } else if (b.dataset.actor) {
       mutate(() => {
         draft.actor = b.dataset.actor;
@@ -527,19 +1012,37 @@ function bindHandEntry() {
     } else if (b.dataset.act) {
       const actor = currentActor();
       if (!actor) { toast("Tap a seated player first"); return; }
+      let openBoard = null;
       mutate(() => {
         if (draft.mode !== "table" && actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
         draft.actions.push({ street: draft.street, actor, act: b.dataset.act, size: null });
-        if (draft.mode !== "table")
-          draft.actor = actor === "hero" ? draft.lastV : "hero";   // auto-alternate (chips mode)
+        if (streetClosed(draft.street) && draft.street !== "river") {
+          // betting done → next street, first-to-act up, and prompt for the board
+          const next = STREETS[STREETS.indexOf(draft.street) + 1];
+          draft.street = next;
+          draft.actor = firstToAct(next) || draft.actor;
+          openBoard = next;
+        } else if (draft.mode !== "table") {
+          draft.actor = nextActorByPos(actor) || nextActorChips(actor);
+        }
       });
+      if (openBoard && groupSlots(openBoard).some((s) => !s.arr[s.i])) {
+        const miss = positionsMissing();
+        if (miss.length) toast("Set positions first: " + miss.join(", "));
+        else openGroupSheet(openBoard);          // straight into entering the flop/turn/river
+      }
     } else if (b.dataset.size) {
       mutate(() => {
         const last = draft.actions[draft.actions.length - 1];
         if (last) last.size = b.dataset.size;
       });
     } else if (b.dataset.slot) {
-      openCardSheet(b.dataset.slot);
+      const g = groupForSlot(b.dataset.slot);
+      if (["flop", "turn", "river"].includes(g)) {
+        const miss = positionsMissing();
+        if (miss.length) { toast("Set positions first: " + miss.join(", ")); return; }
+      }
+      openGroupSheet(g);
     }
   });
 
@@ -557,9 +1060,9 @@ function bindHandEntry() {
   const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   $("he-note").oninput = () => { draft.note = $("he-note").value; persistDraft(); };
   $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
-  $("he-sb").oninput = () => { draft.sb = $("he-sb").value; persistDraft(); };
-  $("he-bb").oninput = () => { draft.bb = $("he-bb").value; persistDraft(); };
-  $("he-std").oninput = () => { draft.std = $("he-std").value; persistDraft(); };
+  $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
+  $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
+  $("he-std").oninput = () => setBlind("std", $("he-std").value);
   $("he-squidhave").oninput = () => { draft.squidHave = $("he-squidhave").value; persistDraft(); };
   $("he-squidleft").oninput = () => { draft.squidLeft = $("he-squidleft").value; persistDraft(); };
   $("he-save").onclick = () => saveHand(false);
@@ -572,24 +1075,47 @@ function usedCards() {
   return new Set([...draft.board, ...draft.heroCards,
     ...draft.villains.flatMap((v) => v.cards || [])].filter(Boolean));
 }
-function slotRef(key) {          // "board:2" -> {zone, i, arr}
-  const [zone, iS] = key.split(":");
-  const i = Number(iS);
-  const arr = zone === "board" ? draft.board
-    : zone === "hero" ? draft.heroCards
-    : (draft.villains[Number(zone.slice(1))] || {}).cards;
-  return { zone, i, arr };
-}
-let sheetSlot = null;
 
-function openCardSheet(key) {
-  sheetSlot = key;
-  const { zone, i, arr } = slotRef(key);
-  if (!arr) return;
+/* A card "group" is a set of slots entered together: the flop (3),
+   the turn (1), the river (1), or a person's two hole cards. */
+function groupForSlot(key) {
+  const [zone, iS] = key.split(":");
+  if (zone === "board") { const i = Number(iS); return i <= 2 ? "flop" : i === 3 ? "turn" : "river"; }
+  return zone;                                   // "hero" | "v0" | "v1" ...
+}
+function groupSlots(g) {                          // -> [{ arr, i }] in fill order
+  if (g === "flop")  return [0, 1, 2].map((i) => ({ arr: draft.board, i }));
+  if (g === "turn")  return [{ arr: draft.board, i: 3 }];
+  if (g === "river") return [{ arr: draft.board, i: 4 }];
+  if (g === "hero")  return [0, 1].map((i) => ({ arr: draft.heroCards, i }));
+  const vi = Number(g.slice(1));
+  const arr = (draft.villains[vi] || {}).cards;
+  return arr ? [0, 1].map((i) => ({ arr, i })) : [];
+}
+function groupTitle(g) {
+  if (g === "flop") return "Flop"; if (g === "turn") return "Turn"; if (g === "river") return "River";
+  if (g === "hero") return "Hero cards";
+  const nm = oppById(draft.villains[Number(g.slice(1))]?.opponentId)?.name;
+  return (nm || "Villain") + " cards";
+}
+let sheetGroup = null, sheetActive = 0;
+
+function openGroupSheet(g, active) {
+  const slots = groupSlots(g);
+  if (!slots.length) return;
+  sheetGroup = g;
+  if (active == null) {                          // default to first empty slot
+    const fe = slots.findIndex((s) => !s.arr[s.i]);
+    active = fe >= 0 ? fe : 0;
+  }
+  sheetActive = active;
   const used = usedCards();
-  const cur = arr[i];
-  const title = zone === "board" ? `Board · ${["flop", "flop", "flop", "turn", "river"][i]}`
-    : zone === "hero" ? "Hero cards" : "Villain cards";
+  const cur = slots[sheetActive].arr[slots[sheetActive].i];
+  const preview = slots.length > 1 ? `<div class="gcslots">` + slots.map((s, idx) => {
+    const c = s.arr[s.i];
+    return `<button class="gcslot${c ? " filled" : ""}${idx === sheetActive ? " active" : ""}" data-gslot="${idx}">`
+      + (c ? cardHTML(c) : `<span class="lbl">?</span>`) + `</button>`;
+  }).join("") + `</div>` : "";
   let grid = "";
   for (const s of SUITS) {
     grid += RANKS.split("").map((r) => {
@@ -598,32 +1124,34 @@ function openCardSheet(key) {
       return `<button class="${s.cls}${c === cur ? " picked" : ""}" data-card="${c}" ${dis ? "disabled" : ""}>${r}${s.sym}</button>`;
     }).join("");
   }
-  showSheet(`<div class="sheethead"><span class="t">${title}</span>
+  showSheet(`<div class="sheethead"><span class="t">${groupTitle(g)}</span>
     <button data-clearcard>Clear</button><button data-closesheet>Done</button></div>
-    <div class="cardgrid">${grid}</div>`);
+    ${preview}<div class="cardgrid">${grid}</div>`);
 }
 
 function sheetClick(e) {
   const b = e.target.closest("button");
-  if (!b) return;
+  if (!b || sheetGroup == null) return;
   if (b.dataset.closesheet !== undefined) { hideSheet(); return; }
 
-  if (b.dataset.card && sheetSlot) {
-    const key = sheetSlot;
+  if (b.dataset.gslot !== undefined) {           // pick which slot in the group to fill
+    openGroupSheet(sheetGroup, Number(b.dataset.gslot));
+  } else if (b.dataset.card) {
+    const emptyBefore = groupSlots(sheetGroup).filter((s) => !s.arr[s.i]).length;
     mutate(() => {
-      const { zone, i, arr } = slotRef(key);
-      arr[i] = b.dataset.card;
-      if (zone === "board") advanceStreetFromBoard();
+      const s = groupSlots(sheetGroup)[sheetActive];
+      s.arr[s.i] = b.dataset.card;
+      if (sheetGroup === "flop" || sheetGroup === "turn" || sheetGroup === "river")
+        advanceStreetFromBoard();
     });
-    // auto-advance to next empty slot in the same zone
-    const { zone, arr } = slotRef(key);
-    const next = arr.findIndex((c) => !c);
-    if (next >= 0) openCardSheet(`${zone}:${next}`);
-    else hideSheet();
-  } else if (b.dataset.clearcard !== undefined && sheetSlot) {
-    const key = sheetSlot;
-    mutate(() => { const { i, arr } = slotRef(key); arr[i] = null; });
-    openCardSheet(key);
+    const slots = groupSlots(sheetGroup);
+    const nextEmpty = slots.findIndex((s) => !s.arr[s.i]);
+    if (nextEmpty >= 0) openGroupSheet(sheetGroup, nextEmpty);      // keep going within the group
+    else if (emptyBefore === 0) openGroupSheet(sheetGroup, sheetActive); // replaced in a full group — stay
+    else hideSheet();                                              // just completed the group
+  } else if (b.dataset.clearcard !== undefined) {
+    mutate(() => { const s = groupSlots(sheetGroup)[sheetActive]; s.arr[s.i] = null; });
+    openGroupSheet(sheetGroup, sheetActive);
   }
 }
 
@@ -633,8 +1161,11 @@ function advanceStreetFromBoard() {
   if (b[4]) target = "river";
   else if (b[3]) target = "turn";
   else if (b[0] && b[1] && b[2]) target = "flop";
-  if (target && STREETS.indexOf(target) > STREETS.indexOf(draft.street))
+  if (target && STREETS.indexOf(target) > STREETS.indexOf(draft.street)) {
     draft.street = target;
+    const f = firstToAct(target);
+    if (f) draft.actor = f;
+  }
 }
 
 /* --- save --- */
@@ -647,10 +1178,12 @@ function draftHasContent(d) {
 async function saveHand(nextHand) {
   const d = draft;
   if (!draftHasContent(d)) { toast("Nothing to save"); return; }
+  const hIn = heroPresent(d);
   const rec = {
     id: d.id || uid(), ts: d.ts || Date.now(), updatedAt: Date.now(),
-    heroPos: d.heroPos,
-    heroCards: d.heroCards.some(Boolean) ? d.heroCards : null,
+    hero: hIn,
+    heroPos: hIn ? d.heroPos : null,
+    heroCards: hIn && d.heroCards.some(Boolean) ? d.heroCards : null,
     villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
       cards: (v.cards || []).some(Boolean) ? v.cards : null })),
     villainIds: d.villains.map((v) => v.opponentId).filter(Boolean),
@@ -664,6 +1197,9 @@ async function saveHand(nextHand) {
       : null,
     note: d.note.trim(),
   };
+  const win = handWinner(rec);                 // result is inferred, never entered
+  rec.showdown = !!win && win.how === "showdown";
+  rec.result = hIn ? heroResult(rec) : null;
   await dbPut("hands", rec);
   const i = HANDS.findIndex((h) => h.id === rec.id);
   if (i >= 0) HANDS[i] = rec; else HANDS.push(rec);
@@ -686,6 +1222,8 @@ function loadHandIntoDraft(h) {
       cards: v.cards ? [...v.cards] : [null, null] })),
     heroPos: h.heroPos || null,
     heroCards: h.heroCards ? [...h.heroCards] : [null, null],
+    heroIn: h.hero !== undefined ? h.hero : true,
+    mode: "chips", focusPos: null,
     board: [...(h.board || [])].concat([null, null, null, null, null]).slice(0, 5),
     actions: (h.actions || []).map((a) => ({ ...a })),
     street: STREETS[Math.max(0, ...streets)] || "pre",
@@ -764,6 +1302,28 @@ function bindStatic() {
     $("od-note").value = "";
     renderOppDetail(curOppId);
   };
+  $("od-notes").onclick = async (e) => {
+    const item = e.target.closest("[data-note]");
+    if (!item) return;
+    const id = item.dataset.note;
+    const o = oppById(curOppId);
+    if (e.target.closest("[data-notedel]")) {
+      if (!confirm("Delete this note?")) return;
+      o.notes = (o.notes || []).filter((n) => n.id !== id);
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-noteedit]")) {
+      editNoteId = id; renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-notecancel]")) {
+      editNoteId = null; renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-notesave]")) {
+      const txt = item.querySelector("textarea").value.trim();
+      const n = (o.notes || []).find((x) => x.id === id);
+      if (n && txt) { n.text = txt; n.ts = Date.now(); o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      editNoteId = null; renderOppDetail(curOppId);
+    }
+  };
   $("od-hands").onclick = handListClick;
   $("hands-list").onclick = handListClick;
 
@@ -810,6 +1370,18 @@ function handListClick(e) {
   if (r) location.hash = "#handview/" + r.dataset.hand;
 }
 
+async function loadBlindsDefault() {
+  const b = await metaGet("defaultBlinds");
+  if (b) blindsDefault = { sb: b.sb || "", bb: b.bb || "", std: b.std || "" };
+}
+/* Blinds are sticky: whatever you type becomes the default for future hands. */
+function setBlind(key, val) {
+  draft[key] = val;
+  blindsDefault[key] = val;
+  metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+  metaSet("defaultBlinds", { ...blindsDefault });
+}
+
 async function requestDurableStorage() {
   try {
     if (navigator.storage && navigator.storage.persist) {
@@ -823,8 +1395,9 @@ async function boot() {
   await openDB();
   await requestDurableStorage();
   await refreshCache();
+  await loadBlindsDefault();
   const saved = await metaGet("draftHand");
-  if (saved) draft = Object.assign(newDraft(), saved);
+  draft = saved ? Object.assign(newDraft(), saved) : newDraft();
   bindStatic();
   window.addEventListener("hashchange", route);
   route();

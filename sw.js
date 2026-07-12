@@ -1,12 +1,15 @@
 /* Service worker: cache the app shell so it runs offline once installed. */
-const CACHE = "journal-v5";
+const CACHE = "journal-v21";
 const ASSETS = [
   ".", "index.html", "style.css", "app.js", "db.js", "vocab.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache:"reload" skips the HTTP cache so a version bump always ships fresh files
+  e.waitUntil(caches.open(CACHE)
+    .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys().then((ks) =>

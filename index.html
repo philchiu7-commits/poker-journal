@@ -82,7 +82,7 @@
 
     <div class="hgroup">
       <div class="posrow"><span class="poslabel">Hero</span><div id="he-heropos" class="chiprow tight"></div></div>
-      <div class="posrow"><span class="poslabel">Vill</span><div id="he-vpos" class="chiprow tight"></div></div>
+      <div id="he-vposrows"></div>
     </div>
   </div>
 
@@ -93,6 +93,7 @@
 
   <div class="hgroup actionpad">
     <div id="he-street" class="seg"></div>
+    <div id="he-pot" class="potline hidden"></div>
     <div id="he-actor" class="seg"></div>
     <div id="he-acts" class="actgrid"></div>
     <div id="he-sizes" class="chiprow hidden"></div>
@@ -109,14 +110,14 @@
 
   <div class="hgroup stackrow">
     <span class="glabel">Blinds</span>
-    <input id="he-sb" type="number" placeholder="SB" inputmode="numeric">
-    <input id="he-bb" type="number" placeholder="BB" inputmode="numeric">
-    <input id="he-std" type="number" placeholder="STD" inputmode="numeric">
+    <span class="kfield"><input id="he-sb" type="number" placeholder="SB" inputmode="numeric"><i>K</i></span>
+    <span class="kfield"><input id="he-bb" type="number" placeholder="BB" inputmode="numeric"><i>K</i></span>
+    <span class="kfield"><input id="he-std" type="number" placeholder="STD" inputmode="numeric"><i>K</i></span>
   </div>
 
   <div class="hgroup stackrow">
     <span class="glabel">Eff. stack</span>
-    <input id="he-effstack" type="number" placeholder="$" inputmode="numeric">
+    <span class="kfield"><input id="he-effstack" type="number" placeholder="stack" inputmode="numeric"><i>K</i></span>
   </div>
 
   <div class="hgroup stackrow">
@@ -144,7 +145,7 @@
     <h1>Hand</h1>
     <button id="hv-edit" class="iconbtn" title="Edit">✎</button>
   </header>
-  <pre id="hv-text" class="handtext"></pre>
+  <div id="hv-text" class="handview"></div>
   <button id="hv-delete" class="danger">Delete hand</button>
 </section>
 
