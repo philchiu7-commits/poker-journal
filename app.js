@@ -66,6 +66,34 @@ function suggestedExploits(o) {
   return out;
 }
 
+/* Merge opponent `fromId` INTO `intoId`: reassign every hand's villain refs,
+   union reads/notes/exploits/dismissed, then delete the absorbed profile. */
+async function mergeOpponents(fromId, intoId) {
+  if (fromId === intoId) return;
+  const from = oppById(fromId), into = oppById(intoId);
+  if (!from || !into) return;
+  for (const h of HANDS) {
+    let touched = false;
+    for (const v of h.villains || []) if (v.opponentId === fromId) { v.opponentId = intoId; touched = true; }
+    if ((h.villainIds || []).includes(fromId)) {
+      h.villainIds = [...new Set(h.villainIds.map((x) => (x === fromId ? intoId : x)))];
+      touched = true;
+    }
+    if (touched) { h.updatedAt = Date.now(); await dbPut("hands", h); }
+  }
+  const fr = oppReads(from), ir = oppReads(into);
+  for (const [k, st] of Object.entries(fr)) if (!ir[k]) ir[k] = st;   // keep survivor's state on conflict
+  into.notes = [...(into.notes || []), ...(from.notes || [])].sort((a, b) => b.ts - a.ts);
+  into.exploits = [...(into.exploits || []), ...(from.exploits || [])].sort((a, b) => b.ts - a.ts);
+  into.exploitDismissed = [...new Set([...(into.exploitDismissed || []), ...(from.exploitDismissed || [])])];
+  if (!into.group && from.group) into.group = from.group;
+  if (!into.physical && from.physical) into.physical = from.physical;
+  into.updatedAt = Date.now();
+  await dbPut("opponents", into);
+  await dbDel("opponents", fromId);
+  await refreshCache();
+}
+
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
 }
@@ -1386,6 +1414,32 @@ function bindStatic() {
     OPP = OPP.filter((x) => x.id !== o.id);
     location.hash = "#opponents";
   };
+  $("od-e-merge").onclick = () => {
+    const cur = oppById(curOppId);
+    const others = OPP.filter((o) => o.id !== curOppId).sort((a, b) => a.name.localeCompare(b.name));
+    if (!others.length) { toast("No other opponent to merge into."); return; }
+    const handCount = (id) => HANDS.filter((h) => (h.villainIds || []).includes(id)).length;
+    sheetGroup = null; // not a card sheet
+    showSheet(`<div class="sheethead"><span class="t">Merge ${esc(cur.name)} into…</span>
+        <button data-sheetclose>Close</button></div>
+      <div class="sheetnote">Pick the profile to keep — ${esc(cur.name)}'s hands, reads, notes &amp; exploits move there, then ${esc(cur.name)} is deleted.</div>
+      <div class="mergelist">${others.map((o) =>
+        `<button class="mergeitem" data-mergeinto="${o.id}"><span class="mnm">${esc(o.name)}</span>` +
+        `<span class="msub muted">${[o.group, handCount(o.id) + "h"].filter(Boolean).join(" · ")}</span></button>`).join("")}</div>`);
+  };
+  $("sheet").addEventListener("click", async (e) => {
+    if (e.target.closest("[data-sheetclose]")) { hideSheet(); return; }
+    const b = e.target.closest("[data-mergeinto]");
+    if (!b) return;
+    const intoId = b.dataset.mergeinto, from = oppById(curOppId), into = oppById(intoId);
+    if (!from || !into) return;
+    if (!confirm(`Merge "${from.name}" into "${into.name}"?\n\n${from.name}'s hands, reads, notes and exploits move to ${into.name}, then "${from.name}" is deleted.`)) return;
+    hideSheet();
+    await mergeOpponents(curOppId, intoId);
+    toast(`Merged into ${into.name}`);
+    location.hash = "#opp/" + intoId;
+    renderOppDetail(intoId);
+  });
   $("od-tags").onclick = async (e) => {
     const b = e.target.closest("[data-tag]");
     if (!b) return;

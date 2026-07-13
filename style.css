@@ -329,6 +329,15 @@ textarea.noteedit { margin-bottom: 0; }
 .sheethead { display: flex; align-items: center; margin-bottom: 10px; }
 .sheethead .t { font-weight: 700; flex: 1; }
 .sheethead button { background: none; border: 0; color: var(--accent); font-size: 15px; cursor: pointer; padding: 4px; }
+.sheetnote { color: var(--muted); font-size: 13px; line-height: 1.4; margin-bottom: 12px; }
+.mergelist { display: flex; flex-direction: column; gap: 8px; }
+.mergeitem {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 11px;
+  padding: 13px 14px; color: var(--text); font-size: 16px; cursor: pointer;
+}
+.mergeitem .mnm { font-weight: 600; flex: 1; }
+.mergeitem .msub { font-size: 13px; }
 .gcslots { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; }
 .gcslot {
   width: 46px; height: 62px; border-radius: 9px; border: 1px dashed var(--line);
