@@ -35,10 +35,12 @@ const readChip = (id, state) =>
   `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(TAG_BY_ID[id]?.label || id)}</span>`;
 /* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
 const READ_GROUPS = [
+  { cat: "preflop",  label: "3bet",       bubbles: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"]] },
   { cat: "postflop", label: "Station",    bubbles: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
   { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
   { cat: "postflop", label: "Raise nuts", bubbles: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
   { cat: "postflop", label: "Bluff till", bubbles: [["bluff-till-f", "F"], ["bluff-till-t", "T"], ["bluff-till-r", "R"]] },
+  { cat: "postflop", label: "Range",      bubbles: [["merged", "Merged"], ["polar", "Polar"], ["bad-polar", "Bad pol"]] },
 ];
 const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
 
