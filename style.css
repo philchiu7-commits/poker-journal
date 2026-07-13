@@ -100,6 +100,10 @@ button.danger {
 }
 .chip:active { transform: scale(.94); }
 .chip.on { background: #1c2c47; color: var(--accent); border-color: var(--accent); font-weight: 600; box-shadow: 0 0 0 1px var(--accent) inset; }
+/* three-state read colours: green = yes, red = no, yellow = mid (draw-size) */
+.chip.on.sgreen  { background: #10301a; color: var(--good); border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
+.chip.on.sred    { background: #3a1414; color: var(--bad); border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+.chip.on.syellow { background: #33280a; color: #e0b23e; border-color: #e0b23e; box-shadow: 0 0 0 1px #e0b23e inset; }
 .chip.heroic.on { background: #163521; color: var(--green); border-color: var(--green); box-shadow: 0 0 0 1px var(--green) inset; }
 .chip.mini { padding: 5px 9px; font-size: 12px; }
 .tagcat { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 6px; }

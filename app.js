@@ -13,6 +13,27 @@ let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
+/* ---------- reads: three-state tendency toggles ----------
+   Yes (green) / No (red) / neutral (off), cycled on tap. draw-size is a
+   3-colour scale instead. Stored per opponent as o.reads { id: state };
+   migrated from the legacy o.tags array (all "yes") on first touch. */
+const READ_CYCLE = { "draw-size": ["green", "yellow", "red"] };
+const readCycle = (id) => READ_CYCLE[id] || ["yes", "no"];
+const STATE_CLASS = { yes: "sgreen", no: "sred", green: "sgreen", yellow: "syellow", red: "sred" };
+function oppReads(o) {
+  if (!o.reads || typeof o.reads !== "object")
+    o.reads = Array.isArray(o.tags) ? Object.fromEntries(o.tags.map((id) => [id, "yes"])) : {};
+  return o.reads;
+}
+function nextReadState(id, cur) {
+  const cyc = readCycle(id);
+  if (!cur) return cyc[0];
+  const i = cyc.indexOf(cur);
+  return i < 0 || i === cyc.length - 1 ? null : cyc[i + 1];
+}
+const readChip = (id, state) =>
+  `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(TAG_BY_ID[id]?.label || id)}</span>`;
+
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
 }
@@ -116,8 +137,8 @@ function updateGroupsDatalist() {
 }
 
 function oppRowHTML(o, st) {
-  const tags = (o.tags || []).slice(0, 3)
-    .map((t) => `<span class="chip mini on">${esc(TAG_BY_ID[t]?.label || t)}</span>`).join("");
+  const tags = Object.entries(oppReads(o)).slice(0, 3)
+    .map(([id, s]) => readChip(id, s)).join("");
   const sub = [st ? `${st.count} hand${st.count > 1 ? "s" : ""}` : "", o.physical]
     .filter(Boolean).join(" · ");
   return `<div class="lrow" data-opp="${o.id}">
@@ -170,11 +191,13 @@ function renderOppDetail(id) {
   $("od-e-group").value = o.group || "";
   $("od-e-physical").value = o.physical || "";
 
+  const reads = oppReads(o);
   $("od-tags").innerHTML = TAG_CATS.map((cat) =>
     `<div class="tagcat">${cat}</div><div class="chiprow">` +
-    TENDENCY_TAGS.filter((t) => t.cat === cat).map((t) =>
-      `<button class="chip mini${(o.tags || []).includes(t.id) ? " on" : ""}" data-tag="${t.id}">${t.label}</button>`
-    ).join("") + `</div>`).join("");
+    TENDENCY_TAGS.filter((t) => t.cat === cat).map((t) => {
+      const st = reads[t.id];
+      return `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${t.id}">${esc(t.label)}</button>`;
+    }).join("") + `</div>`).join("");
 
   $("od-notes").innerHTML = (o.notes || []).map((n) =>
     n.id === editNoteId
@@ -493,7 +516,8 @@ function renderTable() {
       cls += " vill";
       const v = d.villains[occ.idx];
       const o = oppById(v.opponentId);
-      const tag = o?.tags?.[0] ? `<span class="ttag">${esc(TAG_BY_ID[o.tags[0]]?.label || o.tags[0])}</span>` : "";
+      const rk = o ? Object.keys(oppReads(o))[0] : null;
+      const tag = rk ? `<span class="ttag">${esc(TAG_BY_ID[rk]?.label || rk)}</span>` : "";
       inner = `<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">${esc(o?.name || "?")}</span></div>${tag}`;
     } else {
       cls += " empty";
@@ -1300,12 +1324,13 @@ function bindStatic() {
     const b = e.target.closest("[data-tag]");
     if (!b) return;
     const o = oppById(curOppId);
-    const t = b.dataset.tag;
-    const i = (o.tags = o.tags || []).indexOf(t);
-    i >= 0 ? o.tags.splice(i, 1) : o.tags.push(t);
+    const reads = oppReads(o);
+    const id = b.dataset.tag;
+    const ns = nextReadState(id, reads[id]);
+    if (ns) reads[id] = ns; else delete reads[id];
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
-    b.classList.toggle("on");
+    renderOppDetail(curOppId);
   };
   $("od-note-add").onclick = async () => {
     const text = $("od-note").value.trim();
