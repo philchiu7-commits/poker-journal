@@ -228,15 +228,23 @@ function definingAct(h, actor) {
     const r = (ACT_RANK[a.act] ?? 0) + (a.size === "Jam" ? 4 : 0);
     if (!best || r >= best.r) best = { a, r };
   }
-  if (!best) return null;
-  return actPhrase(best.a) + (best.a.street !== "pre" ? ` (${best.a.street})` : "");
+  return best?.a || null;
+}
+/* Compact action code for list rows: "R40K", "3B4x", "B50%", "Jam (turn)". */
+const ACT_ABBR = { fold: "F", check: "X", call: "C", limp: "L", bet: "B", raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B", jam: "Jam" };
+function abbrevAct(a) {
+  const street = a.street !== "pre" ? ` (${a.street})` : "";
+  if (a.act === "jam" || a.size === "Jam") return "Jam" + street;
+  const sz = a.size ? sizeLabel(a.size) : "";
+  const code = ACT_ABBR[a.act] || a.act;
+  return code + (sz ? (/^\d/.test(sz) ? "" : " ") + sz : "") + street;
 }
 /* Row in a hands list. With `oppId`, lead with THAT villain's position,
    hole cards, and defining action instead of just names. */
 function handRowHTML(h, oppId) {
-  const when = `<span class="when">${fmtWhen(h.ts)}</span>`;
   const res = heroResult(h);
   const dot = res ? `<span class="dot ${res}"></span>` : "";
+  const squid = h.squid?.have != null ? `<span class="hr-squid">${h.squid.have}🦑</span>` : "";
   const boardH = (h.board || []).some(Boolean) ? tilesHTML(h.board) + " " : "";
   const sub = `<div class="s">${boardH}${esc(handSummary(h))}</div>`;
   if (oppId) {
@@ -247,16 +255,16 @@ function handRowHTML(h, oppId) {
       const bits = [
         v.pos ? `<span class="hv-pos">${esc(v.pos)}</span>` : "",
         v.cards && v.cards.some(Boolean) ? tilesHTML(v.cards) : "",
-        def ? `<span class="hr-act">${esc(def)}</span>` : "",
+        def ? `<span class="hr-act">${esc(abbrevAct(def))}</span>` : "",
       ].filter(Boolean).join("");
       if (bits) return `<div class="lrow" data-hand="${h.id}">
-        <div class="t hr-t">${dot}${bits}${when}</div>${sub}
+        <div class="t hr-t">${dot}${bits}${squid}</div>${sub}
       </div>`;
     }
   }
   const names = (h.villains || []).map((v) => oppById(v.opponentId)?.name).filter(Boolean).join(", ");
   return `<div class="lrow" data-hand="${h.id}">
-    <div class="t">${dot}${esc(names || "Hand")}${when}</div>${sub}
+    <div class="t">${dot}${esc(names || "Hand")}${squid}</div>${sub}
   </div>`;
 }
 
@@ -340,9 +348,9 @@ function handHTML(h) {
   if (h.effStack) ctx.push(`${kAmt(h.effStack)} eff`);
   if (h.squid) {
     const s = [];
-    if (h.squid.have != null) s.push(`${h.squid.have} have`);
+    if (h.squid.have != null) s.push(`${h.squid.have}🦑`);
     if (h.squid.left != null) s.push(`${h.squid.left} left`);
-    if (s.length) ctx.push(`squid ${s.join(", ")}`);
+    if (s.length) ctx.push(s.join(" · "));
   }
   if (ctx.length) html += `<div class="hv-ctx">${esc(ctx.join("  ·  "))}</div>`;
   const win = handWinner(h);
@@ -923,10 +931,15 @@ function renderHandEntry() {
   ch += `</div>`;
   $("he-cards").innerHTML = ch;
 
-  // note + blinds + eff stack + squid (don't clobber focused inputs)
+  // squid counters: scrollable 0-11 (have) and 0-12 (left) chip rows
+  const squidChips = (key, max, cur) => Array.from({ length: max + 1 }, (_, n) =>
+    `<button class="chip mini${String(cur) === String(n) ? " on" : ""}" data-${key}="${n}">${n}</button>`).join("");
+  $("he-squidhave").innerHTML = squidChips("squidhave", 11, d.squidHave);
+  $("he-squidleft").innerHTML = squidChips("squidleft", 12, d.squidLeft);
+
+  // note + blinds + eff stack (don't clobber focused inputs)
   for (const [id, val] of [["he-note", d.note], ["he-sb", d.sb], ["he-bb", d.bb],
-                           ["he-std", d.std], ["he-effstack", d.effStack],
-                           ["he-squidhave", d.squidHave], ["he-squidleft", d.squidLeft]])
+                           ["he-std", d.std], ["he-effstack", d.effStack]])
     if (document.activeElement !== $(id)) $(id).value = val;
 }
 
@@ -1036,6 +1049,10 @@ function bindHandEntry() {
         const last = draft.actions[draft.actions.length - 1];
         if (last) last.size = b.dataset.size;
       });
+    } else if (b.dataset.squidhave !== undefined) {
+      mutate(() => { draft.squidHave = String(draft.squidHave) === b.dataset.squidhave ? "" : b.dataset.squidhave; });
+    } else if (b.dataset.squidleft !== undefined) {
+      mutate(() => { draft.squidLeft = String(draft.squidLeft) === b.dataset.squidleft ? "" : b.dataset.squidleft; });
     } else if (b.dataset.slot) {
       const g = groupForSlot(b.dataset.slot);
       if (["flop", "turn", "river"].includes(g)) {
@@ -1063,8 +1080,6 @@ function bindHandEntry() {
   $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
   $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
   $("he-std").oninput = () => setBlind("std", $("he-std").value);
-  $("he-squidhave").oninput = () => { draft.squidHave = $("he-squidhave").value; persistDraft(); };
-  $("he-squidleft").oninput = () => { draft.squidLeft = $("he-squidleft").value; persistDraft(); };
   $("he-save").onclick = () => saveHand(false);
   $("he-savenext").onclick = () => saveHand(true);
 }

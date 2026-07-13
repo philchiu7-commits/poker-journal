@@ -268,6 +268,7 @@ textarea.noteedit { margin-bottom: 0; }
 /* hands-list row led by a villain's pos/cards/action (opponent tab) */
 .hr-t .ctile { font-size: 13px; padding: 1px 5px; }
 .hr-act { font-size: 14px; font-weight: 500; }
+.hr-squid { font-size: 13px; color: var(--muted); margin-left: auto; }
 .lrow .t .dot { align-self: center; }
 .lrow .s .ctile { font-size: 11px; padding: 0 4px; box-shadow: none; }
 
