@@ -1558,7 +1558,7 @@ function bindStatic() {
     try {
       const counts = await importJSON(JSON.parse(await f.text()));
       await refreshCache();
-      toast(`Imported ${counts.opponents} opp · ${counts.hands} hands`);
+      toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands`);
       renderData();
     } catch (err) { toast("Import failed: " + err.message); }
     e.target.value = "";
