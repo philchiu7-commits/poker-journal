@@ -7,7 +7,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 /* ---------- in-memory caches (source of truth is IndexedDB) ---------- */
 let OPP = [], HANDS = [];
 let curOppId = null, curHandId = null;
-let editNoteId = null;
+let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 
@@ -33,6 +33,14 @@ function nextReadState(id, cur) {
 }
 const readChip = (id, state) =>
   `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(TAG_BY_ID[id]?.label || id)}</span>`;
+/* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
+const READ_GROUPS = [
+  { cat: "postflop", label: "Station",    bubbles: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
+  { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
+  { cat: "postflop", label: "Raise nuts", bubbles: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
+  { cat: "postflop", label: "Bluff till", bubbles: [["bluff-till-f", "F"], ["bluff-till-t", "T"], ["bluff-till-r", "R"]] },
+];
+const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
 
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
@@ -182,7 +190,7 @@ async function createOpponent(name, group) {
 function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
-  if (curOppId !== id) editNoteId = null;
+  if (curOppId !== id) { editNoteId = null; editExploitId = null; }
   curOppId = id;
   $("od-name").textContent = o.name;
   $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
@@ -192,12 +200,19 @@ function renderOppDetail(id) {
   $("od-e-physical").value = o.physical || "";
 
   const reads = oppReads(o);
-  $("od-tags").innerHTML = TAG_CATS.map((cat) =>
-    `<div class="tagcat">${cat}</div><div class="chiprow">` +
-    TENDENCY_TAGS.filter((t) => t.cat === cat).map((t) => {
-      const st = reads[t.id];
-      return `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${t.id}">${esc(t.label)}</button>`;
-    }).join("") + `</div>`).join("");
+  const readBtn = (id, lbl, bubble) => {
+    const st = reads[id];
+    const base = bubble ? "bubble" : "chip mini";
+    return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
+  };
+  $("od-tags").innerHTML = TAG_CATS.map((cat) => {
+    const groups = READ_GROUPS.filter((g) => g.cat === cat).map((g) =>
+      `<div class="readgroup"><span class="rglabel">${esc(g.label)}</span><div class="bubbles">` +
+      g.bubbles.map(([id, lbl]) => readBtn(id, lbl, true)).join("") + `</div></div>`).join("");
+    const singles = TENDENCY_TAGS.filter((t) => t.cat === cat && !GROUPED_IDS.has(t.id))
+      .map((t) => readBtn(t.id, t.label, false)).join("");
+    return `<div class="tagcat">${cat}</div>${groups}` + (singles ? `<div class="chiprow">${singles}</div>` : "");
+  }).join("");
 
   $("od-notes").innerHTML = (o.notes || []).map((n) =>
     n.id === editNoteId
@@ -215,6 +230,22 @@ function renderOppDetail(id) {
             <button class="chip mini" data-notedel>Delete</button>
           </div></div>`
   ).join("") || `<div class="empty">No notes yet.</div>`;
+
+  $("od-exploits").innerHTML = (o.exploits || []).map((n) =>
+    n.id === editExploitId
+      ? `<div class="noteitem" data-exp="${n.id}">
+          <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
+          <div class="noterowbtns">
+            <button class="chip mini" data-expcancel>Cancel</button>
+            <button class="chip mini on sgreen" data-expsave>Save</button>
+          </div></div>`
+      : `<div class="noteitem" data-exp="${n.id}">
+          <div class="notetext">${esc(n.text)}</div>
+          <div class="noterowbtns">
+            <button class="chip mini" data-expedit>Edit</button>
+            <button class="chip mini" data-expdel>Delete</button>
+          </div></div>`
+  ).join("") || `<div class="empty">No exploits yet — how do you beat this player?</div>`;
 
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
   $("od-hands").innerHTML = hands.map((h) => handRowHTML(h, id)).join("") ||
@@ -1362,6 +1393,38 @@ function bindStatic() {
       const n = (o.notes || []).find((x) => x.id === id);
       if (n && txt) { n.text = txt; n.ts = Date.now(); o.updatedAt = Date.now(); await dbPut("opponents", o); }
       editNoteId = null; renderOppDetail(curOppId);
+    }
+  };
+  $("od-exploit-add").onclick = async () => {
+    const text = $("od-exploit").value.trim();
+    if (!text) return;
+    const o = oppById(curOppId);
+    (o.exploits = o.exploits || []).unshift({ id: uid(), ts: Date.now(), text });
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    $("od-exploit").value = "";
+    renderOppDetail(curOppId);
+  };
+  $("od-exploits").onclick = async (e) => {
+    const item = e.target.closest("[data-exp]");
+    if (!item) return;
+    const id = item.dataset.exp;
+    const o = oppById(curOppId);
+    if (e.target.closest("[data-expdel]")) {
+      if (!confirm("Delete this exploit?")) return;
+      o.exploits = (o.exploits || []).filter((n) => n.id !== id);
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-expedit]")) {
+      editExploitId = id; renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-expcancel]")) {
+      editExploitId = null; renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-expsave]")) {
+      const txt = item.querySelector("textarea").value.trim();
+      const n = (o.exploits || []).find((x) => x.id === id);
+      if (n && txt) { n.text = txt; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      editExploitId = null; renderOppDetail(curOppId);
     }
   };
   $("od-hands").onclick = handListClick;

@@ -101,9 +101,20 @@ button.danger {
 .chip:active { transform: scale(.94); }
 .chip.on { background: #1c2c47; color: var(--accent); border-color: var(--accent); font-weight: 600; box-shadow: 0 0 0 1px var(--accent) inset; }
 /* three-state read colours: green = yes, red = no, yellow = mid (draw-size) */
-.chip.on.sgreen  { background: #10301a; color: var(--good); border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
-.chip.on.sred    { background: #3a1414; color: var(--bad); border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
-.chip.on.syellow { background: #33280a; color: #e0b23e; border-color: #e0b23e; box-shadow: 0 0 0 1px #e0b23e inset; }
+.chip.on.sgreen,  .bubble.on.sgreen  { background: #10301a; color: var(--good); border-color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
+.chip.on.sred,    .bubble.on.sred    { background: #3a1414; color: var(--bad); border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+.chip.on.syellow, .bubble.on.syellow { background: #33280a; color: #e0b23e; border-color: #e0b23e; box-shadow: 0 0 0 1px #e0b23e inset; }
+
+/* grouped reads: a label followed by F/T/R (etc.) bubble toggles */
+.readgroup { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
+.rglabel { font-size: 14px; color: var(--text); width: 96px; flex: none; }
+.bubbles { display: flex; gap: 6px; }
+.bubble {
+  min-width: 42px; padding: 7px 4px; text-align: center;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 9px; font-size: 13px; font-weight: 600;
+}
+.bubble:active { transform: scale(.96); }
 .chip.heroic.on { background: #163521; color: var(--green); border-color: var(--green); box-shadow: 0 0 0 1px var(--green) inset; }
 .chip.mini { padding: 5px 9px; font-size: 12px; }
 .tagcat { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin: 10px 0 6px; }
