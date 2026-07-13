@@ -465,7 +465,7 @@ function actorForPos(pos) {
 }
 /* Screen slots around the oval, slot 0 = bottom-centre (hero's seat). */
 const SEAT_SLOTS = [
-  [50, 94], [19, 84], [13, 49], [25, 14], [50, 7], [75, 14], [87, 49], [81, 84],
+  [50, 94], [23, 88], [10, 60], [14, 30], [34, 11], [58, 8], [79, 14], [89, 44], [82, 80],
 ];
 /* Rotate POSITIONS so hero's seat is at the bottom; else default order. */
 function seatOrder() {
@@ -602,7 +602,7 @@ function lineText(d) {
 /* ---- turn order + street completion (positions drive who's next) ---- */
 /* Acting order: preflop = UTG→…→blinds→straddle (POSITIONS as listed);
    postflop = blinds first, button last. */
-const ORDER_POST = ["SB", "BB", "STD", "U8", "U7", "HJ", "CO", "BN"];
+const ORDER_POST = ["SB", "BB", "STD", "U8", "U7", "U6", "HJ", "CO", "BN"];
 const actOrderFor = (street) => street === "pre" ? POSITIONS : ORDER_POST;
 const AGG_ACTS = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
 
