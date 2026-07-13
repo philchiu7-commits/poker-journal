@@ -602,7 +602,7 @@ function lineText(d) {
 /* ---- turn order + street completion (positions drive who's next) ---- */
 /* Acting order: preflop = UTG→…→blinds→straddle (POSITIONS as listed);
    postflop = blinds first, button last. */
-const ORDER_POST = ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"];
+const ORDER_POST = ["SB", "BB", "STD", "U8", "U7", "HJ", "CO", "BN"];
 const actOrderFor = (street) => street === "pre" ? POSITIONS : ORDER_POST;
 const AGG_ACTS = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
 

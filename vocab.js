@@ -1,6 +1,6 @@
 /* Shared vocabulary — stable ids; the future exploit engine aggregates these. */
 
-const POSITIONS = ["U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
+const POSITIONS = ["U8", "U7", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
 const ACTS = ["fold", "check", "call", "bet", "raise", "3bet", "limp", "jam"];
 const ACTS_POST = ["fold", "check", "call", "bet", "raise"];
