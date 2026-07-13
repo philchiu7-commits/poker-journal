@@ -42,6 +42,28 @@ const READ_GROUPS = [
 ];
 const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
 
+/* Turn the opponent's set reads into concrete exploit suggestions (EXPLOIT_RULES),
+   minus any Phil has dismissed or already accepted (keys in o.exploitDismissed). */
+function suggestedExploits(o) {
+  const reads = oppReads(o);
+  const dismissed = new Set(o.exploitDismissed || []);
+  const seen = new Set();
+  const out = [];
+  for (const [id, state] of Object.entries(reads)) {
+    if (!state) continue;
+    const rule = EXPLOIT_RULES[id];
+    if (!rule) continue;
+    const useAny = !!rule.any;
+    const text = useAny ? rule.any : rule[state];
+    if (!text) continue;
+    const key = id + ":" + (useAny ? "any" : state);
+    if (dismissed.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, text });
+  }
+  return out;
+}
+
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
 }
@@ -246,6 +268,17 @@ function renderOppDetail(id) {
             <button class="chip mini" data-expdel>Delete</button>
           </div></div>`
   ).join("") || `<div class="empty">No exploits yet — how do you beat this player?</div>`;
+
+  const suggs = suggestedExploits(o);
+  $("od-exsugg").innerHTML = suggs.length
+    ? `<div class="sugghead">Suggested from reads</div>` + suggs.map((s) =>
+        `<div class="suggitem" data-key="${esc(s.key)}">
+           <div class="notetext">💡 ${esc(s.text)}</div>
+           <div class="noterowbtns">
+             <button class="chip mini on sgreen" data-exacc>＋ Add</button>
+             <button class="chip mini" data-exdismiss>Dismiss</button>
+           </div></div>`).join("")
+    : "";
 
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
   $("od-hands").innerHTML = hands.map((h) => handRowHTML(h, id)).join("") ||
@@ -1426,6 +1459,20 @@ function bindStatic() {
       if (n && txt) { n.text = txt; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       editExploitId = null; renderOppDetail(curOppId);
     }
+  };
+  $("od-exsugg").onclick = async (e) => {
+    const item = e.target.closest("[data-key]");
+    if (!item) return;
+    const key = item.dataset.key;
+    const o = oppById(curOppId);
+    const sugg = suggestedExploits(o).find((s) => s.key === key);
+    (o.exploitDismissed = o.exploitDismissed || []).push(key); // hide from suggestions either way
+    if (e.target.closest("[data-exacc]") && sugg) {
+      (o.exploits = o.exploits || []).unshift({ id: uid(), ts: Date.now(), text: sugg.text, src: key });
+    }
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(curOppId);
   };
   $("od-hands").onclick = handListClick;
   $("hands-list").onclick = handListClick;
