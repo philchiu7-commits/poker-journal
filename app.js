@@ -10,6 +10,7 @@ let curOppId = null, curHandId = null;
 let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
+let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
@@ -71,6 +72,78 @@ function suggestedExploits(o) {
   }
   return out;
 }
+
+/* ============ on-device learning from the logs (all offline) ============ */
+
+/* Recency-weighted tally of a list of timestamps (half-life ≈ 30 days). Shared
+   by exploit effectiveness and any future recency scoring. */
+const RECENCY_HALFLIFE_MS = 30 * 864e5;
+function recencyScore(tsArr) {
+  const now = Date.now();
+  return (tsArr || []).reduce((s, ts) => s + Math.pow(0.5, (now - (ts || now)) / RECENCY_HALFLIFE_MS), 0);
+}
+
+/* A villain's actions in one hand, bucketed by street. */
+function villainStreetActs(h, actor) {
+  const m = { pre: [], flop: [], turn: [], river: [] };
+  for (const a of h.actions || []) if (a.actor === actor && m[a.street]) m[a.street].push(a.act);
+  return m;
+}
+
+/* FEATURE 1 — infer candidate reads from an opponent's logged hands. Each
+   detector counts hands showing a pattern; a read is suggested once its count
+   crosses a (per-signal) threshold and it isn't already set or dismissed. */
+const READ_SIGNAL_THRESH = { "station-f": 3, "station-t": 3, "station-r": 2, _default: 2 };
+function derivedReads(o) {
+  const hands = HANDS.filter((h) => (h.villainIds || []).includes(o.id));
+  const cnt = {};
+  const bump = (t) => (cnt[t] = (cnt[t] || 0) + 1);
+  const aggr = (arr) => arr.some((a) => a === "bet" || a === "raise");
+  for (const h of hands) {
+    const idx = (h.villains || []).findIndex((v) => v.opponentId === o.id);
+    if (idx < 0) continue;
+    const s = villainStreetActs(h, "v" + idx);
+    const raisedPre = s.pre.some((a) => ["raise", "3bet", "4bet", "5bet"].includes(a));
+    if (s.pre.includes("limp")) bump("limp-caller");
+    if (s.pre.includes("3bet")) bump("3bets-light");
+    if (s.flop.includes("bet") && (s.turn.includes("check") || s.turn.includes("fold"))) bump("gives-up-turn");
+    if (aggr(s.flop) && aggr(s.turn) && aggr(s.river)) bump("barrels-off");
+    if (raisedPre && s.flop.includes("bet")) bump("over-cbet");
+    if (s.flop.includes("raise")) bump("bluff-raise-flop");
+    if (s.flop.includes("call")) bump("station-f");
+    if (s.turn.includes("call")) bump("station-t");
+    if (s.river.includes("call")) bump("station-r");
+  }
+  const reads = oppReads(o);
+  const dismissed = new Set(o.readDismissed || []);
+  return Object.entries(cnt)
+    .filter(([t, c]) => c >= (READ_SIGNAL_THRESH[t] || READ_SIGNAL_THRESH._default)
+      && !reads[t] && !dismissed.has(t) && TAG_BY_ID[t])
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, c]) => ({ tagId: t, count: c, label: TAG_BY_ID[t].label }));
+}
+
+/* FEATURE 2 — predictive defaults for hand entry, from history. */
+function predictOppPos(oppId) {
+  const c = {};
+  for (const h of HANDS) {
+    if (!(h.villainIds || []).includes(oppId)) continue;
+    const v = (h.villains || []).find((x) => x.opponentId === oppId);
+    if (v && v.pos) c[v.pos] = (c[v.pos] || 0) + 1;
+  }
+  const ent = Object.entries(c);
+  if (!ent.length) return null;
+  const total = ent.reduce((s, [, n]) => s + n, 0);
+  ent.sort((a, b) => b[1] - a[1]);
+  return (total >= 3 && ent[0][1] / total >= 0.6) ? ent[0][0] : null;   // only a confident mode
+}
+function predictEffStack() {
+  const withStack = HANDS.filter((h) => h.effStack).sort((a, b) => b.ts - a.ts);
+  return withStack.length ? String(withStack[0].effStack) : "";
+}
+
+/* FEATURE 4 — exploit effectiveness score (recency-weighted "Worked" taps). */
+function exploitScore(e) { return recencyScore(e.wins); }
 
 /* Merge opponent `fromId` INTO `intoId`: reassign every hand's villain refs,
    union reads/notes/exploits/dismissed, then delete the absorbed profile. */
@@ -456,6 +529,22 @@ function renderOppDetail(id) {
     return `<div class="tagcat">${cat}</div>${groups}` + (singles ? `<div class="chiprow">${singles}</div>` : "");
   }).join("");
 
+  // FEATURE 1 — reads inferred from this opponent's logged hands
+  const dReads = derivedReads(o);
+  const showD = showDerivedReads[id];
+  $("od-readsugg").innerHTML = dReads.length
+    ? `<div class="sugghead" data-toggle-dreads>
+        <span>Suggested from hands (${dReads.length})</span>
+        <span class="toggle-arrow">${showD ? "▼" : "▶"}</span>
+      </div>` + (showD ? dReads.map((s) =>
+        `<div class="suggitem" data-dtag="${esc(s.tagId)}">
+           <div class="notetext">📊 <b>${esc(s.label)}</b> — seen in ${s.count} hand${s.count > 1 ? "s" : ""}</div>
+           <div class="noterowbtns">
+             <button class="chip mini on sgreen" data-dacc>＋ Add read</button>
+             <button class="chip mini" data-ddismiss>Dismiss</button>
+           </div></div>`).join("") : "")
+    : "";
+
   $("od-notes").innerHTML = (o.notes || []).map((n) =>
     n.id === editNoteId
       ? `<div class="noteitem" data-note="${n.id}">
@@ -473,8 +562,15 @@ function renderOppDetail(id) {
           </div></div>`
   ).join("") || `<div class="empty">No notes yet.</div>`;
 
-  $("od-exploits").innerHTML = (o.exploits || []).map((n) =>
-    n.id === editExploitId
+  // FEATURE 4 — order exploits by effectiveness (recency-weighted "Worked" taps)
+  const exps = [...(o.exploits || [])].map((e) => ({ e, sc: exploitScore(e) }))
+    .sort((a, b) => b.sc - a.sc);
+  const topId = exps.length && exps[0].sc > 0 ? exps[0].e.id : null;
+  $("od-exploits").innerHTML = exps.map(({ e: n }) => {
+    const wins = (n.wins || []).length;
+    const tally = wins ? `<span class="wintally" title="Worked ${wins}×">👍 ${wins}</span>` : "";
+    const topBadge = n.id === topId ? `<span class="topbadge">top</span>` : "";
+    return n.id === editExploitId
       ? `<div class="noteitem" data-exp="${n.id}">
           <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
           <div class="noterowbtns">
@@ -482,13 +578,14 @@ function renderOppDetail(id) {
             <button class="chip mini on sgreen" data-expsave>Save</button>
           </div></div>`
       : `<div class="noteitem${o.pinnedExploit === n.id ? " pinned" : ""}" data-exp="${n.id}">
-          <div class="notetext">${o.pinnedExploit === n.id ? "💡 " : ""}${esc(n.text)}</div>
+          <div class="notetext">${o.pinnedExploit === n.id ? "💡 " : ""}${esc(n.text)} ${topBadge}${tally}</div>
           <div class="noterowbtns">
+            <button class="chip mini" data-expwin title="Mark this exploit as having worked">👍 Worked</button>
             <button class="chip mini pinbtn${o.pinnedExploit === n.id ? " on sgreen" : ""}" data-exppin title="Show this exploit on the opponents list">${o.pinnedExploit === n.id ? "★ On list" : "☆ Show on list"}</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
-          </div></div>`
-  ).join("") || `<div class="empty">No exploits yet — how do you beat this player?</div>`;
+          </div></div>`;
+  }).join("") || `<div class="empty">No exploits yet — how do you beat this player?</div>`;
 
   const suggs = suggestedExploits(o);
   const showSugg = showSuggestedExploits[id];
@@ -767,7 +864,7 @@ function newDraft(keep) {
     heroIn: keep ? keep.heroIn : true,
     board: [null, null, null, null, null],
     actions: [], street: "pre", actor: null, lastV: "v0",
-    note: "", effStack: "",
+    note: "", effStack: keep ? keep.effStack : predictEffStack(),   // FEATURE 2: default from last hand
     sb: keep ? keep.sb : blindsDefault.sb, bb: keep ? keep.bb : blindsDefault.bb, std: keep ? keep.std : blindsDefault.std,
     squidHave: keep ? keep.squidHave : "", squidLeft: keep ? keep.squidLeft : "",
     mode: keep ? keep.mode : "chips", focusPos: null,
@@ -1385,7 +1482,12 @@ function bindHandEntry() {
       mutate(() => {
         const i = draft.villains.findIndex((v) => v.opponentId === b.dataset.vopp);
         if (i >= 0) draft.villains.splice(i, 1);
-        else draft.villains.push({ opponentId: b.dataset.vopp, pos: null, cards: [null, null] });
+        else {
+          // FEATURE 2 — pre-fill their usual seat (only a confident historical mode)
+          const pos = predictOppPos(b.dataset.vopp);
+          const taken = new Set([draft.heroPos, ...draft.villains.map((v) => v.pos)].filter(Boolean));
+          draft.villains.push({ opponentId: b.dataset.vopp, pos: (pos && !taken.has(pos)) ? pos : null, cards: [null, null] });
+        }
       });
     } else if (b.dataset.hpos) {
       mutate(() => {
@@ -1788,7 +1890,11 @@ function bindStatic() {
     if (!item) return;
     const id = item.dataset.exp;
     const o = oppById(curOppId);
-    if (e.target.closest("[data-exppin]")) {
+    if (e.target.closest("[data-expwin]")) {
+      const n = (o.exploits || []).find((x) => x.id === id);   // log that it worked (recency-weighted)
+      if (n) { (n.wins = n.wins || []).push(Date.now()); o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-exppin]")) {
       o.pinnedExploit = o.pinnedExploit === id ? null : id;   // toggle which shows on the list
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
@@ -1825,6 +1931,25 @@ function bindStatic() {
     (o.exploitDismissed = o.exploitDismissed || []).push(key); // hide from suggestions either way
     if (e.target.closest("[data-exacc]") && sugg) {
       (o.exploits = o.exploits || []).unshift({ id: uid(), ts: Date.now(), text: sugg.text, src: key });
+    }
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(curOppId);
+  };
+  $("od-readsugg").onclick = async (e) => {
+    if (e.target.closest("[data-toggle-dreads]")) {
+      showDerivedReads[curOppId] = !showDerivedReads[curOppId];
+      renderOppDetail(curOppId);
+      return;
+    }
+    const item = e.target.closest("[data-dtag]");
+    if (!item) return;
+    const tag = item.dataset.dtag;
+    const o = oppById(curOppId);
+    if (e.target.closest("[data-dacc]")) {
+      oppReads(o)[tag] = "yes";                              // accept → set the read
+    } else {
+      (o.readDismissed = o.readDismissed || []).push(tag);   // dismiss → stop suggesting it
     }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
