@@ -35,6 +35,8 @@ main {
   background: var(--panel2); color: var(--accent); border: 1px solid var(--line);
   border-radius: 10px; width: 40px; height: 40px; font-size: 20px; cursor: pointer; flex: none;
 }
+.iconbtn.textbtn { width: auto; padding: 0 14px; font-size: 15px; font-weight: 600; }
+.iconbtn.textbtn.on { background: linear-gradient(180deg, var(--accent), var(--accent2)); color: #0a0d12; }
 .backbtn {
   background: none; border: 0; color: var(--accent); font-size: 30px; line-height: 1;
   padding: 0 6px 4px 0; cursor: pointer; flex: none;
@@ -87,6 +89,35 @@ button.danger {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .dot.won { background: var(--good); } .dot.lost { background: var(--bad); } .dot.chop { background: var(--muted); }
+
+/* ---- opponent rows: hand-count badge, pinned exploit, edit/drag ---- */
+.opprow { position: relative; display: flex; align-items: center; gap: 10px; }
+.opprow-body { flex: 1; min-width: 0; }
+.opprow .handbadge {
+  position: absolute; right: 10px; bottom: 8px; flex: none;
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+  font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.opprow .pinexp { color: var(--accent); -webkit-line-clamp: 2; }
+.opprow .draghandle {
+  flex: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: grab;
+  touch-action: none; padding: 2px 4px; user-select: none;
+}
+.opprow.dragging { opacity: .85; border-color: var(--accent); box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.opprow .movebtn {
+  flex: none; background: var(--panel2); border: 1px solid var(--line); color: var(--accent);
+  border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+  margin-right: 26px;
+}
+.grouphead { display: flex; align-items: center; gap: 10px; }
+.grouphead .tagcat { flex: 1; }
+.groupadd {
+  background: none; border: 1px dashed var(--line); color: var(--accent);
+  border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.groupsec { display: flex; flex-direction: column; gap: 8px; }
+.groupsec + .grouphead { margin-top: 6px; }
 .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 26px 10px; }
 
 /* ---- chips ---- */
@@ -174,14 +205,28 @@ textarea.noteedit { margin-bottom: 0; }
   transition: transform .04s ease;
 }
 .actgrid button:active { border-color: var(--accent); background: #1c2c47; color: var(--accent); transform: scale(.97); }
+/* ---- bet-size picker: aligned grid, label + resolved chip amount ---- */
 #he-sizes { margin-top: 8px; }
 #he-sizes:not(.hidden) {
-  align-items: center; gap: 7px;
   background: #142138; border: 1px solid var(--accent); border-radius: 11px;
-  padding: 9px; box-shadow: 0 0 0 3px rgba(91,156,255,.12);
+  padding: 10px; box-shadow: 0 0 0 3px rgba(91,156,255,.12);
 }
-#he-sizes .sizehint { color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; flex: none; margin-right: 1px; }
-#he-sizes input { width: 84px; margin: 0; padding: 8px; }
+.sizehint { color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.sizeopts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.sizebtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-height: 48px; padding: 6px 4px; border-radius: 10px;
+  background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+  font-weight: 700; cursor: pointer;
+}
+.sizebtn:active { border-color: var(--accent); background: #1c2c47; transform: scale(.97); }
+.sizebtn .sz { font-size: 15px; }
+.sizebtn .amt { font-size: 11px; font-weight: 500; color: var(--muted); }
+.sizebtn.sizecustom { flex-direction: row; gap: 4px; }
+.sizebtn.sizecustom input {
+  width: 100%; min-width: 0; margin: 0; padding: 4px 2px; border: 0; background: none;
+  text-align: center; font-size: 14px; color: var(--text);
+}
 
 /* ---- table mode ---- */
 #he-felt { position: relative; height: 300px; margin: 4px 0 10px; }
@@ -226,16 +271,47 @@ textarea.noteedit { margin-bottom: 0; }
 .cdiv { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; margin: 0 3px; flex: none; }
 .cs { color: #e6e8ec; } .ch { color: var(--red); } .cd { color: var(--blue); } .cc { color: var(--green); }
 
-.stackrow { display: flex; gap: 8px; align-items: center; }
-.stackrow .glabel { margin: 0; width: 64px; flex: none; }
-.stackrow input { flex: 1; min-width: 0; margin: 0; }
-.stackrow .kfield { position: relative; flex: 1; min-width: 0; display: block; }
-.stackrow .kfield input { width: 100%; padding-right: 24px; }
-.stackrow .kfield i {
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  color: var(--muted); font-style: normal; font-size: 15px; font-weight: 400;
-  letter-spacing: .01em; pointer-events: none;
+/* ---- compact context bar (blinds · eff · squid) at top of Hand tab ---- */
+.ctxbar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; margin-bottom: 10px;
 }
+.ctxfield {
+  display: flex; flex-direction: column; flex: 1 1 0; min-width: 52px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 3px 7px;
+}
+.ctxfield label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.ctxfield input {
+  width: 100%; min-width: 0; margin: 0; padding: 1px 0; border: 0; background: none;
+  font-size: 15px; font-weight: 700; color: var(--text);
+}
+.ctxpick {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1 1 0; min-width: 52px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 3px 7px;
+  color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  font-weight: 700; cursor: pointer;
+}
+.ctxpick i { font-style: normal; font-size: 15px; color: var(--text); }
+.ctxpick.set { border-color: var(--accent); }
+
+/* ---- villain search ---- */
+.vsearch {
+  width: 100%; margin: 0 0 8px; padding: 9px 12px; box-sizing: border-box;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); font-size: 15px;
+}
+.chipdiv { flex: none; width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.chipnote { color: var(--muted); font-size: 13px; align-self: center; padding: 0 4px; }
+
+/* ---- number picker sheet (squid) ---- */
+.numpicker {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  max-height: 46vh; overflow-y: auto; padding: 2px;
+}
+.numopt {
+  min-height: 52px; border-radius: 11px; background: var(--panel2); border: 1px solid var(--line);
+  color: var(--text); font-size: 20px; font-weight: 700; cursor: pointer;
+}
+.numopt.on { background: linear-gradient(180deg, var(--accent), var(--accent2)); color: #0a0d12; border-color: var(--accent); }
 
 .savebar {
   position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom));

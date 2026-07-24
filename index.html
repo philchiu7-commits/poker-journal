@@ -19,6 +19,7 @@
 <section id="view-opponents">
   <header class="vhead">
     <h1>Opponents</h1>
+    <button id="opp-edit" class="iconbtn textbtn" title="Reorder &amp; group">Edit</button>
     <button id="opp-add" class="iconbtn" title="New opponent">＋</button>
   </header>
   <input id="opp-search" type="search" placeholder="Search name, look…" autocomplete="off">
@@ -84,9 +85,20 @@
 
   <div class="hgroup"><div id="he-mode" class="seg"></div></div>
 
+  <!-- compact context bar: blinds · eff stack · squid, all small and up top -->
+  <div class="ctxbar">
+    <span class="ctxfield"><label>SB</label><input id="he-sb" type="number" placeholder="–" inputmode="numeric"></span>
+    <span class="ctxfield"><label>BB</label><input id="he-bb" type="number" placeholder="–" inputmode="numeric"></span>
+    <span class="ctxfield"><label>STD</label><input id="he-std" type="number" placeholder="–" inputmode="numeric"></span>
+    <span class="ctxfield"><label>Eff</label><input id="he-effstack" type="number" placeholder="–" inputmode="numeric"></span>
+    <button id="he-squidhave-btn" class="ctxpick" data-squidpick="have">🦑<i>–</i></button>
+    <button id="he-squidleft-btn" class="ctxpick" data-squidpick="left">Left<i>–</i></button>
+  </div>
+
   <div id="he-chipsonly">
     <div class="hgroup">
       <div class="glabel">Villains</div>
+      <input id="he-vsearch" class="vsearch" type="search" placeholder="🔍 Search villains…" autocomplete="off">
       <div id="he-villains" class="chiprow scroll"></div>
     </div>
 
@@ -106,33 +118,12 @@
     <div id="he-pot" class="potline hidden"></div>
     <div id="he-actor" class="seg"></div>
     <div id="he-acts" class="actgrid"></div>
-    <div id="he-sizes" class="chiprow hidden"></div>
+    <div id="he-sizes" class="sizegrid hidden"></div>
   </div>
 
   <div class="hgroup">
     <div class="glabel">Board &amp; cards</div>
     <div id="he-cards" class="cardsrow"></div>
-  </div>
-
-  <div class="hgroup">
-    <textarea id="he-note" rows="1" placeholder="What happened…"></textarea>
-  </div>
-
-  <div class="hgroup stackrow">
-    <span class="glabel">Blinds</span>
-    <span class="kfield"><input id="he-sb" type="number" placeholder="SB" inputmode="numeric"><i>K</i></span>
-    <span class="kfield"><input id="he-bb" type="number" placeholder="BB" inputmode="numeric"><i>K</i></span>
-    <span class="kfield"><input id="he-std" type="number" placeholder="STD" inputmode="numeric"><i>K</i></span>
-  </div>
-
-  <div class="hgroup stackrow">
-    <span class="glabel">Eff. stack</span>
-    <span class="kfield"><input id="he-effstack" type="number" placeholder="stack" inputmode="numeric"><i>K</i></span>
-  </div>
-
-  <div class="hgroup">
-    <div class="posrow"><span class="poslabel">🦑 Have</span><div id="he-squidhave" class="chiprow tight scroll"></div></div>
-    <div class="posrow"><span class="poslabel">🦑 Left</span><div id="he-squidleft" class="chiprow tight scroll"></div></div>
   </div>
 
   <div class="savebar">

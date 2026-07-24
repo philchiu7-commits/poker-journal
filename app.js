@@ -10,6 +10,8 @@ let curOppId = null, curHandId = null;
 let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
+let oppEditMode = false;          // opponents list: reorder / regroup mode
+let vSearch = "";                 // hand-entry villain search query
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 
 const oppById = (id) => OPP.find((o) => o.id === id);
@@ -198,15 +200,38 @@ function updateGroupsDatalist() {
     .map((g) => `<option value="${esc(g)}">`).join("");
 }
 
+/* The exploit chosen to surface on the list row (pinned), else nothing. */
+function pinnedExploit(o) {
+  if (!o.pinnedExploit) return null;
+  return (o.exploits || []).find((e) => e.id === o.pinnedExploit) || null;
+}
+/* Manual-order comparator within a group: explicit o.order first, then last-seen. */
+function oppOrderCmp(stats) {
+  return (a, b) => {
+    const oa = a.order ?? Infinity, ob = b.order ?? Infinity;
+    if (oa !== ob) return oa - ob;
+    return (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0);
+  };
+}
+
 function oppRowHTML(o, st) {
-  const tags = Object.entries(oppReads(o)).slice(0, 3)
-    .map(([id, s]) => readChip(id, s)).join("");
-  const sub = [st ? `${st.count} hand${st.count > 1 ? "s" : ""}` : "", o.physical]
-    .filter(Boolean).join(" · ");
-  return `<div class="lrow" data-opp="${o.id}">
-    <div class="t">${esc(o.name)}<span class="when">${st ? fmtWhen(st.last) : ""}</span></div>
-    ${sub ? `<div class="s">${esc(sub)}</div>` : ""}
-    ${tags ? `<div class="chiprow" style="margin-top:6px">${tags}</div>` : ""}
+  const pin = pinnedExploit(o);
+  const tags = !oppEditMode && !pin
+    ? Object.entries(oppReads(o)).slice(0, 3).map(([id, s]) => readChip(id, s)).join("")
+    : "";
+  const handle = oppEditMode ? `<span class="draghandle" data-drag="${o.id}">⠿</span>` : "";
+  const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
+  const badge = st ? `<span class="handbadge">${st.count}</span>` : "";
+  const pinLine = pin ? `<div class="s pinexp">💡 ${esc(pin.text)}</div>` : "";
+  const physLine = !pin && o.physical ? `<div class="s">${esc(o.physical)}</div>` : "";
+  return `<div class="lrow opprow${oppEditMode ? " editing" : ""}" data-opp="${o.id}">
+    ${handle}
+    <div class="opprow-body">
+      <div class="t">${esc(o.name)}</div>
+      ${pinLine}${physLine}
+      ${tags ? `<div class="chiprow" style="margin-top:6px">${tags}</div>` : ""}
+    </div>
+    ${move}${badge}
   </div>`;
 }
 
@@ -216,19 +241,151 @@ function renderOpponents() {
   let list = OPP.filter((o) => !o.archived);
   if (q) list = list.filter((o) =>
     [o.name, o.physical, o.group].join(" ").toLowerCase().includes(q));
-  list.sort((a, b) =>
-    (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
+  list.sort(oppOrderCmp(stats));
   // section by group (groups alphabetical, ungrouped last)
   const groups = [...new Set(list.map((o) => o.group || ""))]
     .sort((a, b) => (a === "") - (b === "") || a.localeCompare(b));
+  $("opp-edit").classList.toggle("on", oppEditMode);
+  $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
   $("opp-list").innerHTML = list.length ? groups.map((g) => {
     const rows = list.filter((o) => (o.group || "") === g)
       .map((o) => oppRowHTML(o, stats[o.id])).join("");
-    const head = groups.length > 1 || g
-      ? `<div class="tagcat">${esc(g || "ungrouped")}</div>` : "";
-    return head + rows;
+    const showHead = groups.length > 1 || g || oppEditMode;
+    const add = oppEditMode ? `<button class="groupadd" data-groupadd="${esc(g)}">＋ add</button>` : "";
+    const head = showHead
+      ? `<div class="grouphead"><span class="tagcat">${esc(g || "ungrouped")}</span>${add}</div>` : "";
+    return `${head}<div class="groupsec" data-group="${esc(g)}">${rows}</div>`;
   }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
   updateGroupsDatalist();
+  if (oppEditMode) bindOppDrag();
+}
+
+/* ---- reorder (drag) + regroup, active only in edit mode ---- */
+
+/* Persist the current visual order of a group section as explicit o.order values. */
+async function commitGroupOrder(sec) {
+  const ids = [...sec.querySelectorAll("[data-opp]")].map((r) => r.dataset.opp);
+  await Promise.all(ids.map((id, i) => {
+    const o = oppById(id);
+    if (o && o.order !== i) { o.order = i; o.updatedAt = Date.now(); return dbPut("opponents", o); }
+  }));
+}
+
+/* Pointer-based drag: works on touch (iOS) and mouse. Drag a handle to reorder
+   rows within their group section; drop position tracks the pointer. */
+function bindOppDrag() {
+  const list = $("opp-list");
+  list.querySelectorAll(".draghandle").forEach((h) => {
+    h.onpointerdown = (e) => {
+      e.preventDefault();
+      const row = h.closest(".opprow");
+      const sec = row.closest(".groupsec");
+      row.classList.add("dragging");
+      const move = (ev) => {
+        const y = ev.clientY;
+        const rows = [...sec.querySelectorAll(".opprow:not(.dragging)")];
+        let after = null;
+        for (const r of rows) {
+          const box = r.getBoundingClientRect();
+          if (y > box.top + box.height / 2) after = r;
+        }
+        if (after) after.after(row);
+        else sec.prepend(row);
+      };
+      const up = async () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        row.classList.remove("dragging");
+        await commitGroupOrder(sec);
+        await refreshCache();
+        renderOpponents();
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    };
+  });
+}
+
+/* Move one opponent to another group (or ungrouped / a brand-new group). */
+function openMoveSheet(id) {
+  const o = oppById(id);
+  if (!o) return;
+  const groups = [...new Set(OPP.map((x) => x.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const opt = (g, lbl) =>
+    `<button class="mergeitem" data-setgroup="${esc(g)}">
+       <span class="mnm">${esc(lbl)}</span>${(o.group || "") === g ? '<span class="msub">current</span>' : ""}
+     </button>`;
+  showSheet(`<div class="sheethead"><span class="t">Move ${esc(o.name)}</span>
+      <button class="chip" data-sheetclose>Done</button></div>
+    <div class="sheetnote">Move to a group, or make a new one.</div>
+    <div class="mergelist">
+      ${opt("", "Ungrouped")}
+      ${groups.map((g) => opt(g, g)).join("")}
+    </div>
+    <input id="newgroup-name" class="vsearch" placeholder="New group name…" autocomplete="off">
+    <button id="newgroup-go" class="primary" style="margin-top:8px">Move to new group</button>`);
+  $("newgroup-go").onclick = async () => {
+    const g = $("newgroup-name").value.trim();
+    if (!g) return;
+    await setOppGroup(id, g);
+  };
+  $("sheet").querySelectorAll("[data-setgroup]").forEach((b) => {
+    b.onclick = () => setOppGroup(id, b.dataset.setgroup);
+  });
+}
+async function setOppGroup(id, group) {
+  const o = oppById(id);
+  if (!o) return;
+  o.group = group;
+  o.order = undefined;                 // let it fall to the end of the new group
+  o.updatedAt = Date.now();
+  await dbPut("opponents", o);
+  hideSheet();
+  renderOpponents();
+}
+
+/* From a group heading: pull in opponents that are currently ungrouped. */
+function openGroupAddSheet(group) {
+  const pool = OPP.filter((o) => !o.archived && !(o.group || "")).sort((a, b) => a.name.localeCompare(b.name));
+  if (!pool.length) { toast("No ungrouped players to add"); return; }
+  const label = group || "ungrouped";
+  showSheet(`<div class="sheethead"><span class="t">Add to “${esc(label)}”</span>
+      <button class="chip" data-sheetclose>Done</button></div>
+    <div class="sheetnote">Tap players to move them into this group.</div>
+    <div class="mergelist">
+      ${pool.map((o) => `<button class="mergeitem" data-addto="${o.id}">
+        <span class="mnm">${esc(o.name)}</span></button>`).join("")}
+    </div>`);
+  $("sheet").querySelectorAll("[data-addto]").forEach((b) => {
+    b.onclick = async () => {
+      const o = oppById(b.dataset.addto);
+      if (o) { o.group = group; o.order = undefined; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      b.remove();
+      renderOpponents();
+    };
+  });
+}
+
+/* Squid count picker: a scrollable column of numbers (press-and-select). */
+function openSquidPicker(which) {
+  const isHave = which === "have";
+  const max = isHave ? 11 : 12;
+  const cur = isHave ? draft.squidHave : draft.squidLeft;
+  const title = isHave ? "🦑 Squid — have" : "🦑 Squid — left";
+  const nums = ["", ...Array.from({ length: max + 1 }, (_, n) => String(n))];
+  showSheet(`<div class="sheethead"><span class="t">${title}</span>
+      <button class="chip" data-sheetclose>Done</button></div>
+    <div class="numpicker">${nums.map((n) =>
+      `<button class="numopt${String(cur) === n ? " on" : ""}" data-num="${n}">${n === "" ? "–" : n}</button>`).join("")}</div>`);
+  $("sheet").querySelectorAll("[data-num]").forEach((b) => {
+    b.onclick = () => {
+      mutate(() => {
+        if (isHave) draft.squidHave = b.dataset.num;
+        else draft.squidLeft = b.dataset.num;
+      });
+      hideSheet();
+    };
+  });
 }
 
 async function createOpponent(name, group) {
@@ -293,9 +450,10 @@ function renderOppDetail(id) {
             <button class="chip mini" data-expcancel>Cancel</button>
             <button class="chip mini on sgreen" data-expsave>Save</button>
           </div></div>`
-      : `<div class="noteitem" data-exp="${n.id}">
-          <div class="notetext">${esc(n.text)}</div>
+      : `<div class="noteitem${o.pinnedExploit === n.id ? " pinned" : ""}" data-exp="${n.id}">
+          <div class="notetext">${o.pinnedExploit === n.id ? "💡 " : ""}${esc(n.text)}</div>
           <div class="noterowbtns">
+            <button class="chip mini pinbtn${o.pinnedExploit === n.id ? " on sgreen" : ""}" data-exppin title="Show on the opponents list">${o.pinnedExploit === n.id ? "★ Pinned" : "☆ Pin"}</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
           </div></div>`
@@ -976,15 +1134,29 @@ function renderHandEntry() {
   $("he-actor").classList.toggle("hidden", table);   // seat replaces the actor toggle
   if (table) renderTable();
 
-  // villain chips (existing opponents only — add new ones in the Opponents tab)
+  // villain picker: Hero + selected always shown; then search results, or recent when idle
   const stats = oppStats();
-  const sorted = OPP.filter((o) => !o.archived).sort((a, b) =>
-    (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
   const selIds = d.villains.map((v) => v.opponentId);
+  const byRecent = (a, b) => (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0);
+  const active = OPP.filter((o) => !o.archived);
+  const q = vSearch.trim().toLowerCase();
+  const selected = active.filter((o) => selIds.includes(o.id)).sort(byRecent);
+  let pool;
+  if (q) {                                              // filtered results (exclude already-selected)
+    pool = active.filter((o) => !selIds.includes(o.id) &&
+      [o.name, o.physical, o.group].join(" ").toLowerCase().includes(q)).sort(byRecent);
+  } else {                                              // idle: most-recent handful as quick chips
+    pool = active.filter((o) => !selIds.includes(o.id)).sort(byRecent).slice(0, 8);
+  }
   const heroChip = `<button class="chip heroic${d.heroIn ? " on" : ""}" data-heroin>You</button>`;
-  $("he-villains").innerHTML = heroChip + sorted.map((o) =>
-    `<button class="chip${selIds.includes(o.id) ? " on" : ""}" data-vopp="${o.id}">${esc(o.name)}</button>`
-  ).join("");
+  const chip = (o, on) =>
+    `<button class="chip${on ? " on" : ""}" data-vopp="${o.id}">${esc(o.name)}</button>`;
+  $("he-villains").innerHTML = heroChip +
+    selected.map((o) => chip(o, true)).join("") +
+    (selected.length && pool.length ? `<span class="chipdiv"></span>` : "") +
+    pool.map((o) => chip(o, false)).join("") +
+    (q && !pool.length ? `<span class="chipnote">no match</span>` : "");
+  if (document.activeElement !== $("he-vsearch")) $("he-vsearch").value = vSearch;
 
   // position rows (hide Hero's row when Hero isn't in the hand)
   $("he-heropos").closest(".posrow").classList.toggle("hidden", !d.heroIn);
@@ -1040,12 +1212,14 @@ function renderHandEntry() {
       return 0;
     };
     $("he-sizes").innerHTML =
-      `<span class="sizehint">${actLabel(last.act)} size</span>` +
+      `<div class="sizehint">${actLabel(last.act)} size</div>` +
+      `<div class="sizeopts">` +
       sizesFor(last).map((s) => {
         const amt = base.now > 0 ? chipAmt(s) : 0;
-        return `<button class="chip" data-size="${s}">${s}${amt ? `<i>${potStr(amt)}</i>` : ""}</button>`;
+        return `<button class="sizebtn" data-size="${s}"><span class="sz">${s}</span>${amt ? `<span class="amt">${potStr(amt)}</span>` : ""}</button>`;
       }).join("") +
-      `<input data-sizenum type="number" placeholder="custom" inputmode="numeric">`;
+      `<label class="sizebtn sizecustom"><span class="sz">#</span><input data-sizenum type="number" placeholder="custom" inputmode="numeric"></label>` +
+      `</div>`;
   }
 
   // card slots
@@ -1065,14 +1239,14 @@ function renderHandEntry() {
   ch += `</div>`;
   $("he-cards").innerHTML = ch;
 
-  // squid counters: scrollable 0-11 (have) and 0-12 (left) chip rows
-  const squidChips = (key, max, cur) => Array.from({ length: max + 1 }, (_, n) =>
-    `<button class="chip mini${String(cur) === String(n) ? " on" : ""}" data-${key}="${n}">${n}</button>`).join("");
-  $("he-squidhave").innerHTML = squidChips("squidhave", 11, d.squidHave);
-  $("he-squidleft").innerHTML = squidChips("squidleft", 12, d.squidLeft);
+  // squid pickers (compact buttons at top) — number chosen in a scroll sheet
+  $("he-squidhave-btn").innerHTML = `🦑<i>${d.squidHave === "" ? "–" : d.squidHave}</i>`;
+  $("he-squidleft-btn").innerHTML = `Left<i>${d.squidLeft === "" ? "–" : d.squidLeft}</i>`;
+  $("he-squidhave-btn").classList.toggle("set", d.squidHave !== "");
+  $("he-squidleft-btn").classList.toggle("set", d.squidLeft !== "");
 
-  // note + blinds + eff stack (don't clobber focused inputs)
-  for (const [id, val] of [["he-note", d.note], ["he-sb", d.sb], ["he-bb", d.bb],
+  // blinds + eff stack (don't clobber focused inputs)
+  for (const [id, val] of [["he-sb", d.sb], ["he-bb", d.bb],
                            ["he-std", d.std], ["he-effstack", d.effStack]])
     if (document.activeElement !== $(id)) $(id).value = val;
 }
@@ -1183,10 +1357,8 @@ function bindHandEntry() {
         const last = draft.actions[draft.actions.length - 1];
         if (last) last.size = b.dataset.size;
       });
-    } else if (b.dataset.squidhave !== undefined) {
-      mutate(() => { draft.squidHave = String(draft.squidHave) === b.dataset.squidhave ? "" : b.dataset.squidhave; });
-    } else if (b.dataset.squidleft !== undefined) {
-      mutate(() => { draft.squidLeft = String(draft.squidLeft) === b.dataset.squidleft ? "" : b.dataset.squidleft; });
+    } else if (b.dataset.squidpick) {
+      openSquidPicker(b.dataset.squidpick);
     } else if (b.dataset.slot) {
       const g = groupForSlot(b.dataset.slot);
       if (["flop", "turn", "river"].includes(g)) {
@@ -1209,7 +1381,7 @@ function bindHandEntry() {
 
   $("he-undo").onclick = undo;
   const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
-  $("he-note").oninput = () => { draft.note = $("he-note").value; persistDraft(); };
+  $("he-vsearch").oninput = () => { vSearch = $("he-vsearch").value; renderHandEntry(); };
   $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
   $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
   $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
@@ -1356,6 +1528,7 @@ async function saveHand(nextHand) {
   undoStack = [];
   const primary = oppById(rec.villainIds[0]);
   draft = nextHand ? newDraft(d) : newDraft();
+  vSearch = "";
   await metaSet("draftHand", null);
   toast(primary ? `Saved vs ${primary.name}` : "Hand saved");
   renderHandEntry();
@@ -1398,6 +1571,7 @@ function bindStatic() {
 
   // opponents list
   $("opp-search").oninput = renderOpponents;
+  $("opp-edit").onclick = () => { oppEditMode = !oppEditMode; renderOpponents(); };
   $("opp-add").onclick = () => { $("opp-new").classList.toggle("hidden"); $("opp-new-name").focus(); };
   $("opp-new-save").onclick = async () => {
     const name = $("opp-new-name").value.trim();
@@ -1408,8 +1582,13 @@ function bindStatic() {
     location.hash = "#opp/" + o.id;
   };
   $("opp-list").onclick = (e) => {
+    if (e.target.closest(".draghandle")) return;                    // drag, not navigate
+    const groupadd = e.target.closest("[data-groupadd]");
+    if (groupadd) { openGroupAddSheet(groupadd.dataset.groupadd); return; }
+    const mv = e.target.closest("[data-move]");
+    if (mv) { openMoveSheet(mv.dataset.move); return; }
     const r = e.target.closest("[data-opp]");
-    if (r) location.hash = "#opp/" + r.dataset.opp;
+    if (r && !oppEditMode) location.hash = "#opp/" + r.dataset.opp;
   };
 
   // opponent detail
@@ -1515,9 +1694,15 @@ function bindStatic() {
     if (!item) return;
     const id = item.dataset.exp;
     const o = oppById(curOppId);
-    if (e.target.closest("[data-expdel]")) {
+    if (e.target.closest("[data-exppin]")) {
+      o.pinnedExploit = o.pinnedExploit === id ? null : id;   // toggle which shows on the list
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;
       o.exploits = (o.exploits || []).filter((n) => n.id !== id);
+      if (o.pinnedExploit === id) o.pinnedExploit = null;
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
