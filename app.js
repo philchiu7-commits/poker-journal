@@ -1150,22 +1150,46 @@ function sizesFor(a) {
 /* True when the pending action is a preflop open-raise we size in big blinds. */
 function isOpenRaise(a) { return a && a.street === "pre" && a.act === "raise"; }
 
-/* Adaptive open-raise buttons (in BB) for a given big-blind size. Seeded with
-   DEFAULT_OPEN_BB (8–15bb); the more a size is used at this blind level the
-   higher it ranks, and unused defaults get pushed out by popular custom sizes. */
+/* Round chips to a table-friendly number: 32K→30K, 48K→50K, 16K→15K.
+   Step grows with magnitude so big sizes don't snap to odd values. */
+function niceChips(k) {
+  const step = k < 30 ? 5 : (k < 200 ? 10 : 25);
+  return Math.round(k / step) * step;
+}
+
+const OPEN_HALFLIFE_MS = 30 * 864e5;   // recency half-life ≈ 30 days
+const OPEN_DEFAULT_BASE = 0.75;        // keeps 8–15bb present until a custom size is used enough
+
+function openSizePicks(bb) {
+  const v = openSizeStats[bb];
+  return Array.isArray(v) ? v : [];
+}
+/* Recency-weighted score per BB size at this blind level: each past pick
+   contributes 0.5^(age/halflife), so recent sizing choices dominate. This is
+   the seam a predictive model would later slot into (adding position / squid /
+   stack features) — same button API, richer scoring. */
+function openSizeWeights(bb) {
+  const now = Date.now(), w = {};
+  for (const p of openSizePicks(bb))
+    w[p.size] = (w[p.size] || 0) + Math.pow(0.5, (now - (p.ts || now)) / OPEN_HALFLIFE_MS);
+  return w;
+}
 function openSizeButtons(bb) {
-  const stats = openSizeStats[bb] || {};
+  const w = openSizeWeights(bb);
   const cand = new Set(DEFAULT_OPEN_BB);
-  for (const k of Object.keys(stats)) cand.add(Number(k));
-  const arr = [...cand].filter((n) => n > 0);
-  arr.sort((a, b) => (stats[b] || 0) - (stats[a] || 0)   // most-used first
-    || Math.abs(a - 10) - Math.abs(b - 10) || a - b);    // then closest to 10bb
-  return arr.slice(0, 4).sort((a, b) => a - b);          // display low→high
+  for (const k of Object.keys(w)) cand.add(Number(k));
+  const score = (n) => (w[n] || 0) + (DEFAULT_OPEN_BB.includes(n) ? OPEN_DEFAULT_BASE : 0);
+  return [...cand].filter((n) => n > 0)
+    .sort((a, b) => score(b) - score(a)                  // most-used-recently first
+      || Math.abs(a - 10) - Math.abs(b - 10) || a - b)   // then closest to 10bb
+    .slice(0, 4)
+    .sort((a, b) => a - b);                              // ALWAYS smallest → biggest
 }
 async function recordOpenSize(bb, bbSize) {
   if (!bb || !bbSize || bbSize <= 0) return;
-  const s = (openSizeStats[bb] = openSizeStats[bb] || {});
-  s[bbSize] = (s[bbSize] || 0) + 1;
+  const arr = (openSizeStats[bb] = openSizePicks(bb));
+  arr.push({ size: bbSize, ts: Date.now() });
+  if (arr.length > 60) arr.splice(0, arr.length - 60);   // keep a recent window
   await metaSet("openSizeStats", openSizeStats);
 }
 
@@ -1268,9 +1292,9 @@ function renderHandEntry() {
     if (isOpenRaise(last) && bb > 0) {
       // open-raise sized in big blinds (adaptive), resolved to exact chips
       btns = openSizeButtons(bb).map((n) => {
-        const chips = Math.round(n * bb);
+        const chips = niceChips(n * bb);
         return `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
-          `<span class="sz">${n}bb</span><span class="amt">${chips}K</span></button>`;
+          `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`;
       }).join("") +
       `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
     } else {
@@ -1880,6 +1904,16 @@ async function boot() {
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   openSizeStats = (await metaGet("openSizeStats")) || {};
+  // migrate old {bb:{size:count}} → recency picks {bb:[{size,ts}]}
+  for (const bb of Object.keys(openSizeStats)) {
+    const v = openSizeStats[bb];
+    if (!Array.isArray(v)) {
+      const picks = [];
+      for (const [size, count] of Object.entries(v || {}))
+        for (let i = 0; i < count; i++) picks.push({ size: Number(size), ts: Date.now() });
+      openSizeStats[bb] = picks;
+    }
+  }
   const saved = await metaGet("draftHand");
   draft = saved ? Object.assign(newDraft(), saved) : newDraft();
   bindStatic();
