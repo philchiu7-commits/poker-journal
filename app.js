@@ -12,6 +12,9 @@ let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
+let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
+let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
+const DEFAULT_OPEN_BB = [8, 10, 12, 15];   // standard live-open sizes, in big blinds
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 
 const oppById = (id) => OPP.find((o) => o.id === id);
@@ -235,29 +238,57 @@ function oppRowHTML(o, st) {
   </div>`;
 }
 
+/* Search blob incl. pinyin so romanized typing matches Chinese names. */
+function oppMatches(o, nq) {
+  if (!nq) return true;
+  const p = toPinyin(o.name);
+  const blob = [o.name, o.physical, o.group, p.full, p.initials]
+    .join(" ").toLowerCase().replace(/\s+/g, "");
+  return blob.includes(nq);
+}
+
 function renderOpponents() {
-  const q = $("opp-search").value.trim().toLowerCase();
+  const nq = $("opp-search").value.trim().toLowerCase().replace(/\s+/g, "");
   const stats = oppStats();
   let list = OPP.filter((o) => !o.archived);
-  if (q) list = list.filter((o) =>
-    [o.name, o.physical, o.group].join(" ").toLowerCase().includes(q));
+  if (nq) list = list.filter((o) => oppMatches(o, nq));
   list.sort(oppOrderCmp(stats));
-  // section by group (groups alphabetical, ungrouped last)
+  // section by group — most-recently-touched group first (ungrouped ranks by its own recency)
+  const groupRecency = {};
+  for (const o of list) {
+    const g = o.group || "";
+    const r = Math.max(stats[o.id]?.last || 0, o.updatedAt || 0);
+    if (r > (groupRecency[g] || 0)) groupRecency[g] = r;
+  }
   const groups = [...new Set(list.map((o) => o.group || ""))]
-    .sort((a, b) => (a === "") - (b === "") || a.localeCompare(b));
+    .sort((a, b) => (groupRecency[b] || 0) - (groupRecency[a] || 0));
   $("opp-edit").classList.toggle("on", oppEditMode);
   $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
   $("opp-list").innerHTML = list.length ? groups.map((g) => {
-    const rows = list.filter((o) => (o.group || "") === g)
-      .map((o) => oppRowHTML(o, stats[o.id])).join("");
+    const members = list.filter((o) => (o.group || "") === g);
+    const collapsed = collapsedGroups.has(g);
+    const rows = members.map((o) => oppRowHTML(o, stats[o.id])).join("");
     const showHead = groups.length > 1 || g || oppEditMode;
     const add = oppEditMode ? `<button class="groupadd" data-groupadd="${esc(g)}">＋ add</button>` : "";
     const head = showHead
-      ? `<div class="grouphead"><span class="tagcat">${esc(g || "ungrouped")}</span>${add}</div>` : "";
-    return `${head}<div class="groupsec" data-group="${esc(g)}">${rows}</div>`;
+      ? `<div class="grouphead">
+           <button class="groupcollapse" data-groupcollapse="${esc(g)}">
+             <span class="chev">${collapsed ? "▸" : "▾"}</span>
+             <span class="tagcat">${esc(g || "ungrouped")}</span>
+             <span class="gcount">${members.length}</span>
+           </button>${add}
+         </div>` : "";
+    return `${head}<div class="groupsec${collapsed ? " hidden" : ""}" data-group="${esc(g)}">${rows}</div>`;
   }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
   updateGroupsDatalist();
   if (oppEditMode) bindOppDrag();
+}
+
+async function toggleGroupCollapse(g) {
+  if (collapsedGroups.has(g)) collapsedGroups.delete(g);
+  else collapsedGroups.add(g);
+  await metaSet("collapsedGroups", [...collapsedGroups]);
+  renderOpponents();
 }
 
 /* ---- reorder (drag) + regroup, active only in edit mode ---- */
@@ -453,7 +484,7 @@ function renderOppDetail(id) {
       : `<div class="noteitem${o.pinnedExploit === n.id ? " pinned" : ""}" data-exp="${n.id}">
           <div class="notetext">${o.pinnedExploit === n.id ? "💡 " : ""}${esc(n.text)}</div>
           <div class="noterowbtns">
-            <button class="chip mini pinbtn${o.pinnedExploit === n.id ? " on sgreen" : ""}" data-exppin title="Show on the opponents list">${o.pinnedExploit === n.id ? "★ Pinned" : "☆ Pin"}</button>
+            <button class="chip mini pinbtn${o.pinnedExploit === n.id ? " on sgreen" : ""}" data-exppin title="Show this exploit on the opponents list">${o.pinnedExploit === n.id ? "★ On list" : "☆ Show on list"}</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
           </div></div>`
@@ -1116,6 +1147,28 @@ function sizesFor(a) {
   return SIZES_OPEN;
 }
 
+/* True when the pending action is a preflop open-raise we size in big blinds. */
+function isOpenRaise(a) { return a && a.street === "pre" && a.act === "raise"; }
+
+/* Adaptive open-raise buttons (in BB) for a given big-blind size. Seeded with
+   DEFAULT_OPEN_BB (8–15bb); the more a size is used at this blind level the
+   higher it ranks, and unused defaults get pushed out by popular custom sizes. */
+function openSizeButtons(bb) {
+  const stats = openSizeStats[bb] || {};
+  const cand = new Set(DEFAULT_OPEN_BB);
+  for (const k of Object.keys(stats)) cand.add(Number(k));
+  const arr = [...cand].filter((n) => n > 0);
+  arr.sort((a, b) => (stats[b] || 0) - (stats[a] || 0)   // most-used first
+    || Math.abs(a - 10) - Math.abs(b - 10) || a - b);    // then closest to 10bb
+  return arr.slice(0, 4).sort((a, b) => a - b);          // display low→high
+}
+async function recordOpenSize(bb, bbSize) {
+  if (!bb || !bbSize || bbSize <= 0) return;
+  const s = (openSizeStats[bb] = openSizeStats[bb] || {});
+  s[bbSize] = (s[bbSize] || 0) + 1;
+  await metaSet("openSizeStats", openSizeStats);
+}
+
 function renderHandEntry() {
   const d = draft;
   const table = d.mode === "table";
@@ -1139,12 +1192,11 @@ function renderHandEntry() {
   const selIds = d.villains.map((v) => v.opponentId);
   const byRecent = (a, b) => (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0);
   const active = OPP.filter((o) => !o.archived);
-  const q = vSearch.trim().toLowerCase();
+  const nq = vSearch.trim().toLowerCase().replace(/\s+/g, "");
   const selected = active.filter((o) => selIds.includes(o.id)).sort(byRecent);
   let pool;
-  if (q) {                                              // filtered results (exclude already-selected)
-    pool = active.filter((o) => !selIds.includes(o.id) &&
-      [o.name, o.physical, o.group].join(" ").toLowerCase().includes(q)).sort(byRecent);
+  if (nq) {                                             // filtered results (pinyin-aware, exclude selected)
+    pool = active.filter((o) => !selIds.includes(o.id) && oppMatches(o, nq)).sort(byRecent);
   } else {                                              // idle: most-recent handful as quick chips
     pool = active.filter((o) => !selIds.includes(o.id)).sort(byRecent).slice(0, 8);
   }
@@ -1155,7 +1207,7 @@ function renderHandEntry() {
     selected.map((o) => chip(o, true)).join("") +
     (selected.length && pool.length ? `<span class="chipdiv"></span>` : "") +
     pool.map((o) => chip(o, false)).join("") +
-    (q && !pool.length ? `<span class="chipnote">no match</span>` : "");
+    (nq && !pool.length ? `<span class="chipnote">no match</span>` : "");
   if (document.activeElement !== $("he-vsearch")) $("he-vsearch").value = vSearch;
 
   // position rows (hide Hero's row when Hero isn't in the hand)
@@ -1211,14 +1263,26 @@ function renderHandEntry() {
       if (/^\d+(\.\d+)?x$/i.test(s)) return facing ? parseFloat(s) * facing : 0;
       return 0;
     };
-    $("he-sizes").innerHTML =
-      `<div class="sizehint">${actLabel(last.act)} size</div>` +
-      `<div class="sizeopts">` +
-      sizesFor(last).map((s) => {
+    const bb = Number(d.bb) || 0;
+    let btns;
+    if (isOpenRaise(last) && bb > 0) {
+      // open-raise sized in big blinds (adaptive), resolved to exact chips
+      btns = openSizeButtons(bb).map((n) => {
+        const chips = Math.round(n * bb);
+        return `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
+          `<span class="sz">${n}bb</span><span class="amt">${chips}K</span></button>`;
+      }).join("") +
+      `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
+    } else {
+      btns = sizesFor(last).map((s) => {
         const amt = base.now > 0 ? chipAmt(s) : 0;
         return `<button class="sizebtn" data-size="${s}"><span class="sz">${s}</span>${amt ? `<span class="amt">${potStr(amt)}</span>` : ""}</button>`;
-      }).join("") +
-      `<label class="sizebtn sizecustom"><span class="sz">#</span><input data-sizenum type="number" placeholder="custom" inputmode="numeric"></label>` +
+      }).join("");
+    }
+    $("he-sizes").innerHTML =
+      `<div class="sizehint">${actLabel(last.act)} size</div>` +
+      `<div class="sizeopts">` + btns +
+      `<label class="sizebtn sizecustom"><input data-sizenum type="number" placeholder="custom" inputmode="numeric"></label>` +
       `</div>`;
   }
 
@@ -1357,6 +1421,7 @@ function bindHandEntry() {
         const last = draft.actions[draft.actions.length - 1];
         if (last) last.size = b.dataset.size;
       });
+      if (b.dataset.bbsize) recordOpenSize(Number(draft.bb) || 0, Number(b.dataset.bbsize));
     } else if (b.dataset.squidpick) {
       openSquidPicker(b.dataset.squidpick);
     } else if (b.dataset.slot) {
@@ -1372,10 +1437,13 @@ function bindHandEntry() {
   $("view-hand").addEventListener("change", (e) => {
     if (e.target.dataset?.sizenum !== undefined) {
       const v = e.target.value.trim();
-      if (v) mutate(() => {
+      if (v) {
         const last = draft.actions[draft.actions.length - 1];
-        if (last) last.size = "$" + v;
-      });
+        // a custom open-raise chip amount feeds the adaptive BB buttons
+        if (isOpenRaise(last) && Number(draft.bb) > 0)
+          recordOpenSize(Number(draft.bb), Math.round(Number(v) / Number(draft.bb)));
+        mutate(() => { if (last) last.size = "$" + v; });
+      }
     }
   });
 
@@ -1583,6 +1651,8 @@ function bindStatic() {
   };
   $("opp-list").onclick = (e) => {
     if (e.target.closest(".draghandle")) return;                    // drag, not navigate
+    const gc = e.target.closest("[data-groupcollapse]");
+    if (gc) { toggleGroupCollapse(gc.dataset.groupcollapse); return; }
     const groupadd = e.target.closest("[data-groupadd]");
     if (groupadd) { openGroupAddSheet(groupadd.dataset.groupadd); return; }
     const mv = e.target.closest("[data-move]");
@@ -1808,6 +1878,8 @@ async function boot() {
   await requestDurableStorage();
   await refreshCache();
   await loadBlindsDefault();
+  collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
+  openSizeStats = (await metaGet("openSizeStats")) || {};
   const saved = await metaGet("draftHand");
   draft = saved ? Object.assign(newDraft(), saved) : newDraft();
   bindStatic();
