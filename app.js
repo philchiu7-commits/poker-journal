@@ -1150,11 +1150,11 @@ function sizesFor(a) {
 /* True when the pending action is a preflop open-raise we size in big blinds. */
 function isOpenRaise(a) { return a && a.street === "pre" && a.act === "raise"; }
 
-/* Round chips to a table-friendly number: 32K→30K, 48K→50K, 16K→15K.
-   Step grows with magnitude so big sizes don't snap to odd values. */
+/* Round chips to a table-friendly number that always ends in 0: 32K→30K,
+   48K→50K, 16K→20K. Step grows with magnitude but stays a multiple of 10. */
 function niceChips(k) {
-  const step = k < 30 ? 5 : (k < 200 ? 10 : 25);
-  return Math.round(k / step) * step;
+  const step = k < 200 ? 10 : (k < 600 ? 50 : 100);
+  return Math.max(10, Math.round(k / step) * step);
 }
 
 const OPEN_HALFLIFE_MS = 30 * 864e5;   // recency half-life ≈ 30 days
