@@ -9,6 +9,7 @@ let OPP = [], HANDS = [];
 let curOppId = null, curHandId = null;
 let editNoteId = null, editExploitId = null;
 let storageDurable = false;
+let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 
 const oppById = (id) => OPP.find((o) => o.id === id);
@@ -118,13 +119,14 @@ const cardHTML = (c) => c ? `<span class="${suitOf(c).cls}">${c.slice(0, -1)}${s
 const cardsStr = (cs) => (cs || []).filter(Boolean).join("");
 /* Card as a little tile (hand view + rows). `prev` = earlier-street board card, dimmed. */
 const tileHTML = (c, prev) => c
-  ? `<span class="ctile${prev ? " prev" : ""} ${suitOf(c).cls}">${c.slice(0, -1)}<i>${suitOf(c).sym}</i></span>` : "";
+  ? `<span class="ctile${prev ? " prev" : ""} ${suitOf(c).cls}">${c.slice(0, -1)}<span class="suit">${suitOf(c).sym}</span></span>` : "";
 const tilesHTML = (cs) => (cs || []).filter(Boolean).map((c) => tileHTML(c)).join("");
 
 /* ---------- action phrasing (hand-history style: "opens to 40K") ---------- */
 const sizeLabel = (s) => !s ? "" :
   /^\$\d/.test(s) ? s.slice(1) + "K" :
-  /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
+  /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() :
+  /^(\d+(?:\.\d+)?)(%)$/.test(s) ? s.replace(/%$/, "") : s;
 function actVerb(a) {
   switch (a.act) {
     case "fold":  return "folds";
@@ -300,14 +302,18 @@ function renderOppDetail(id) {
   ).join("") || `<div class="empty">No exploits yet — how do you beat this player?</div>`;
 
   const suggs = suggestedExploits(o);
+  const showSugg = showSuggestedExploits[id];
   $("od-exsugg").innerHTML = suggs.length
-    ? `<div class="sugghead">Suggested from reads</div>` + suggs.map((s) =>
+    ? `<div class="sugghead" data-toggle-sugg>
+        <span>Suggested from reads (${suggs.length})</span>
+        <span class="toggle-arrow">${showSugg ? "▼" : "▶"}</span>
+      </div>` + (showSugg ? suggs.map((s) =>
         `<div class="suggitem" data-key="${esc(s.key)}">
            <div class="notetext">💡 ${esc(s.text)}</div>
            <div class="noterowbtns">
              <button class="chip mini on sgreen" data-exacc>＋ Add</button>
              <button class="chip mini" data-exdismiss>Dismiss</button>
-           </div></div>`).join("")
+           </div></div>`).join("") : "")
     : "";
 
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
@@ -347,6 +353,16 @@ function definingAct(h, actor) {
   }
   return best?.a || null;
 }
+/* Action sequence for a villain on their last street: "XxR" = check, check, raise. */
+function actionSeq(h, actor) {
+  const allActs = (h.actions || []).filter((x) => x.actor === actor);
+  if (!allActs.length) return null;
+  const lastStreet = allActs[allActs.length - 1].street;
+  const seq = allActs.filter((a) => a.street === lastStreet)
+    .map((a) => ACT_ABBR[a.act] || a.act.slice(0, 1).toUpperCase())
+    .join("");
+  return seq && lastStreet !== "pre" ? seq + ` (${lastStreet})` : seq;
+}
 /* Compact action code for list rows: "R40K", "3B4x", "B50%", "Jam (turn)". */
 const ACT_ABBR = { fold: "F", check: "X", call: "C", limp: "L", bet: "B", raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B", jam: "Jam" };
 function abbrevAct(a) {
@@ -368,11 +384,11 @@ function handRowHTML(h, oppId) {
     const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (i >= 0) {
       const v = h.villains[i];
-      const def = definingAct(h, "v" + i);
+      const seq = actionSeq(h, "v" + i);
       const bits = [
         v.pos ? `<span class="hv-pos">${esc(v.pos)}</span>` : "",
         v.cards && v.cards.some(Boolean) ? tilesHTML(v.cards) : "",
-        def ? `<span class="hr-act">${esc(abbrevAct(def))}</span>` : "",
+        seq ? `<span class="hr-act">${esc(seq)}</span>` : "",
       ].filter(Boolean).join("");
       if (bits) return `<div class="lrow" data-hand="${h.id}">
         <div class="t hr-t">${dot}${bits}${squid}</div>${sub}
@@ -1517,6 +1533,11 @@ function bindStatic() {
     }
   };
   $("od-exsugg").onclick = async (e) => {
+    if (e.target.closest("[data-toggle-sugg]")) {
+      showSuggestedExploits[curOppId] = !showSuggestedExploits[curOppId];
+      renderOppDetail(curOppId);
+      return;
+    }
     const item = e.target.closest("[data-key]");
     if (!item) return;
     const key = item.dataset.key;
