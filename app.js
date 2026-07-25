@@ -277,10 +277,31 @@ function updateGroupsDatalist() {
     .map((g) => `<option value="${esc(g)}">`).join("");
 }
 
-/* The exploit chosen to surface on the list row (pinned), else nothing. */
-function pinnedExploit(o) {
-  if (!o.pinnedExploit) return null;
-  return (o.exploits || []).find((e) => e.id === o.pinnedExploit) || null;
+/* Short chip label for a long exploit when no explicit abbr is typed. */
+function autoShort(text) {
+  const words = String(text || "").trim().split(/\s+/);
+  let s = words.slice(0, 3).join(" ");
+  if (s.length > 18) return s.slice(0, 17) + "…";
+  return s + (words.length > 3 ? "…" : "");
+}
+/* Ordered front-page card items for an opponent (reads + exploits), migrating a
+   legacy single pinnedExploit into the new list on first read. */
+function featuredItems(o) {
+  if (!Array.isArray(o.featured))
+    o.featured = o.pinnedExploit ? [{ type: "exploit", id: o.pinnedExploit }] : [];
+  return o.featured;
+}
+/* Render one featured item as a compact chip (read chip, or abbreviated exploit
+   chip whose full text shows on hover); "" if the item no longer exists. */
+function featuredChip(o, it) {
+  if (it.type === "read") {
+    const state = oppReads(o)[it.id];
+    return state ? readChip(it.id, state) : "";
+  }
+  const e = (o.exploits || []).find((x) => x.id === it.id);
+  if (!e) return "";
+  const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
+  return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
 }
 /* Manual-order comparator within a group: explicit o.order first, then last-seen. */
 function oppOrderCmp(stats) {
@@ -292,21 +313,21 @@ function oppOrderCmp(stats) {
 }
 
 function oppRowHTML(o, st) {
-  const pin = pinnedExploit(o);
-  const tags = !oppEditMode && !pin
-    ? Object.entries(oppReads(o)).slice(0, 3).map(([id, s]) => readChip(id, s)).join("")
-    : "";
+  // curated card first; fall back to a few set reads before anything's featured
+  const feat = featuredItems(o);
+  let chips = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("");
+  if (!chips) chips = Object.entries(oppReads(o)).slice(0, 3).map(([id, s]) => readChip(id, s)).join("");
+  const showChips = !oppEditMode && chips;
   const handle = oppEditMode ? `<span class="draghandle" data-drag="${o.id}">⠿</span>` : "";
   const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
   const badge = st ? `<span class="handbadge">${st.count}</span>` : "";
-  const pinLine = pin ? `<div class="s pinexp">💡 ${esc(pin.text)}</div>` : "";
-  const physLine = !pin && o.physical ? `<div class="s">${esc(o.physical)}</div>` : "";
+  const physLine = !oppEditMode && !chips && o.physical ? `<div class="s">${esc(o.physical)}</div>` : "";
   return `<div class="lrow opprow${oppEditMode ? " editing" : ""}" data-opp="${o.id}">
     ${handle}
     <div class="opprow-body">
       <div class="t">${esc(o.name)}</div>
-      ${pinLine}${physLine}
-      ${tags ? `<div class="chiprow" style="margin-top:6px">${tags}</div>` : ""}
+      ${physLine}
+      ${showChips ? `<div class="chiprow cardchips">${chips}</div>` : ""}
     </div>
     ${move}${badge}
   </div>`;
@@ -543,6 +564,74 @@ function renderLineupSheet() {
   };
 }
 
+/* Front-page card editor: pick & order the reads + exploits shown on the list
+   row. Mirrors the lineup sheet — ordered list with ↑ ↓ ✕ plus an add-picker. */
+function itemLabel(o, it) {
+  if (it.type === "read") return TAG_BY_ID[it.id]?.label || it.id;
+  const e = (o.exploits || []).find((x) => x.id === it.id);
+  return e ? (e.abbr?.trim() || autoShort(e.text)) : "(deleted)";
+}
+function openCardSheet() { renderCardSheet(); }
+function renderCardSheet() {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const feat = featuredItems(o);
+  const key = (it) => it.type + ":" + it.id;
+  const chosen = new Set(feat.map(key));
+  const rows = feat.map((it, i) => {
+    const e = it.type === "exploit" ? (o.exploits || []).find((x) => x.id === it.id) : null;
+    const tag = it.type === "exploit"
+      ? `<input class="abbrin" data-abbr="${it.id}" placeholder="short tag" value="${esc(e?.abbr || "")}">`
+      : "";
+    return `<div class="lineitem">
+       <span class="seatno">${i + 1}</span>
+       <span class="mnm">${it.type === "exploit" ? "💡 " : ""}${esc(itemLabel(o, it))}</span>
+       ${tag}
+       <span class="linebtns">
+         <button class="chip mini" data-cup="${i}"${i === 0 ? " disabled" : ""}>↑</button>
+         <button class="chip mini" data-cdown="${i}"${i === feat.length - 1 ? " disabled" : ""}>↓</button>
+         <button class="chip mini" data-crm="${esc(key(it))}">✕</button>
+       </span>
+     </div>`;
+  }).join("") || `<div class="empty">Nothing on the card yet — add reads or exploits below.</div>`;
+  const setReads = Object.keys(oppReads(o)).filter((id) => oppReads(o)[id] && !chosen.has("read:" + id) && TAG_BY_ID[id]);
+  const exps = (o.exploits || []).filter((e) => !chosen.has("exploit:" + e.id));
+  const pool =
+    setReads.map((id) => `<button class="chip" data-cadd="read:${esc(id)}">${esc(TAG_BY_ID[id].label)}</button>`).join("") +
+    exps.map((e) => `<button class="chip" data-cadd="exploit:${esc(e.id)}">💡 ${esc(e.abbr?.trim() || autoShort(e.text))}</button>`).join("");
+  showSheet(`<div class="sheethead"><span class="t">Front-page card</span>
+      <button class="chip" data-sheetclose>Done</button></div>
+    <div class="sheetnote">Pick which reads &amp; exploits show on this player's row, and drag the order. Exploit chips show your short tag (full text on hover).</div>
+    <div class="linelist">${rows}</div>
+    <div class="glabel" style="margin-top:12px">Add to card</div>
+    <div class="chiprow" id="card-pool">${pool || `<span class="chipnote">set some reads or add exploits first</span>`}</div>`);
+  const sheet = $("sheet");
+  const refresh = async () => {
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    $("od-card-preview").innerHTML = featuredItems(o).map((it) => featuredChip(o, it)).filter(Boolean).join("")
+      || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
+    renderCardSheet();
+  };
+  const idxOf = (k) => feat.findIndex((it) => key(it) === k);
+  sheet.querySelectorAll("[data-cadd]").forEach((b) => b.onclick = () => {
+    const [type, ...rest] = b.dataset.cadd.split(":"); feat.push({ type, id: rest.join(":") }); refresh();
+  });
+  sheet.querySelectorAll("[data-crm]").forEach((b) => b.onclick = () => {
+    const i = idxOf(b.dataset.crm); if (i >= 0) feat.splice(i, 1); refresh();
+  });
+  sheet.querySelectorAll("[data-cup]").forEach((b) => b.onclick = () => {
+    const i = +b.dataset.cup; if (i > 0) { [feat[i - 1], feat[i]] = [feat[i], feat[i - 1]]; refresh(); }
+  });
+  sheet.querySelectorAll("[data-cdown]").forEach((b) => b.onclick = () => {
+    const i = +b.dataset.cdown; if (i < feat.length - 1) { [feat[i + 1], feat[i]] = [feat[i], feat[i + 1]]; refresh(); }
+  });
+  sheet.querySelectorAll("[data-abbr]").forEach((inp) => inp.onchange = async () => {
+    const e = (o.exploits || []).find((x) => x.id === inp.dataset.abbr);
+    if (e) { e.abbr = inp.value.trim(); o.updatedAt = Date.now(); await dbPut("opponents", o); renderCardSheet(); }
+  });
+}
+
 async function createOpponent(name, group) {
   const o = { id: uid(), name, group: group || "", tags: [], physical: "", notes: [],
     createdAt: Date.now(), updatedAt: Date.now(), archived: false };
@@ -560,6 +649,9 @@ function renderOppDetail(id) {
   curOppId = id;
   $("od-name").textContent = o.name;
   $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
+  const feat = featuredItems(o);
+  $("od-card-preview").innerHTML = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("")
+    || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
   $("od-e-group").value = o.group || "";
@@ -631,12 +723,11 @@ function renderOppDetail(id) {
             <button class="chip mini" data-expcancel>Cancel</button>
             <button class="chip mini on sgreen" data-expsave>Save</button>
           </div></div>`
-      : `<div class="noteitem${o.pinnedExploit === n.id ? " pinned" : ""}${n.adj ? " adj" : ""}" data-exp="${n.id}">
-          <div class="notetext">${o.pinnedExploit === n.id ? "💡 " : ""}${esc(n.text)} ${adjBadge}${topBadge}${tally}</div>
+      : `<div class="noteitem${n.adj ? " adj" : ""}" data-exp="${n.id}">
+          <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}${tally}</div>
           <div class="noterowbtns">
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
             <button class="chip mini" data-expwin title="Mark this exploit as having worked">👍 Worked</button>
-            <button class="chip mini pinbtn${o.pinnedExploit === n.id ? " on sgreen" : ""}" data-exppin title="Show this exploit on the opponents list">${o.pinnedExploit === n.id ? "★ On list" : "☆ Show on list"}</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
           </div></div>`;
@@ -1876,6 +1967,7 @@ function bindStatic() {
 
   // opponent detail
   $("od-edit").onclick = () => $("od-editform").classList.toggle("hidden");
+  $("od-card-edit").onclick = openCardSheet;
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);
     o.name = $("od-e-name").value.trim() || o.name;
@@ -1985,15 +2077,10 @@ function bindStatic() {
       const n = (o.exploits || []).find((x) => x.id === id);   // log that it worked (recency-weighted)
       if (n) { (n.wins = n.wins || []).push(Date.now()); o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
-    } else if (e.target.closest("[data-exppin]")) {
-      o.pinnedExploit = o.pinnedExploit === id ? null : id;   // toggle which shows on the list
-      o.updatedAt = Date.now();
-      await dbPut("opponents", o);
-      renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;
       o.exploits = (o.exploits || []).filter((n) => n.id !== id);
-      if (o.pinnedExploit === id) o.pinnedExploit = null;
+      o.featured = featuredItems(o).filter((it) => !(it.type === "exploit" && it.id === id));
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
