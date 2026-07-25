@@ -154,3 +154,25 @@ const EXPLOIT_RULES = {
   "talks-when-strong":{ yes: "When he gets chatty, he's strong — fold your marginal hands." },
   "force-squid":      { yes: "He forces squid spots — expect wider gambling ranges; value-bet bigger, he pays off chasing." },
 };
+
+/* Reusable exploit archetypes — a shared library added onto any opponent from
+   the Exploits panel. `abbr` is the short code shown on the front-page card;
+   `text` is the full description revealed on tap/hover. */
+const EXPLOIT_TEMPLATES = [
+  { abbr: "EQF",  name: "Equity Fish",
+    text: "Equity Fish — barrels only their real equity (straight draws, flush draws). Lacks SDV bluffs and spew bluffs." },
+  { abbr: "MUB",  name: "Monster Under the Bed",
+    text: "Monster Under the Bed — scared of scare-card turns; over-folds fearing a monster. Don't bet thin against them; barrel scare cards." },
+  { abbr: "DHF",  name: "Draw Hyper-Focus",
+    text: "Draw Hyper-Focus — loves bluffing when draws complete and hates bluff-catching then. When draws miss, hates bluffing and turns into a station." },
+  { abbr: "UBOC", name: "Underbluff + Overcooler",
+    text: "Underbluff + Overcooler — in polarized get-in spots they pure-jam their nutted hands (invulnerable) and underbluff with draws (e.g. 8s on 864). Most players default to this." },
+  { abbr: "FL",   name: "Frontloading",
+    text: "Frontloading — commits range/info early. Put them in spots where they end up face-up, then exploit the known range." },
+  { abbr: "FPS",  name: "Fancy Play Syndrome",
+    text: "Fancy Play Syndrome — makes crazy plays way out of the ordinary; over-levels themselves." },
+  { abbr: "BBS",  name: "Bad Beat Sizing",
+    text: "Bad Beat Sizing — when the story says weak but they rivered a nutted hand, they size up. The sizing is inconsistent with the story — read the tell and fold." },
+  { abbr: "TAL",  name: "Truth After Lie",
+    text: "Truth After Lie — slow-plays, then suddenly sizes up for value. When a mostly toy-game (8s) range wants to block-bet but instead sizes up, it's the slow-played nutted (Ks) hand." },
+];

@@ -221,6 +221,16 @@ textarea.noteedit { margin-bottom: 0; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; color: var(--text);
 }
 
+/* exploit-template picker */
+.tmplitem { align-items: flex-start; gap: 10px; }
+.tmplitem[disabled] { opacity: .5; }
+.tmplitem .tmplcode {
+  flex: none; align-self: flex-start; background: #1c2c47; border: 1px solid #34517f; color: var(--accent);
+  border-radius: 8px; padding: 3px 8px; font-size: 12px; font-weight: 800; letter-spacing: .03em;
+}
+.tmplitem .tmplbody { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.tmplitem .tmpltext { color: var(--muted); font-size: 12px; line-height: 1.35; white-space: normal; }
+
 /* villains header row + Lineup link */
 .glabelrow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .glabelrow .glabel { margin: 0; }

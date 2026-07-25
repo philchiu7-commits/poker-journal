@@ -633,6 +633,35 @@ function renderCardSheet() {
   });
 }
 
+/* Add a reusable archetype exploit (EXPLOIT_TEMPLATES) onto this opponent —
+   abbr = short code (card chip), text = full description (tap to reveal). */
+function openTemplateSheet() {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const has = (abbr) => (o.exploits || []).some((e) => e.src === "tmpl:" + abbr);
+  showSheet(`<div class="sheethead"><span class="t">Exploit templates</span>
+      <button class="chip" data-sheetclose>Done</button></div>
+    <div class="sheetnote">Tap to add an archetype. The code (e.g. EQF) shows on the card; the full text reveals on tap.</div>
+    <div class="mergelist">${EXPLOIT_TEMPLATES.map((t) =>
+      `<button class="mergeitem tmplitem" data-tmpl="${esc(t.abbr)}"${has(t.abbr) ? " disabled" : ""}>
+         <span class="tmplcode">${esc(t.abbr)}</span>
+         <span class="tmplbody"><span class="mnm">${esc(t.name)}</span>
+           <span class="tmpltext">${esc(t.text)}</span></span>
+         ${has(t.abbr) ? '<span class="msub">added</span>' : '<span class="msub">＋</span>'}
+       </button>`).join("")}</div>`);
+  $("sheet").querySelectorAll("[data-tmpl]").forEach((b) => b.onclick = async () => {
+    if (b.disabled) return;
+    const t = EXPLOIT_TEMPLATES.find((x) => x.abbr === b.dataset.tmpl);
+    if (!t) return;
+    (o.exploits = o.exploits || []).unshift({ id: uid(), ts: Date.now(), text: t.text, abbr: t.abbr, wins: [], adj: false, src: "tmpl:" + t.abbr });
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    toast(`Added ${t.abbr}`);
+    openTemplateSheet();          // re-render so it shows as "added"
+    renderOppDetail(curOppId);
+  });
+}
+
 async function createOpponent(name, group) {
   const o = { id: uid(), name, group: group || "", tags: [], physical: "", notes: [],
     createdAt: Date.now(), updatedAt: Date.now(), archived: false };
@@ -1971,6 +2000,7 @@ function bindStatic() {
   // opponent detail
   $("od-edit").onclick = () => $("od-editform").classList.toggle("hidden");
   $("od-card-edit").onclick = openCardSheet;
+  $("od-exploit-tmpl").onclick = openTemplateSheet;
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);
     o.name = $("od-e-name").value.trim() || o.name;
