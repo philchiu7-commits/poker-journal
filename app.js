@@ -186,12 +186,13 @@ function fmtWhen(ts) {
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
-function toast(msg) {
+function toast(msg, ms) {
   const t = $("toast");
   t.textContent = msg;
+  t.classList.toggle("wide", msg.length > 24);        // wrap longer messages
   t.classList.remove("hidden");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.add("hidden"), 1800);
+  toast._t = setTimeout(() => t.classList.add("hidden"), ms || (msg.length > 40 ? 3200 : 1800));
 }
 const suitOf = (c) => SUITS.find((s) => s.id === c[c.length - 1]);
 const cardHTML = (c) => c ? `<span class="${suitOf(c).cls}">${c.slice(0, -1)}${suitOf(c).sym}</span>` : "";
@@ -1955,6 +1956,8 @@ function bindStatic() {
   };
   $("opp-list").onclick = (e) => {
     if (e.target.closest(".draghandle")) return;                    // drag, not navigate
+    const card = e.target.closest(".excard");
+    if (card) { toast(card.getAttribute("title") || card.textContent); return; }   // full text, no nav
     const gc = e.target.closest("[data-groupcollapse]");
     if (gc) { toggleGroupCollapse(gc.dataset.groupcollapse); return; }
     const groupadd = e.target.closest("[data-groupadd]");
