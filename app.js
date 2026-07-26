@@ -1113,7 +1113,28 @@ function newDraft() {
     sb: blindsDefault.sb, bb: blindsDefault.bb, std: blindsDefault.std,
     squidHave: "", squidLeft: "",
     mode: "chips", focusPos: null,
+    btnPos: null, assignBtn: false,
   };
+}
+
+/* Effective BTN position: explicit if set, else derived — last occupied seat in
+   the current ring, else "BN" if it's in the ring, else the ring's last seat. */
+function effectiveBtnPos() {
+  if (draft.btnPos) return draft.btnPos;
+  const ring = seatRing();
+  const seated = ring.filter((p) => seatOccupant(p).type !== "empty");
+  if (seated.length) return seated[seated.length - 1];
+  return ring.includes("BN") ? "BN" : ring[ring.length - 1];
+}
+function moveBtn(dir) {
+  const ring = seatRing();
+  if (!ring.length) return;
+  const cur = ring.indexOf(effectiveBtnPos());
+  const idx = cur < 0 ? 0 : cur;
+  const next = dir === "cw" ? (idx + 1) % ring.length
+                            : (idx - 1 + ring.length) % ring.length;
+  draft.btnPos = ring[next];
+  draft.assignBtn = false;
 }
 
 /* ---- seat model (table mode) — positions ARE the seats ---- */
@@ -1144,30 +1165,56 @@ function renderTable() {
   let felt = `<div class="feltoval"></div>
     <div class="feltcenter">${board ? `<div class="feltboard">${board}</div>` : ""}</div>`;
 
+  const btn = effectiveBtnPos();
+  const stackStr = d.effStack ? "$" + kAmt(d.effStack) : "";
   felt += seatOrder().map(({ slot, pos }) => {
     const occ = seatOccupant(pos);
     const focused = d.focusPos === pos;
+    const dBadge = pos === btn ? `<span class="tdealer" title="Button">D</span>` : "";
     let inner, cls = "tseat";
     if (occ.type === "hero") {
       cls += " hero";
       const cards = d.heroCards.some(Boolean)
         ? `<div class="theroc">${d.heroCards.map((c) => c ? cardHTML(c) : "").join("")}</div>` : "";
-      inner = `${cards}<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">You</span></div>`;
+      inner = `${cards}<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">You</span>${stackStr ? `<span class="tstack">${stackStr}</span>` : ""}</div>${dBadge}`;
     } else if (occ.type === "villain") {
       cls += " vill";
       const v = d.villains[occ.idx];
       const o = oppById(v.opponentId);
       const rk = o ? Object.keys(oppReads(o))[0] : null;
       const tag = rk ? `<span class="ttag">${esc(TAG_BY_ID[rk]?.label || rk)}</span>` : "";
-      inner = `<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">${esc(o?.name || "?")}</span></div>${tag}`;
+      inner = `<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">${esc(o?.name || "?")}</span>${stackStr ? `<span class="tstack">${stackStr}</span>` : ""}</div>${dBadge}${tag}`;
     } else {
       cls += " empty";
-      inner = `<div class="tpill add"><span class="tpos">${pos}</span><span class="tnm">＋</span></div>`;
+      inner = `<div class="tpill add"><span class="tpos">${pos}</span><span class="tnm">＋</span></div>${dBadge}`;
     }
     if (focused) cls += " focus";
+    if (d.assignBtn) cls += " btnpick";
     return `<button class="${cls}" data-seat="${pos}" style="left:${slot[0]}%;top:${slot[1]}%">${inner}</button>`;
   }).join("");
   $("he-felt").innerHTML = felt;
+
+  // bottom panel: table-setup bar (BTN + adjust) + assignment/edit for focused seat
+  const setup = $("he-tablesetup");
+  if (setup) {
+    const strdOn = Number(d.std) > 0;
+    setup.innerHTML =
+      `<div class="tsetup-row">
+         <button class="tspill tsblinds" data-blindsedit>
+           <span class="tspilllbl">Blinds</span><span class="tspillval">${esc(d.sb || "–")} / ${esc(d.bb || "–")}</span>
+         </button>
+         <button class="tspill tsstraddle${strdOn ? " on" : ""}" data-straddle>
+           <span class="tspilllbl">Straddle</span><span class="tspillval">${strdOn ? esc(String(d.std)) : "OFF"}</span>
+         </button>
+       </div>
+       <div class="tsetup-row">
+         <span class="tsetup-lbl">BTN</span>
+         <button class="tsbtn" data-btnmove="ccw" title="Counter-clockwise">↺</button>
+         <button class="tsbtn" data-btnmove="cw" title="Clockwise">↻</button>
+         <button class="tsbtn${d.assignBtn ? " on" : ""}" data-btnassign>${d.assignBtn ? "Tap seat…" : "Assign"}</button>
+         <button class="tsbtn" data-adjustall>Adjust Stacks</button>
+       </div>`;
+  }
 
   // assignment strip for the focused seat
   const el = $("he-seatassign");
@@ -1176,21 +1223,52 @@ function renderTable() {
     return;
   }
   const occ = seatOccupant(d.focusPos);
-  const stats = oppStats();
-  const opps = OPP.filter((o) => !o.archived).sort((a, b) =>
-    (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
-  const seatedIds = d.villains.filter((v) => v.pos && v.pos !== d.focusPos).map((v) => v.opponentId);
+  const seatV = occ.type === "villain" ? d.villains[occ.idx] : null;
+  const seatCards = occ.type === "hero" ? d.heroCards
+                   : occ.type === "villain" ? (seatV.cards || [null, null])
+                   : null;
+  if (occ.type === "empty") {
+    const stats = oppStats();
+    const opps = OPP.filter((o) => !o.archived).sort((a, b) =>
+      (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
+    const seatedIds = d.villains.filter((v) => v.pos && v.pos !== d.focusPos).map((v) => v.opponentId);
+    el.innerHTML =
+      `<div class="assignhead"><span class="tpos">${d.focusPos}</span>
+        <span class="muted">— place a player</span></div>
+      <div class="chiprow scroll">
+        <button class="chip" data-assign-hero>You</button>` +
+      opps.map((o) => `<button class="chip${seatedIds.includes(o.id) ? " seated" : ""}" data-assign-opp="${o.id}">${esc(o.name)}</button>`).join("") +
+      `</div>`;
+    return;
+  }
+  // occupied seat editor: Name / Stack / Cards / Remove — cards use the same
+  // sheet-based picker the Board & cards row uses (openGroupSheet).
+  const nm = occ.type === "hero" ? "You" : (oppById(seatV.opponentId)?.name || "?");
+  const cardGroup = occ.type === "hero" ? "hero" : "v" + occ.idx;
+  const cardSlots = seatCards.map((c, i) =>
+    `<button class="cslot mini${c ? " filled" : ""}" data-seatcard="${i}" data-cardgroup="${cardGroup}">` +
+    (c ? cardHTML(c) : `<span class="lbl">?</span>`) + `</button>`).join("");
   el.innerHTML =
-    `<div class="assignhead"><span class="tpos">${d.focusPos}</span>` +
-    (occ.type === "empty" ? `<span class="muted">— place a player</span>`
-      : `<span>${occ.type === "hero" ? "You" : esc(oppById(d.villains[occ.idx].opponentId)?.name || "?")}</span>
-         <button class="chip mini" data-seatclear>Clear</button>`) +
-    `</div>
-    <div class="chiprow scroll">
-      <button class="chip${occ.type === "hero" ? " on" : ""}" data-assign-hero>You</button>` +
-    opps.map((o) => `<button class="chip${occ.type === "villain" && d.villains[occ.idx].opponentId === o.id ? " on" : ""}`
-      + `${seatedIds.includes(o.id) ? " seated" : ""}" data-assign-opp="${o.id}">${esc(o.name)}</button>`).join("") +
-    `</div>`;
+    `<div class="seatedit">
+       <div class="seatedit-hd">
+         <span class="tpos">${d.focusPos}</span>
+         <span class="seatedit-nm">${esc(nm)}</span>
+         ${occ.type === "villain" ? `<button class="chip mini" data-seatchange>Change</button>` : ""}
+         <button class="chip mini danger" data-seatclear>Remove</button>
+       </div>
+       <div class="seatedit-row">
+         <label class="seatedit-fld">
+           <span>Stack</span>
+           <input id="he-seatstack" type="number" inputmode="numeric" placeholder="–" value="${esc(String(d.effStack || ""))}">
+         </label>
+         <div class="seatedit-fld">
+           <span>Cards</span>
+           <div class="seatedit-cards">${cardSlots}</div>
+         </div>
+       </div>
+     </div>`;
+  const stkIn = $("he-seatstack");
+  if (stkIn) stkIn.oninput = () => { draft.effStack = stkIn.value; persistDraft(); };
 }
 let draft = newDraft();
 let undoStack = [];
@@ -1858,8 +1936,41 @@ function bindHandEntry() {
 
     if (b.dataset.mode) {
       mutate(() => { draft.mode = b.dataset.mode; });
-    } else if (b.dataset.seat) {                 // table: focus a seat
-      mutate(() => { draft.focusPos = draft.focusPos === b.dataset.seat ? null : b.dataset.seat; });
+    } else if (b.dataset.seat) {                 // table: BTN assign or focus a seat
+      const pos = b.dataset.seat;
+      mutate(() => {
+        if (draft.assignBtn) { draft.btnPos = pos; draft.assignBtn = false; return; }
+        draft.focusPos = draft.focusPos === pos ? null : pos;
+      });
+    } else if (b.dataset.btnmove) {
+      mutate(() => moveBtn(b.dataset.btnmove));
+    } else if (b.dataset.btnassign !== undefined) {
+      mutate(() => { draft.assignBtn = !draft.assignBtn; if (draft.assignBtn) draft.focusPos = null; });
+    } else if (b.dataset.straddle !== undefined) {
+      mutate(() => {
+        const on = Number(draft.std) > 0;
+        const nv = on ? "" : String(Number(draft.bb || 0) * 2 || draft.bb || "");
+        draft.std = nv;
+        blindsDefault.std = nv;
+        metaSet("defaultBlinds", { ...blindsDefault });
+      });
+    } else if (b.dataset.adjustall !== undefined) {
+      const cur = draft.effStack || "";
+      const raw = prompt("Set all stacks to (chips):", cur);
+      if (raw != null && raw.trim() !== "") {
+        mutate(() => { draft.effStack = raw.trim(); });
+      }
+    } else if (b.dataset.blindsedit !== undefined) {
+      const sb = $("he-sb"); if (sb) { sb.focus(); sb.select(); }
+    } else if (b.dataset.seatcard !== undefined) {
+      openGroupSheet(b.dataset.cardgroup, Number(b.dataset.seatcard));
+    } else if (b.dataset.seatchange !== undefined) {
+      // clear the seat so the assignment chips re-appear for reassignment
+      mutate(() => {
+        const pos = draft.focusPos;
+        if (draft.heroPos === pos) draft.heroPos = null;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
+      });
     } else if (b.dataset.assignHero !== undefined) {
       mutate(() => {
         const pos = draft.focusPos;
