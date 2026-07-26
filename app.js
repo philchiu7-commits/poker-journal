@@ -1847,8 +1847,7 @@ function bindHandEntry() {
   $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
   $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
   $("he-std").oninput = () => setBlind("std", $("he-std").value);
-  $("he-save").onclick = () => saveHand(false);
-  $("he-savenext").onclick = () => saveHand(true);
+  $("he-save").onclick = () => saveHand();
 }
 
 /* --- card picker sheet --- */
@@ -1957,7 +1956,7 @@ function draftHasContent(d) {
     d.board.some(Boolean) || d.heroCards.some(Boolean);
 }
 
-async function saveHand(nextHand) {
+async function saveHand() {
   const d = draft;
   if (!draftHasContent(d)) { toast("Nothing to save"); return; }
   const hIn = heroPresent(d);
