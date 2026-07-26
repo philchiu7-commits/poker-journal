@@ -72,6 +72,7 @@ const TENDENCY_TAGS = [
   { id: "never-bluffs",         cat: "postflop", label: "Big bets = nuts" },
   { id: "sp-dis-board",         cat: "postflop", label: "SP dis board" },
   { id: "oop-protect",          cat: "postflop", label: "OOP protect" },
+  { id: "check-oop-limped",     cat: "postflop", label: "Check OOP limped" },
   // sizing
   { id: "preflop-sizing",       cat: "sizing",   label: "Preflop sizing" },
   { id: "3bet-sizing",          cat: "sizing",   label: "3bet sizing" },
@@ -140,6 +141,7 @@ const EXPLOIT_RULES = {
   "gives-up-turn":    { yes: "He gives up turns — float the flop, stab the turn when he checks." },
   "sp-dis-board":     { yes: "He slowplays on disconnected/dry boards — his checks aren't always weak; don't over-barrel dry runouts, and let him do the betting." },
   "oop-protect":      { yes: "He bets OOP to protect — those bets are medium, not nutted; raise or float and pressure later streets." },
+  "check-oop-limped": { yes: "He always checks OOP in limped pots — never leads. Stab flop when he checks; his check-calls are capped." },
   // sizing
   "preflop-sizing":  { yes: "His preflop sizing is a tell — bigger = stronger. Adjust your continue range." },
   "3bet-sizing":     { yes: "His 3-bet sizing is a tell — read strength off the size and adjust your call/4-bet range." },

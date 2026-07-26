@@ -240,6 +240,7 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .linkbtn.on { border-color: var(--accent); color: var(--accent); }
 
+.sheetnote.warn { color: #e0a63a; background: #2b220a; border: 1px solid #6b551f; border-radius: 8px; padding: 8px 10px; }
 /* lineup sheet */
 .linelist { display: flex; flex-direction: column; gap: 6px; }
 .lineitem {

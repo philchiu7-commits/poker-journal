@@ -15,6 +15,7 @@ let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
 let tableLineup = [];             // today's seat ring, ordered: ("hero" | oppId)[] — anchors positions
+let lineupSeats = 9;              // table size (6–9); picks which subset of the seat ring is in play
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
 const DEFAULT_OPEN_BB = [8, 10, 12, 15];   // standard live-open sizes, in big blinds
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
@@ -534,16 +535,24 @@ function renderLineupSheet() {
   const inLineup = new Set(tableLineup);
   const pool = OPP.filter((o) => !o.archived && !inLineup.has(o.id)).sort((a, b) => a.name.localeCompare(b.name));
   const heroAdd = inLineup.has("hero") ? "" : `<button class="chip" data-ladd="hero">＋ You</button>`;
+  const sizes = [6, 7, 8, 9].map((n) =>
+    `<button class="chip mini${lineupSeats === n ? " on" : ""}" data-lsize="${n}">${n}</button>`).join("");
+  const overCap = tableLineup.length > lineupSeats
+    ? `<div class="sheetnote warn">⚠︎ ${tableLineup.length} players seated but table is ${lineupSeats}-handed. Increase table size or remove players.</div>` : "";
   showSheet(`<div class="sheethead"><span class="t">Table lineup</span>
       <button class="chip" data-sheetclose>Done</button></div>
     <div class="sheetnote">Seat everyone in clockwise order for today. Then each hand, tap just one player's position and the rest fill in automatically.</div>
+    <div class="posrow" style="margin-bottom:8px"><span class="poslabel">Table size</span><div class="chiprow tight">${sizes}</div></div>
+    ${overCap}
     <div class="linelist">${rows}</div>
-    <div class="glabel" style="margin-top:12px">Add to table</div>
+    <div class="glabel" style="margin-top:14px">Add to table (all players)</div>
     <input id="lineup-search" class="vsearch" placeholder="🔍 Search…" autocomplete="off">
     <div class="chiprow" id="lineup-pool">${heroAdd}${pool.map((o) => `<button class="chip" data-ladd="${o.id}">${esc(o.name)}</button>`).join("")}</div>
     ${tableLineup.length ? `<button class="secondary" id="lineup-clear" style="margin-top:12px">Clear lineup</button>` : ""}`);
   const sheet = $("sheet");
   const refresh = async () => { await saveLineup(); renderLineupSheet(); renderHandEntry(); };
+  sheet.querySelectorAll("[data-lsize]").forEach((b) =>
+    b.onclick = async () => { lineupSeats = Number(b.dataset.lsize); await metaSet("lineupSeats", lineupSeats); refresh(); });
   sheet.querySelectorAll("[data-ladd]").forEach((b) =>
     b.onclick = () => { tableLineup.push(b.dataset.ladd); refresh(); });
   sheet.querySelectorAll("[data-lrm]").forEach((b) =>
@@ -1032,18 +1041,21 @@ function renderData() {
 
 /* ================= Hand entry ================= */
 
-function newDraft(keep) {
+/* A fresh empty draft — villains, positions, cards, actions all cleared. Save
+   always fully unselects; only long-lived table context (blinds, squid, mode,
+   eff-stack default) carries over. */
+function newDraft() {
   return {
     id: null, ts: null,
-    villains: keep ? keep.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos, cards: [null, null] })) : [],
-    heroPos: keep ? keep.heroPos : null, heroCards: [null, null],
-    heroIn: keep ? keep.heroIn : true,
+    villains: [],
+    heroPos: null, heroCards: [null, null],
+    heroIn: true,
     board: [null, null, null, null, null],
     actions: [], street: "pre", actor: null, lastV: "v0",
-    note: "", effStack: keep ? keep.effStack : predictEffStack(),   // FEATURE 2: default from last hand
-    sb: keep ? keep.sb : blindsDefault.sb, bb: keep ? keep.bb : blindsDefault.bb, std: keep ? keep.std : blindsDefault.std,
-    squidHave: keep ? keep.squidHave : "", squidLeft: keep ? keep.squidLeft : "",
-    mode: keep ? keep.mode : "chips", focusPos: null,
+    note: "", effStack: predictEffStack(),
+    sb: blindsDefault.sb, bb: blindsDefault.bb, std: blindsDefault.std,
+    squidHave: "", squidLeft: "",
+    mode: "chips", focusPos: null,
   };
 }
 
@@ -1240,19 +1252,29 @@ function firstToAct(street) {
    everyone else's follows by their offset along the ORDER_POST seat ring. */
 const lineupId = (actor) => actor === "hero" ? "hero" : draft.villains[Number(actor.slice(1))]?.opponentId;
 const lineupActive = () => tableLineup.length >= 2;
+/* Seat rings by table size: which positions are in play. STD (straddle) included
+   at 7+ handed to match how Phil's game runs. Clockwise from SB. */
+const SEAT_RINGS = {
+  6: ["SB", "BB", "U6", "HJ", "CO", "BN"],
+  7: ["SB", "BB", "STD", "U6", "HJ", "CO", "BN"],
+  8: ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"],
+  9: ["SB", "BB", "STD", "U8", "U7", "U6", "HJ", "CO", "BN"],
+};
+const seatRing = () => SEAT_RINGS[lineupSeats] || SEAT_RINGS[9];
 function deriveLineup(anchor) {
   if (!lineupActive()) return;
+  const ring = seatRing();
   const ai = tableLineup.indexOf(lineupId(anchor));
   const ap = draftActorPos(anchor);
   if (ai < 0 || !ap) return;
-  const pIdx = ORDER_POST.indexOf(ap);
-  if (pIdx < 0) return;
-  const L = ORDER_POST.length;
+  const pIdx = ring.indexOf(ap);
+  if (pIdx < 0) return;                            // anchor on a seat outside this table size
+  const L = ring.length;
   for (const p of draftParticipants()) {
     if (p === anchor) continue;
     const li = tableLineup.indexOf(lineupId(p));
     if (li < 0) continue;
-    const pos = ORDER_POST[(((pIdx + (li - ai)) % L) + L) % L];
+    const pos = ring[(((pIdx + (li - ai)) % L) + L) % L];
     if (p === "hero") draft.heroPos = pos;
     else draft.villains[Number(p.slice(1))].pos = pos;
   }
@@ -1262,6 +1284,30 @@ function autoDeriveLineup() {
   if (!lineupActive()) return;
   const anchor = draftParticipants().find((p) => draftActorPos(p) && tableLineup.includes(lineupId(p)));
   if (anchor) deriveLineup(anchor);
+}
+/* Limped-pot straddle: STD is always in the pot when someone posts a straddle.
+   On a preflop limp with blinds.std set + a lineup active, add the STD-seat
+   lineup member to the hand if they aren't already in. */
+function ensureStraddleInPot() {
+  if (draft.street !== "pre" || !Number(draft.std) || !lineupActive()) return;
+  if (draft.villains.some((v) => v.pos === "STD") || draft.heroPos === "STD") return;
+  const ring = seatRing();
+  if (!ring.includes("STD")) return;
+  // find who sits at STD by deriving positions from any anchor
+  const anchor = draftParticipants().find((p) => draftActorPos(p) && tableLineup.includes(lineupId(p)));
+  if (!anchor) return;
+  const ai = tableLineup.indexOf(lineupId(anchor));
+  const pIdx = ring.indexOf(draftActorPos(anchor));
+  if (pIdx < 0) return;
+  const stdRingIdx = ring.indexOf("STD");
+  const li = (((stdRingIdx - pIdx) % ring.length) + ring.length) % ring.length;
+  const stdLineupIdx = (ai + li) % tableLineup.length;
+  const stdId = tableLineup[stdLineupIdx];
+  if (!stdId) return;
+  if (stdId === "hero") { draft.heroIn = true; draft.heroPos = "STD"; }
+  else if (!draft.villains.some((v) => v.opponentId === stdId)) {
+    draft.villains.push({ opponentId: stdId, pos: "STD", cards: [null, null] });
+  }
 }
 /* Betting on `street` is closed: everyone live has responded to the last
    aggression (or everyone has checked/limped through). */
@@ -1519,21 +1565,30 @@ function renderHandEntry() {
   const byRecent = (a, b) => (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0);
   const active = OPP.filter((o) => !o.archived);
   const nq = vSearch.trim().toLowerCase().replace(/\s+/g, "");
-  const selected = active.filter((o) => selIds.includes(o.id)).sort(byRecent);
-  let pool;
-  if (nq) {                                             // filtered results (pinyin-aware, exclude selected)
-    pool = active.filter((o) => !selIds.includes(o.id) && oppMatches(o, nq)).sort(byRecent);
-  } else {                                              // idle: most-recent handful as quick chips
-    pool = active.filter((o) => !selIds.includes(o.id)).sort(byRecent).slice(0, 8);
-  }
   const heroChip = `<button class="chip heroic${d.heroIn ? " on" : ""}" data-heroin>You</button>`;
   const chip = (o, on) =>
     `<button class="chip${on ? " on" : ""}" data-vopp="${o.id}">${esc(o.name)}</button>`;
-  $("he-villains").innerHTML = heroChip +
-    selected.map((o) => chip(o, true)).join("") +
-    (selected.length && pool.length ? `<span class="chipdiv"></span>` : "") +
-    pool.map((o) => chip(o, false)).join("") +
-    (nq && !pool.length ? `<span class="chipnote">no match</span>` : "");
+  let html = heroChip;
+  if (nq) {
+    // search takes over: pinyin-aware filter over everyone
+    const matched = active.filter((o) => oppMatches(o, nq)).sort(byRecent);
+    html += matched.map((o) => chip(o, selIds.includes(o.id))).join("")
+      || `<span class="chipnote">no match</span>`;
+  } else if (lineupActive()) {
+    // show EVERY seated villain in seat order (not just recent) so they're all reachable
+    const seated = tableLineup.filter((id) => id !== "hero").map((id) => oppById(id)).filter(Boolean);
+    html += seated.map((o) => chip(o, selIds.includes(o.id))).join("");
+    const extras = active.filter((o) => !tableLineup.includes(o.id) && selIds.includes(o.id));
+    if (extras.length) html += `<span class="chipdiv"></span>` + extras.map((o) => chip(o, true)).join("");
+  } else {
+    // no lineup: recency-sorted, put selected first
+    const selected = active.filter((o) => selIds.includes(o.id)).sort(byRecent);
+    const pool = active.filter((o) => !selIds.includes(o.id)).sort(byRecent).slice(0, 8);
+    html += selected.map((o) => chip(o, true)).join("")
+      + (selected.length && pool.length ? `<span class="chipdiv"></span>` : "")
+      + pool.map((o) => chip(o, false)).join("");
+  }
+  $("he-villains").innerHTML = html;
   if (document.activeElement !== $("he-vsearch")) $("he-vsearch").value = vSearch;
   $("he-lineup-btn").textContent = lineupActive() ? `Lineup · ${tableLineup.length}` : "Lineup";
   $("he-lineup-btn").classList.toggle("on", lineupActive());
@@ -1594,12 +1649,15 @@ function renderHandEntry() {
     const bb = Number(d.bb) || 0;
     let btns;
     if (isOpenRaise(last) && bb > 0) {
-      // open-raise sized in big blinds (adaptive), resolved to exact chips
-      btns = openSizeButtons(bb).map((n) => {
-        const chips = niceChips(n * bb);
-        return `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
-          `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`;
-      }).join("") +
+      // open-raise sized in big blinds (adaptive), resolved to exact chips.
+      // Dedupe: at small blinds two bb sizes can round to the same chip amount —
+      // keep the smaller bb and drop duplicates so every button is distinct.
+      const seen = new Set();
+      const uniq = openSizeButtons(bb).map((n) => ({ n, chips: niceChips(n * bb) }))
+        .filter((x) => !seen.has(x.chips) && seen.add(x.chips));
+      btns = uniq.map(({ n, chips }) =>
+        `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
+        `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`).join("") +
       `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
     } else {
       btns = sizesFor(last).map((s) => {
@@ -1734,6 +1792,7 @@ function bindHandEntry() {
       mutate(() => {
         if (draft.mode !== "table" && actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
         draft.actions.push({ street: draft.street, actor, act: b.dataset.act, size: null });
+        if (b.dataset.act === "limp") ensureStraddleInPot();     // STD is always in a limped pot
         if (streetClosed(draft.street) && draft.street !== "river") {
           // betting done → next street, first-to-act up, and prompt for the board
           const next = STREETS[STREETS.indexOf(draft.street) + 1];
@@ -1929,7 +1988,7 @@ async function saveHand(nextHand) {
 
   undoStack = [];
   const primary = oppById(rec.villainIds[0]);
-  draft = nextHand ? newDraft(d) : newDraft();
+  draft = newDraft();
   vSearch = "";
   await metaSet("draftHand", null);
   toast(primary ? `Saved vs ${primary.name}` : "Hand saved");
@@ -2240,6 +2299,7 @@ async function boot() {
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
+  lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};
   // migrate old {bb:{size:count}} → recency picks {bb:[{size,ts}]}
   for (const bb of Object.keys(openSizeStats)) {
