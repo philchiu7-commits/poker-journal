@@ -192,6 +192,7 @@ textarea.noteedit { margin-bottom: 0; }
 .suggitem { border-top: 1px solid var(--line); padding: 9px 2px; font-size: 14px; opacity: .92; }
 .suggitem .notetext { color: var(--muted); }
 .wintally { font-size: 12px; color: var(--good); font-weight: 700; white-space: nowrap; }
+.convtag { font-size: 10px; font-weight: 800; color: var(--good); background: #10301a; border: 1px solid var(--good); border-radius: 5px; padding: 1px 5px; vertical-align: middle; margin-right: 4px; }
 .topbadge {
   font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
   color: #0a0d12; background: linear-gradient(180deg, var(--accent), var(--accent2));

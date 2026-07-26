@@ -783,9 +783,11 @@ function renderOppDetail(id) {
             <button class="chip mini on" data-notesave>Save</button>
           </div></div>`
       : `<div class="noteitem" data-note="${n.id}">
-          <div class="notetext">${esc(n.text)}</div>
+          <div class="notetext">${n.handId ? '<span class="convtag">✓ hand</span> ' : ""}${esc(n.text)}</div>
           <div class="noterowbtns">
-            <button class="chip mini" data-notehand>→ Log hand</button>
+            ${n.handId
+              ? `<button class="chip mini" data-notegohand>Open hand ↗</button>`
+              : `<button class="chip mini" data-notehand>→ Log hand</button>`}
             <button class="chip mini" data-noteedit>Edit</button>
             <button class="chip mini" data-notedel>Delete</button>
           </div></div>`
@@ -2299,14 +2301,16 @@ function bindStatic() {
   };
   $("od-notes-convert").onclick = async () => {
     const o = oppById(curOppId);
-    const notes = (o.notes || []).filter((n) => !n.handId);
-    if (!notes.length) { toast("No notes to convert"); return; }
-    if (!confirm(`Parse ${notes.length} notes into hands? Ambiguous notes leave blanks for you to finish. Original notes stay in the record.`)) return;
-    let ok = 0;
+    const allNotes = o.notes || [];
+    const notes = allNotes.filter((n) => !n.handId);
+    if (!allNotes.length) { toast("No notes to convert"); return; }
+    if (!notes.length) { toast(`All ${allNotes.length} notes are already converted`); return; }
+    if (!confirm(`Create a hand from each of ${notes.length} note${notes.length > 1 ? "s" : ""}? Recognised shorthand pre-fills the hand; the rest stays in the note text so you can finish it. Notes stay in place too.`)) return;
+    let ok = 0, structured = 0;
     for (const n of notes) {
       const d = parseNoteToDraft(n.text, curOppId);
-      // require SOMETHING structured beyond just the raw text before saving
-      if (!d.villains[0].pos && !d.villains[0].cards.some(Boolean) && !d.board.some(Boolean) && !d.actions.length) continue;
+      const hasStruct = !!(d.villains[0].pos || d.villains[0].cards.some(Boolean) || d.board.some(Boolean) || d.actions.length);
+      if (hasStruct) structured++;
       const now = Date.now();
       const rec = {
         id: uid(), ts: now, updatedAt: now, hero: false,
@@ -2323,12 +2327,12 @@ function bindStatic() {
       rec.result = null; rec.showdown = false;
       await dbPut("hands", rec);
       HANDS.push(rec);
-      n.handId = rec.id;                 // link the note to its parsed hand
+      n.handId = rec.id;                 // link the note to its parsed hand (blocks re-convert)
       ok++;
     }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
-    toast(`Parsed ${ok} of ${notes.length} notes`);
+    toast(`Created ${ok} hand${ok > 1 ? "s" : ""} · ${structured} pre-filled from shorthand`, 4200);
     renderOppDetail(curOppId);
   };
   $("od-notes").onclick = async (e) => {
@@ -2345,6 +2349,10 @@ function bindStatic() {
       await metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
       location.hash = "#hand";
       return;
+    }
+    if (e.target.closest("[data-notegohand]")) {
+      const n = (o.notes || []).find((x) => x.id === id);
+      if (n?.handId) { location.hash = "#handview/" + n.handId; return; }
     }
     if (e.target.closest("[data-notedel]")) {
       if (!confirm("Delete this note?")) return;
