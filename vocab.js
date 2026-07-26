@@ -23,14 +23,21 @@ const SUITS = [
    special 3-colour read (green/yellow/red). Some postflop reads are shown as
    grouped bubbles (Station/Lead/Raise nuts/Bluff till) — see READ_GROUPS in
    app.js; their labels here are the full names used in row chips. */
+/* Yes/No axis pairs — one read holds both directions. Legacy separate tags
+   (over-folds-cbet, fit-or-fold, gives-up-turn, never-bluffs, limps-monsters)
+   auto-migrate onto these survivors in app.js. Limps monsters is now a grouped
+   bubble row (wS / nS). */
 const TENDENCY_TAGS = [
   // preflop — opening
   { id: "open-too-wide",        cat: "preflop",  label: "Open too wide" },
   { id: "ep-range-limp",        cat: "preflop",  label: "EP range limp" },
-  { id: "limps-monsters",       cat: "preflop",  label: "Limps monsters" },
+  { id: "limps-monster-ws",     cat: "preflop",  label: "Limps monster wS" },
+  { id: "limps-monster-ns",     cat: "preflop",  label: "Limps monster nS" },
   { id: "attacks-limps",        cat: "preflop",  label: "Attacks limps" },
   // preflop — limping / squid
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
+  { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
+  { id: "limp-wide-scale",      cat: "preflop",  label: "Limp wide (scale)" },
   { id: "limp-wide-squid",      cat: "preflop",  label: "nS wide limp" },
   { id: "limp-wide-multiplier", cat: "preflop",  label: "Goes for multipliers" },
   { id: "wide-cc",              cat: "preflop",  label: "Wide CC" },
@@ -41,7 +48,8 @@ const TENDENCY_TAGS = [
   { id: "can-4bet-light",       cat: "preflop",  label: "Can 4bet light" },
   { id: "over-folds-3bet",      cat: "preflop",  label: "Over-folds to 3bet" },
   { id: "never-folds-pre",      cat: "preflop",  label: "Never folds pre" },
-  // postflop — grouped bubbles
+  { id: "lrr-bluff",            cat: "preflop",  label: "Lrr bluff" },
+  // postflop — grouped bubbles (Station/Lead/Raise-nuts/Bluff-till/Range)
   { id: "station-f",            cat: "postflop", label: "Station F" },
   { id: "station-t",            cat: "postflop", label: "Station T" },
   { id: "station-r",            cat: "postflop", label: "Station R" },
@@ -60,19 +68,20 @@ const TENDENCY_TAGS = [
   // postflop — bluffing
   { id: "bluff-raise-flop",     cat: "postflop", label: "Bluff raise flop" },
   { id: "bluff-xt",             cat: "postflop", label: "Bluff XT" },
-  { id: "bluffs-rivers",        cat: "postflop", label: "Bluffs rivers" },
-  // postflop — cbet / float
+  { id: "bluffs-rivers",        cat: "postflop", label: "Bluffs rivers" },       // yes = over-bluffs river, no = big bets = nuts
+  // postflop — cbet / float (merged: over-cbet no = overfolds; floats-wide no = fit-or-fold)
   { id: "over-cbet",            cat: "postflop", label: "Over cbet" },
-  { id: "over-folds-cbet",      cat: "postflop", label: "Over-folds to cbet" },
-  { id: "fit-or-fold",          cat: "postflop", label: "Fit-or-fold" },
   { id: "floats-wide",          cat: "postflop", label: "Floats wide" },
-  // postflop — made-hand strength
-  { id: "barrels-off",          cat: "postflop", label: "Barrels relentlessly" },
-  { id: "gives-up-turn",        cat: "postflop", label: "Gives up on turn" },
-  { id: "never-bluffs",         cat: "postflop", label: "Big bets = nuts" },
+  // postflop — barrel / lead / limped-pot behaviour
+  { id: "barrels-off",          cat: "postflop", label: "Barrels relentlessly" }, // yes = barrels, no = gives up on turn
+  { id: "lead-limped",          cat: "postflop", label: "Lead limped" },
   { id: "sp-dis-board",         cat: "postflop", label: "SP dis board" },
   { id: "oop-protect",          cat: "postflop", label: "OOP protect" },
   { id: "check-oop-limped",     cat: "postflop", label: "Check OOP limped" },
+  { id: "range-check-oop",      cat: "postflop", label: "Range check OOP" },
+  { id: "bet-merged-mwp",       cat: "postflop", label: "Bet merged mwp" },
+  { id: "no-river-block",       cat: "postflop", label: "No river blocks" },
+  { id: "protected-block",      cat: "postflop", label: "Protected block" },
   // sizing
   { id: "preflop-sizing",       cat: "sizing",   label: "Preflop sizing" },
   { id: "3bet-sizing",          cat: "sizing",   label: "3bet sizing" },
@@ -101,7 +110,10 @@ const EXPLOIT_RULES = {
   "open-too-wide":   { yes: "3-bet him wider IP — his opens are weak and he over-folds or plays face-up." },
   "ep-range-limp":   { yes: "Iso-raise his EP limps big — he limps a whole range and folds the trash." },
   "attacks-limps":   { yes: "Don't limp behind him — he iso-raises limps. Limp-reraise your monsters, fold the rest." },
-  "limps-monsters":  { yes: "When he limps then re-raises, fold marginal hands — the limp was a trap." },
+  "limps-monster-ws":{ yes: "With a squid, his limp = a monster — never iso, fold to his limp-reraise." },
+  "limps-monster-ns":{ yes: "No squid, his limp = a monster — never iso, fold to his limp-reraise." },
+  "lp-limp-weak":    { yes: "In limped pots, his limp-calls are weak — barrel him off flops and turns." },
+  "lrr-bluff":       { yes: "His limp-reraises include bluffs — flat/call wider and re-jam value; his LRR range is polar." },
   "limp-wide-squid": { yes: "He limps wide when there's no squid — iso-raise large to isolate and punish the weak limps." },
   "limp-wide-multiplier": { yes: "He chases the multiplier — iso big and value-bet, he over-commits with junk to hit it." },
   "can-4bet-light":  { yes: "His 4-bets aren't always strong — 5-bet jam your value and call wider IP." },
@@ -131,17 +143,23 @@ const EXPLOIT_RULES = {
   // postflop singles
   "bluff-raise-flop": { yes: "His flop raises are often bluffs — call down or re-raise light." },
   "bluff-xt":         { yes: "Check-flop-then-bet-turn from him is usually a bluff — call or raise." },
-  "over-cbet":        { yes: "He c-bets too much — float wide and check-raise; his c-bet range is weak." },
-  "fit-or-fold":      { yes: "C-bet every flop — he folds unless he connects." },
-  "over-folds-cbet":  { yes: "Fire c-bets relentlessly — he over-folds to c-bets." },
-  "floats-wide":      { yes: "He floats flops light — barrel turns to punish the floats." },
-  "bluffs-rivers":    { yes: "Bluff-catch rivers wider — he over-bluffs the river." },
-  "never-bluffs":     { yes: "When he bets big, fold everything but the nuts — big bet = value." },
-  "barrels-off":      { yes: "He barrels relentlessly — don't fold decent bluff-catchers, let him fire into you." },
-  "gives-up-turn":    { yes: "He gives up turns — float the flop, stab the turn when he checks." },
+  "over-cbet":        { yes: "He c-bets too much — float wide and check-raise; his c-bet range is weak.",
+                        no:  "Fire c-bets relentlessly — he over-folds to c-bets." },
+  "floats-wide":      { yes: "He floats flops light — barrel turns to punish the floats.",
+                        no:  "C-bet every flop — he's fit-or-fold, folds unless he connects." },
+  "bluffs-rivers":    { yes: "Bluff-catch rivers wider — he over-bluffs the river.",
+                        no:  "When he bets big, fold everything but the nuts — big bets = value." },
+  "barrels-off":      { yes: "He barrels relentlessly — don't fold decent bluff-catchers, let him fire into you.",
+                        no:  "He gives up turns — float the flop, stab the turn when he checks." },
+  "lead-limped":      { yes: "He leads limped pots — his lead range is capped, raise as bluff and value." },
   "sp-dis-board":     { yes: "He slowplays on disconnected/dry boards — his checks aren't always weak; don't over-barrel dry runouts, and let him do the betting." },
   "oop-protect":      { yes: "He bets OOP to protect — those bets are medium, not nutted; raise or float and pressure later streets." },
   "check-oop-limped": { yes: "He always checks OOP in limped pots — never leads. Stab flop when he checks; his check-calls are capped." },
+  "range-check-oop":  { yes: "He range-checks OOP — his checks are uncapped, don't over-stab; bluff-catch when he leads." },
+  "bet-merged-mwp":   { yes: "He bets a merged range in multiway pots — thin value not just nuts; call down wider and raise thinner." },
+  "no-river-block":   { yes: "He doesn't use block bets on rivers — his river bets are polar (nuts or bluff). Bluff-catch mediums." },
+  "protected-block":  { yes: "His block bets are protection — medium-strength, not weak. Raise him for value with better, don't spew-bluff-raise." },
+  "limp-wide-scale":  { any: "His limp width is a tell — tighter than usual = trap, wider than usual = weak. Size iso relative to expected width." },
   // sizing
   "preflop-sizing":  { yes: "His preflop sizing is a tell — bigger = stronger. Adjust your continue range." },
   "3bet-sizing":     { yes: "His 3-bet sizing is a tell — read strength off the size and adjust your call/4-bet range." },

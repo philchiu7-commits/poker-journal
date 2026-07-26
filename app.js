@@ -22,13 +22,22 @@ let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
-/* ---------- reads: three-state tendency toggles ----------
-   Yes (green) / No (red) / neutral (off), cycled on tap. draw-size is a
-   3-colour scale instead. Stored per opponent as o.reads { id: state };
-   migrated from the legacy o.tags array (all "yes") on first touch. */
-const READ_CYCLE = { "draw-size": ["green", "yellow", "red"] };
-const readCycle = (id) => READ_CYCLE[id] || ["yes", "no"];
-const STATE_CLASS = { yes: "sgreen", no: "sred", green: "sgreen", yellow: "syellow", red: "sred" };
+/* ---------- reads: intensity-scaled tendency toggles ----------
+   Cycle: off → yes → yes! (strong) → no → no! (strong) → off. Draw-size and
+   limp-wide-scale keep the 3-colour scale. Legacy tags (over-folds-cbet →
+   over-cbet:no, gives-up-turn → barrels-off:no, etc.) migrate on boot. */
+const READ_CYCLE = {
+  "draw-size":       ["green", "yellow", "red"],
+  "limp-wide-scale": ["green", "yellow", "red"],
+};
+const readCycle = (id) => READ_CYCLE[id] || ["yes", "yes!", "no", "no!"];
+const STATE_CLASS = {
+  yes: "sgreen", "yes!": "sgreen sstrong",
+  no: "sred", "no!": "sred sstrong",
+  green: "sgreen", yellow: "syellow", red: "sred",
+};
+/* Normalise strength suffix ("yes!"/"no!") to base state for exploit lookup. */
+const readBase = (s) => s === "yes!" ? "yes" : s === "no!" ? "no" : s;
 function oppReads(o) {
   if (!o.reads || typeof o.reads !== "object")
     o.reads = Array.isArray(o.tags) ? Object.fromEntries(o.tags.map((id) => [id, "yes"])) : {};
@@ -45,6 +54,7 @@ const readChip = (id, state) =>
 /* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
 const READ_GROUPS = [
   { cat: "preflop",  label: "3bet",       bubbles: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"]] },
+  { cat: "preflop",  label: "Limps monster", bubbles: [["limps-monster-ws", "wS"], ["limps-monster-ns", "nS"]] },
   { cat: "postflop", label: "Station",    bubbles: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
   { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
   { cat: "postflop", label: "Raise nuts", bubbles: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
@@ -65,9 +75,10 @@ function suggestedExploits(o) {
     const rule = EXPLOIT_RULES[id];
     if (!rule) continue;
     const useAny = !!rule.any;
-    const text = useAny ? rule.any : rule[state];
+    const base = readBase(state);                            // "yes!"→"yes", "no!"→"no"
+    const text = useAny ? rule.any : rule[base];
     if (!text) continue;
-    const key = id + ":" + (useAny ? "any" : state);
+    const key = id + ":" + (useAny ? "any" : base);
     if (dismissed.has(key) || seen.has(key)) continue;
     seen.add(key);
     out.push({ key, text });
@@ -95,34 +106,48 @@ function villainStreetActs(h, actor) {
 /* FEATURE 1 — infer candidate reads from an opponent's logged hands. Each
    detector counts hands showing a pattern; a read is suggested once its count
    crosses a (per-signal) threshold and it isn't already set or dismissed. */
-const READ_SIGNAL_THRESH = { "station-f": 3, "station-t": 3, "station-r": 2, _default: 2 };
+/* Signals: {tagId, state, threshold}. State "no" means the "no" direction of
+   the merged read (e.g. gives-up-turn → barrels-off:no). */
+const READ_SIGNALS = [
+  { id: "limp-caller",      state: "yes", th: 2 },
+  { id: "3bets-light",      state: "yes", th: 2 },
+  { id: "barrels-off",      state: "no",  th: 2 },   // was: gives-up-turn
+  { id: "barrels-off",      state: "yes", th: 2 },
+  { id: "over-cbet",        state: "yes", th: 2 },
+  { id: "bluff-raise-flop", state: "yes", th: 2 },
+  { id: "station-f",        state: "yes", th: 3 },
+  { id: "station-t",        state: "yes", th: 3 },
+  { id: "station-r",        state: "yes", th: 2 },
+];
 function derivedReads(o) {
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(o.id));
   const cnt = {};
-  const bump = (t) => (cnt[t] = (cnt[t] || 0) + 1);
+  const bump = (k) => (cnt[k] = (cnt[k] || 0) + 1);
   const aggr = (arr) => arr.some((a) => a === "bet" || a === "raise");
   for (const h of hands) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === o.id);
     if (idx < 0) continue;
     const s = villainStreetActs(h, "v" + idx);
     const raisedPre = s.pre.some((a) => ["raise", "3bet", "4bet", "5bet"].includes(a));
-    if (s.pre.includes("limp")) bump("limp-caller");
-    if (s.pre.includes("3bet")) bump("3bets-light");
-    if (s.flop.includes("bet") && (s.turn.includes("check") || s.turn.includes("fold"))) bump("gives-up-turn");
-    if (aggr(s.flop) && aggr(s.turn) && aggr(s.river)) bump("barrels-off");
-    if (raisedPre && s.flop.includes("bet")) bump("over-cbet");
-    if (s.flop.includes("raise")) bump("bluff-raise-flop");
-    if (s.flop.includes("call")) bump("station-f");
-    if (s.turn.includes("call")) bump("station-t");
-    if (s.river.includes("call")) bump("station-r");
+    if (s.pre.includes("limp")) bump("limp-caller:yes");
+    if (s.pre.includes("3bet")) bump("3bets-light:yes");
+    if (s.flop.includes("bet") && (s.turn.includes("check") || s.turn.includes("fold"))) bump("barrels-off:no");
+    if (aggr(s.flop) && aggr(s.turn) && aggr(s.river)) bump("barrels-off:yes");
+    if (raisedPre && s.flop.includes("bet")) bump("over-cbet:yes");
+    if (s.flop.includes("raise")) bump("bluff-raise-flop:yes");
+    if (s.flop.includes("call")) bump("station-f:yes");
+    if (s.turn.includes("call")) bump("station-t:yes");
+    if (s.river.includes("call")) bump("station-r:yes");
   }
   const reads = oppReads(o);
   const dismissed = new Set(o.readDismissed || []);
-  return Object.entries(cnt)
-    .filter(([t, c]) => c >= (READ_SIGNAL_THRESH[t] || READ_SIGNAL_THRESH._default)
-      && !reads[t] && !dismissed.has(t) && TAG_BY_ID[t])
-    .sort((a, b) => b[1] - a[1])
-    .map(([t, c]) => ({ tagId: t, count: c, label: TAG_BY_ID[t].label }));
+  return READ_SIGNALS.map((sig) => {
+    const key = sig.id + ":" + sig.state;
+    const c = cnt[key] || 0;
+    if (c < sig.th || reads[sig.id] || dismissed.has(key) || !TAG_BY_ID[sig.id]) return null;
+    const suffix = sig.state === "no" ? " (NO)" : "";
+    return { tagId: sig.id, state: sig.state, key, count: c, label: TAG_BY_ID[sig.id].label + suffix };
+  }).filter(Boolean).sort((a, b) => b.count - a.count);
 }
 
 /* FEATURE 2 — predictive defaults for hand entry, from history. */
@@ -177,6 +202,28 @@ async function mergeOpponents(fromId, intoId) {
 
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
+}
+
+/* Legacy read migration: fold removed tags onto their surviving axis-mate. */
+const READ_LEGACY_MAP = {
+  "over-folds-cbet": { to: "over-cbet",     state: "no" },
+  "fit-or-fold":     { to: "floats-wide",   state: "no" },
+  "gives-up-turn":   { to: "barrels-off",   state: "no" },
+  "never-bluffs":    { to: "bluffs-rivers", state: "no" },
+  "limps-monsters":  { to: "limps-monster-ns", state: "yes" },   // best-guess destination
+};
+async function migrateLegacyReads() {
+  for (const o of OPP) {
+    const r = oppReads(o);
+    let dirty = false;
+    for (const [oldId, { to, state }] of Object.entries(READ_LEGACY_MAP)) {
+      if (r[oldId] == null) continue;
+      if (r[to] == null) r[to] = r[oldId] === "yes" ? state : (r[oldId] === "no" ? (state === "yes" ? "no" : "yes") : r[oldId]);
+      delete r[oldId];
+      dirty = true;
+    }
+    if (dirty) { o.updatedAt = Date.now(); await dbPut("opponents", o); }
+  }
 }
 
 /* ---------- small utils ---------- */
@@ -719,7 +766,7 @@ function renderOppDetail(id) {
         <span>Suggested from hands (${dReads.length})</span>
         <span class="toggle-arrow">${showD ? "▼" : "▶"}</span>
       </div>` + (showD ? dReads.map((s) =>
-        `<div class="suggitem" data-dtag="${esc(s.tagId)}">
+        `<div class="suggitem" data-dtag="${esc(s.tagId)}" data-dstate="${esc(s.state || "yes")}" data-dkey="${esc(s.key)}">
            <div class="notetext">📊 <b>${esc(s.label)}</b> — seen in ${s.count} hand${s.count > 1 ? "s" : ""}</div>
            <div class="noterowbtns">
              <button class="chip mini on sgreen" data-dacc>＋ Add read</button>
@@ -738,7 +785,7 @@ function renderOppDetail(id) {
       : `<div class="noteitem" data-note="${n.id}">
           <div class="notetext">${esc(n.text)}</div>
           <div class="noterowbtns">
-            <span class="when">${fmtWhen(n.ts)}</span>
+            <button class="chip mini" data-notehand>→ Log hand</button>
             <button class="chip mini" data-noteedit>Edit</button>
             <button class="chip mini" data-notedel>Delete</button>
           </div></div>`
@@ -1557,6 +1604,8 @@ function renderHandEntry() {
   const lt = lineText(d);
   $("he-line").textContent = lt || (table ? "New hand — tap a seat" : "New hand — tap a villain");
   $("he-line").classList.toggle("muted", !lt);
+  $("he-notehint").classList.toggle("hidden", !d.note);
+  $("he-notehint-text").textContent = d.note || "";
 
   // mode toggle + show/hide the two entry styles
   $("he-mode").innerHTML =
@@ -1849,6 +1898,7 @@ function bindHandEntry() {
 
   $("he-undo").onclick = undo;
   $("he-lineup-btn").onclick = openLineupSheet;
+  $("he-notehint-clear").onclick = () => { mutate(() => { draft.note = ""; }); };
   const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   $("he-vsearch").oninput = () => { vSearch = $("he-vsearch").value; renderHandEntry(); };
   $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
@@ -1995,11 +2045,38 @@ async function saveHand() {
 
   undoStack = [];
   const primary = oppById(rec.villainIds[0]);
+  // stash the pre-save draft so an accidental Save can be undone with one tap
+  lastSaveUndo = { draft: JSON.parse(JSON.stringify(d)), handId: rec.id, ts: Date.now() };
   draft = newDraft();
   vSearch = "";
   await metaSet("draftHand", null);
-  toast(primary ? `Saved vs ${primary.name}` : "Hand saved");
+  showSaveToast(primary ? `Saved vs ${primary.name} · tap to undo` : "Hand saved · tap to undo");
   renderHandEntry();
+}
+/* One-tap undo after Save: within 12s of a save, tapping the toast restores
+   the pre-save draft and deletes the just-saved hand. */
+let lastSaveUndo = null;
+function showSaveToast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("wide", msg.length > 24);
+  t.classList.remove("hidden");
+  t.style.cursor = "pointer";
+  const start = Date.now();
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { t.classList.add("hidden"); t.style.cursor = ""; }, 12000);
+  t.onclick = async () => {
+    if (!lastSaveUndo || Date.now() - lastSaveUndo.ts > 15000 || Date.now() - start > 12000) return;
+    const { draft: prev, handId } = lastSaveUndo;
+    lastSaveUndo = null;
+    await dbDel("hands", handId);
+    HANDS = HANDS.filter((h) => h.id !== handId);
+    draft = prev;
+    t.classList.add("hidden"); t.style.cursor = ""; t.onclick = null;
+    await metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+    renderHandEntry();
+    toast("Restored");
+  };
 }
 
 /* --- edit an existing hand: load into draft --- */
@@ -2136,6 +2213,18 @@ function bindStatic() {
     if (!item) return;
     const id = item.dataset.note;
     const o = oppById(curOppId);
+    if (e.target.closest("[data-notehand]")) {
+      const n = (o.notes || []).find((x) => x.id === id);
+      if (!n) return;
+      // seed a fresh hand with this villain and the note text pinned above
+      draft = newDraft();
+      draft.villains = [{ opponentId: curOppId, pos: null, cards: [null, null] }];
+      draft.note = n.text;
+      autoDeriveLineup();
+      await metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+      location.hash = "#hand";
+      return;
+    }
     if (e.target.closest("[data-notedel]")) {
       if (!confirm("Delete this note?")) return;
       o.notes = (o.notes || []).filter((n) => n.id !== id);
@@ -2222,11 +2311,13 @@ function bindStatic() {
     const item = e.target.closest("[data-dtag]");
     if (!item) return;
     const tag = item.dataset.dtag;
+    const state = item.dataset.dstate || "yes";
+    const dkey = item.dataset.dkey || tag;                   // per-direction dismiss key
     const o = oppById(curOppId);
     if (e.target.closest("[data-dacc]")) {
-      oppReads(o)[tag] = "yes";                              // accept → set the read
+      oppReads(o)[tag] = state;                              // accept → set the read (yes or no)
     } else {
-      (o.readDismissed = o.readDismissed || []).push(tag);   // dismiss → stop suggesting it
+      (o.readDismissed = o.readDismissed || []).push(dkey);  // dismiss → stop suggesting this direction
     }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
@@ -2312,6 +2403,7 @@ async function boot() {
   await openDB();
   await requestDurableStorage();
   await refreshCache();
+  await migrateLegacyReads();
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
