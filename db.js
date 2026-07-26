@@ -33,10 +33,20 @@ function _tx(store, mode, fn) {
   });
 }
 
-const dbPut = (store, obj) => _tx(store, "readwrite", (s) => s.put(obj));
+/* Stores whose writes trigger an auto-backup snapshot. */
+const AUTOSNAP_STORES = new Set(["opponents", "hands", "sessions"]);
+const dbPut = async (store, obj) => {
+  const r = await _tx(store, "readwrite", (s) => s.put(obj));
+  if (AUTOSNAP_STORES.has(store)) scheduleAutoSnapshot();
+  return r;
+};
 const dbGet = (store, id) => _tx(store, "readonly", (s) => s.get(id));
 const dbAll = (store) => _tx(store, "readonly", (s) => s.getAll());
-const dbDel = (store, id) => _tx(store, "readwrite", (s) => s.delete(id));
+const dbDel = async (store, id) => {
+  const r = await _tx(store, "readwrite", (s) => s.delete(id));
+  if (AUTOSNAP_STORES.has(store)) scheduleAutoSnapshot();
+  return r;
+};
 const dbByIndex = (store, index, value) =>
   _tx(store, "readonly", (s) => s.index(index).getAll(value));
 
@@ -54,8 +64,22 @@ async function exportData() {
   return { app: "poker-journal", version: 1, exportedAt: Date.now(), opponents, hands, sessions };
 }
 
-async function exportJSON() {
+/* Silent auto-backup: after any mutation, stash a fresh full export snapshot
+   into meta.autoSnapshot. Debounced so rapid edits don't hammer IDB. Doesn't
+   write a file (iOS Safari can't without a tap) — that's what "Save auto-
+   backup" does. */
+let _snapPending = null;
+async function autoSnapshot() {
   const data = await exportData();
+  const meta = { ts: Date.now(), counts: { opponents: data.opponents.length, hands: data.hands.length, sessions: data.sessions.length } };
+  await metaSet("autoSnapshot", { ...meta, data });
+}
+function scheduleAutoSnapshot() {
+  clearTimeout(_snapPending);
+  _snapPending = setTimeout(() => { _snapPending = null; autoSnapshot().catch(() => {}); }, 400);
+}
+/* Share/download an already-prepared export blob. Returns false on user cancel. */
+async function shareBackupData(data) {
   const stamp = new Date().toISOString().slice(0, 10);
   const name = `poker-journal-${stamp}.json`;
   const file = new File([JSON.stringify(data)], name, { type: "application/json" });
@@ -72,6 +96,7 @@ async function exportJSON() {
   await metaSet("lastExportAt", Date.now());
   return true;
 }
+async function exportJSON() { return shareBackupData(await exportData()); }
 
 const normName = (s) => (s || "").trim().toLowerCase();
 const dedupeById = (arr) => { const seen = new Set(); return arr.filter((x) => x && x.id && !seen.has(x.id) && seen.add(x.id)); };

@@ -1037,6 +1037,14 @@ function renderData() {
     store.className = "sub2 warn";
   }
   $("data-stats").textContent = `${OPP.length} opponents · ${HANDS.length} hands`;
+  metaGet("autoSnapshot").then((snap) => {
+    if (!snap) { $("data-autobackup").textContent = "Auto-backup: not yet made — save a hand or open an opponent to create one."; return; }
+    const secs = Math.floor((Date.now() - snap.ts) / 1000);
+    const ago = secs < 60 ? `${secs}s` : secs < 3600 ? `${Math.floor(secs / 60)}m` : `${Math.floor(secs / 3600)}h`;
+    const c = snap.counts || {};
+    $("data-autobackup").textContent =
+      `Auto-backup: updated ${ago} ago · ${c.opponents || 0} opps · ${c.hands || 0} hands. Refreshes on every change (stays inside the app; tap Save to write a file).`;
+  });
 }
 
 /* ================= Hand entry ================= */
@@ -2245,6 +2253,15 @@ function bindStatic() {
       if (await exportJSON()) { toast("Exported"); renderData(); }
     } catch (e) { toast("Export failed: " + e.message); }
   };
+  $("data-autosave").onclick = async () => {
+    try {
+      const snap = await metaGet("autoSnapshot");
+      if (!snap?.data) { toast("No auto-backup yet"); return; }
+      await shareBackupData(snap.data);
+      toast("Saved auto-backup");
+      renderData();
+    } catch (e) { if (e?.name !== "AbortError") toast("Save failed: " + e.message); }
+  };
   $("data-import").onclick = () => $("data-importfile").click();
   $("data-importfile").onchange = async (e) => {
     const f = e.target.files[0];
@@ -2315,6 +2332,9 @@ async function boot() {
   bindStatic();
   window.addEventListener("hashchange", route);
   route();
+  // ensure an auto-backup exists on first boot (or if it's stale)
+  const snap = await metaGet("autoSnapshot");
+  if (!snap || Date.now() - snap.ts > 60000) scheduleAutoSnapshot();
   if ("serviceWorker" in navigator)
     navigator.serviceWorker.register("sw.js").catch(() => {});
 }
