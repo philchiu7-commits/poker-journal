@@ -1225,6 +1225,91 @@ function nextActorChips(actor) {
   if (n <= 1) return actor;
   return "v" + ((Number(actor.slice(1)) + 1) % n);
 }
+/* ---------- shorthand-note → hand parser ----------
+   Extracts what's reliable from Phil's rough notes: position, holding, board,
+   squid state, and the villain's headline preflop action. Anything ambiguous
+   is left for manual entry (the raw note stays as draft.note). */
+const POS_RX = /\b(U8|U7|U6|HJ|CO|BN|SB|BB|SD|STD)\b/;
+const HOLDING_RX = /\b([AKQJT2-9])([AKQJT2-9])([so])?\b/g;    // A9o, A9s, 66
+const SQUID_RX = /\b(nS|wS|w\d{1,2}S|w\/?\d{1,2}S|\d{1,2}\/\d{1,2})\b/i;
+const PRE_ACT_RX = /\b(Open|Iso|Lrr|Lc|Ld|3b|4b|Lb|limp|Ls)\b/;
+const SUIT_RX = /(ss|hh|dd|cc|ds|rr)/;                        // board suit hints
+function parsePosToken(tok) {
+  if (!tok) return null;
+  return tok === "SD" ? "STD" : tok;
+}
+function pickSuits(hs, wants) { /* pick two suit letters honoring 'o'/'s'/monotone hints */
+  const all = ["s", "h", "d", "c"];
+  const avail = all.filter((s) => !hs.has(s));
+  if (wants === "s") return [avail[0], avail[0]];                        // both same
+  if (wants === "o") return [avail[0], avail[1] || avail[0]];            // different
+  return [avail[0], avail[1] || avail[0]];
+}
+function parseNoteToDraft(text, opponentId) {
+  const d = newDraft();
+  d.villains = [{ opponentId, pos: null, cards: [null, null] }];
+  d.note = text;
+  if (!text) return d;
+  // squid
+  const sq = text.match(SQUID_RX);
+  if (sq) {
+    const s = sq[1].replace("w/", "w").toLowerCase();
+    if (s === "ns") d.squidHave = "0";
+    else if (s === "ws") d.squidHave = "1";
+    else if (/^w\d/.test(s)) d.squidHave = s.slice(1).replace("s", "");
+    else if (/^\d+\/\d+$/.test(s)) { const [h, l] = s.split("/"); d.squidHave = h; d.squidLeft = l; }
+  }
+  // position — first token from a "AvB" (subject is first)
+  const m = text.match(/\b(U8|U7|U6|HJ|CO|BN|SB|SD|STD|BB)v(U8|U7|U6|HJ|CO|BN|SB|SD|STD|BB)\b/);
+  if (m) d.villains[0].pos = parsePosToken(m[1]);
+  else {
+    const pm = text.match(POS_RX);
+    if (pm) d.villains[0].pos = parsePosToken(pm[1]);
+  }
+  // holding — pick the first plausible 2-card token; default offsuit
+  const holds = [...text.matchAll(HOLDING_RX)].map((m) => ({ r1: m[1], r2: m[2], suit: m[3] || "o" }));
+  const hold = holds.find((h) => (h.r1 === h.r2 && !h.suit) || h.suit);   // paired or explicit s/o
+  if (hold) {
+    const suits = pickSuits(new Set(), hold.suit);
+    d.villains[0].cards = [hold.r1 + suits[0], hold.r2 + suits[1]];
+  }
+  // board — look for BOARD-shaped token: 3+ ranks maybe followed by suit-code
+  const boardTok = text.match(/\b([AKQJT2-9]{3,5})(ss|hh|dd|cc|ds|rr)?\b/);
+  if (boardTok && boardTok[1].length >= 3) {
+    const ranks = boardTok[1].split("");
+    const used = new Set();
+    for (const c of d.villains[0].cards || []) if (c) used.add(c[1]);
+    const suitHint = boardTok[2];
+    for (let i = 0; i < ranks.length && i < 5; i++) {
+      let suit;
+      if (suitHint === "ss" || suitHint === "hh" || suitHint === "dd" || suitHint === "cc") suit = suitHint[0];
+      else if (suitHint === "ds") suit = i < 2 ? "d" : "s";
+      else suit = ["s","h","d","c"].find((s) => !used.has(s + i));   // best-effort distinct suits
+      used.add(suit + i);
+      d.board[i] = ranks[i] + suit;
+    }
+  }
+  // preflop headline action — set a single villain action if it's clear
+  const act = text.match(PRE_ACT_RX);
+  if (act) {
+    const a = act[1];
+    let push = null;
+    if (a === "Open") push = { act: "raise" };
+    else if (a === "Iso")  push = { act: "raise" };
+    else if (a === "3b")   push = { act: "3bet" };
+    else if (a === "4b")   push = { act: "raise" };
+    else if (a === "Lc")   push = { act: "limp" };   // limp-call: villain limped; then called a raise (rest is manual)
+    else if (a === "Lrr")  push = { act: "limp" };   // limp-reraise: first action was limp
+    else if (a === "Ld" || a === "Lb") push = { act: "limp" };   // lead/limp-bet: assume villain limped pre first
+    else if (a === "limp" || a === "Ls") push = { act: "limp" };
+    // size adjacent to the action (e.g. "Open 60k", "Iso 90k")
+    const sizeMatch = text.match(new RegExp(a + "\\s*(\\d{1,3})[Kk]?\\b"));
+    const size = sizeMatch ? sizeMatch[1] + "k" : null;
+    if (push) d.actions.push({ street: "pre", actor: "v0", act: push.act, size });
+  }
+  return d;
+}
+
 function ensureVillainSlot() {
   if (!draft.villains.length)
     draft.villains.push({ opponentId: null, pos: null, cards: [null, null] });
@@ -2208,6 +2293,40 @@ function bindStatic() {
     $("od-note").value = "";
     renderOppDetail(curOppId);
   };
+  $("od-notes-convert").onclick = async () => {
+    const o = oppById(curOppId);
+    const notes = (o.notes || []).filter((n) => !n.handId);
+    if (!notes.length) { toast("No notes to convert"); return; }
+    if (!confirm(`Parse ${notes.length} notes into hands? Ambiguous notes leave blanks for you to finish. Original notes stay in the record.`)) return;
+    let ok = 0;
+    for (const n of notes) {
+      const d = parseNoteToDraft(n.text, curOppId);
+      // require SOMETHING structured beyond just the raw text before saving
+      if (!d.villains[0].pos && !d.villains[0].cards.some(Boolean) && !d.board.some(Boolean) && !d.actions.length) continue;
+      const now = Date.now();
+      const rec = {
+        id: uid(), ts: now, updatedAt: now, hero: false,
+        heroPos: null, heroCards: null,
+        villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
+          cards: (v.cards || []).some(Boolean) ? v.cards : null })),
+        villainIds: [curOppId],
+        board: d.board, actions: d.actions,
+        effStack: null, blinds: null,
+        squid: (d.squidHave || d.squidLeft)
+          ? { have: d.squidHave ? Number(d.squidHave) : null, left: d.squidLeft ? Number(d.squidLeft) : null } : null,
+        note: n.text, srcNoteId: n.id,
+      };
+      rec.result = null; rec.showdown = false;
+      await dbPut("hands", rec);
+      HANDS.push(rec);
+      n.handId = rec.id;                 // link the note to its parsed hand
+      ok++;
+    }
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    toast(`Parsed ${ok} of ${notes.length} notes`);
+    renderOppDetail(curOppId);
+  };
   $("od-notes").onclick = async (e) => {
     const item = e.target.closest("[data-note]");
     if (!item) return;
@@ -2216,11 +2335,9 @@ function bindStatic() {
     if (e.target.closest("[data-notehand]")) {
       const n = (o.notes || []).find((x) => x.id === id);
       if (!n) return;
-      // seed a fresh hand with this villain and the note text pinned above
-      draft = newDraft();
-      draft.villains = [{ opponentId: curOppId, pos: null, cards: [null, null] }];
-      draft.note = n.text;
-      autoDeriveLineup();
+      // parse as much of the shorthand as we can into a fresh draft
+      draft = parseNoteToDraft(n.text, curOppId);
+      autoDeriveLineup();                                       // seat via today's lineup if anchored
       await metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
       location.hash = "#hand";
       return;
