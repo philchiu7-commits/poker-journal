@@ -2302,15 +2302,21 @@ function bindStatic() {
   $("od-notes-convert").onclick = async () => {
     const o = oppById(curOppId);
     const allNotes = o.notes || [];
-    const notes = allNotes.filter((n) => !n.handId);
+    const unconverted = allNotes.filter((n) => !n.handId);
     if (!allNotes.length) { toast("No notes to convert"); return; }
-    if (!notes.length) { toast(`All ${allNotes.length} notes are already converted`); return; }
-    if (!confirm(`Create a hand from each of ${notes.length} note${notes.length > 1 ? "s" : ""}? Recognised shorthand pre-fills the hand; the rest stays in the note text so you can finish it. Notes stay in place too.`)) return;
-    let ok = 0, structured = 0;
-    for (const n of notes) {
-      const d = parseNoteToDraft(n.text, curOppId);
-      const hasStruct = !!(d.villains[0].pos || d.villains[0].cards.some(Boolean) || d.board.some(Boolean) || d.actions.length);
-      if (hasStruct) structured++;
+    if (!unconverted.length) { toast(`All ${allNotes.length} notes already converted`); return; }
+    // only hand-shaped notes qualify — pure tendency comments ("Clairvoyance",
+    // "Loves to bluff") stay as notes. A note is hand-shaped if the parser
+    // extracts a position, hole cards, a board, or an action.
+    const candidates = unconverted.map((n) => ({ n, d: parseNoteToDraft(n.text, curOppId) }))
+      .filter(({ d }) => d.villains[0].pos || d.villains[0].cards.some(Boolean) || d.board.some(Boolean) || d.actions.length);
+    const tendency = unconverted.length - candidates.length;
+    if (!candidates.length) {
+      toast(`No hand-shaped notes to convert · ${tendency} tendency note${tendency > 1 ? "s" : ""} left alone`, 4200);
+      return;
+    }
+    if (!confirm(`Create ${candidates.length} hand${candidates.length > 1 ? "s" : ""} from your shorthand notes? ${tendency ? tendency + " tendency-only note" + (tendency > 1 ? "s" : "") + " will be left alone." : ""}`)) return;
+    for (const { n, d } of candidates) {
       const now = Date.now();
       const rec = {
         id: uid(), ts: now, updatedAt: now, hero: false,
@@ -2327,12 +2333,11 @@ function bindStatic() {
       rec.result = null; rec.showdown = false;
       await dbPut("hands", rec);
       HANDS.push(rec);
-      n.handId = rec.id;                 // link the note to its parsed hand (blocks re-convert)
-      ok++;
+      n.handId = rec.id;
     }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
-    toast(`Created ${ok} hand${ok > 1 ? "s" : ""} · ${structured} pre-filled from shorthand`, 4200);
+    toast(`Created ${candidates.length} hand${candidates.length > 1 ? "s" : ""}${tendency ? ` · ${tendency} tendency note${tendency > 1 ? "s" : ""} left alone` : ""}`, 4200);
     renderOppDetail(curOppId);
   };
   $("od-notes").onclick = async (e) => {
