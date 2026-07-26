@@ -1735,14 +1735,18 @@ function renderHandEntry() {
   $("he-lineup-btn").textContent = lineupActive() ? `Lineup · ${tableLineup.length}` : "Lineup";
   $("he-lineup-btn").classList.toggle("on", lineupActive());
 
-  // position rows (hide Hero's row when Hero isn't in the hand)
+  // position rows — chips reflect today's table size (6/7/8/9-handed).
+  // Preserve any legacy position already saved on the draft so it's not hidden.
+  const ring = seatRing();
+  const extras = [d.heroPos, ...d.villains.map((v) => v.pos)].filter((p) => p && !ring.includes(p));
+  const posList = [...ring, ...new Set(extras)];
   $("he-heropos").closest(".posrow").classList.toggle("hidden", !d.heroIn);
-  $("he-heropos").innerHTML = POSITIONS.map((p) =>
+  $("he-heropos").innerHTML = posList.map((p) =>
     `<button class="chip mini${d.heroPos === p ? " on" : ""}" data-hpos="${p}">${p}</button>`).join("");
   // one position row per selected villain, labelled by name
   $("he-vposrows").innerHTML = d.villains.map((v, i) => {
     const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
-    const chips = POSITIONS.map((p) =>
+    const chips = posList.map((p) =>
       `<button class="chip mini${v.pos === p ? " on" : ""}" data-vposi="${i}" data-vpos="${p}">${p}</button>`).join("");
     return `<div class="posrow"><span class="poslabel">${esc(nm.slice(0, 9))}</span><div class="chiprow tight">${chips}</div></div>`;
   }).join("");
