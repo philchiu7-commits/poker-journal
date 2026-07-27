@@ -27,10 +27,12 @@ const oppById = (id) => OPP.find((o) => o.id === id);
    limp-wide-scale keep the 3-colour scale. Legacy tags (over-folds-cbet →
    over-cbet:no, gives-up-turn → barrels-off:no, etc.) migrate on boot. */
 const READ_CYCLE = {
-  "draw-size":       ["green", "yellow", "red"],
-  "limp-wide-scale": ["green", "yellow", "red"],
+  "size-up-draws":   ["green", "yellow", "red"],
 };
 const readCycle = (id) => READ_CYCLE[id] || ["yes", "yes!", "no", "no!"];
+const SCALE_READS = new Set(
+  (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "scale").map((t) => t.id));
+const isScaleRead = (id) => SCALE_READS.has(id);
 const STATE_CLASS = {
   yes: "sgreen", "yes!": "sgreen sstrong",
   no: "sred", "no!": "sred sstrong",
@@ -49,8 +51,24 @@ function nextReadState(id, cur) {
   const i = cyc.indexOf(cur);
   return i < 0 || i === cyc.length - 1 ? null : cyc[i + 1];
 }
-const readChip = (id, state) =>
-  `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(TAG_BY_ID[id]?.label || id)}</span>`;
+/* Scale-read text label: number → tight/normal/wide bucket, for chip display. */
+function scaleBucket(n) {
+  const v = Number(n);
+  if (!isFinite(v)) return "";
+  if (v <= 20) return "tight";
+  if (v <= 40) return "tightish";
+  if (v <= 60) return "normal";
+  if (v <= 80) return "loose";
+  return "wide";
+}
+const readChip = (id, state) => {
+  const lbl = TAG_BY_ID[id]?.label || id;
+  if (isScaleRead(id)) {
+    const v = Math.max(0, Math.min(100, Number(state) || 0));
+    return `<span class="chip mini on sscale" title="${esc(lbl)}: ${v}/100 (${scaleBucket(v)})">${esc(lbl)} · ${v}</span>`;
+  }
+  return `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(lbl)}</span>`;
+};
 /* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
 const READ_GROUPS = [
   { cat: "preflop",  label: "3bet",       bubbles: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"]] },
@@ -59,6 +77,8 @@ const READ_GROUPS = [
   { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
   { cat: "postflop", label: "Raise nuts", bubbles: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
   { cat: "postflop", label: "Bluff till", bubbles: [["bluff-till-f", "F"], ["bluff-till-t", "T"], ["bluff-till-r", "R"]] },
+  { cat: "postflop", label: "Bluff raise", bubbles: [["bluff-raise-f", "F"], ["bluff-raise-t", "T"], ["bluff-raise-r", "R"]] },
+  { cat: "postflop", label: "Bluff XT",   bubbles: [["bluff-xt-f", "F"], ["bluff-xt-t", "T"], ["bluff-xt-r", "R"]] },
   { cat: "postflop", label: "Range",      bubbles: [["merged", "Merged"], ["polar", "Polar"], ["bad-polar", "Bad pol"]] },
 ];
 const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
@@ -114,7 +134,7 @@ const READ_SIGNALS = [
   { id: "barrels-off",      state: "no",  th: 2 },   // was: gives-up-turn
   { id: "barrels-off",      state: "yes", th: 2 },
   { id: "over-cbet",        state: "yes", th: 2 },
-  { id: "bluff-raise-flop", state: "yes", th: 2 },
+  { id: "bluff-raise-f",    state: "yes", th: 2 },
   { id: "station-f",        state: "yes", th: 3 },
   { id: "station-t",        state: "yes", th: 3 },
   { id: "station-r",        state: "yes", th: 2 },
@@ -134,7 +154,7 @@ function derivedReads(o) {
     if (s.flop.includes("bet") && (s.turn.includes("check") || s.turn.includes("fold"))) bump("barrels-off:no");
     if (aggr(s.flop) && aggr(s.turn) && aggr(s.river)) bump("barrels-off:yes");
     if (raisedPre && s.flop.includes("bet")) bump("over-cbet:yes");
-    if (s.flop.includes("raise")) bump("bluff-raise-flop:yes");
+    if (s.flop.includes("raise")) bump("bluff-raise-f:yes");
     if (s.flop.includes("call")) bump("station-f:yes");
     if (s.turn.includes("call")) bump("station-t:yes");
     if (s.river.includes("call")) bump("station-r:yes");
@@ -206,11 +226,20 @@ async function refreshCache() {
 
 /* Legacy read migration: fold removed tags onto their surviving axis-mate. */
 const READ_LEGACY_MAP = {
-  "over-folds-cbet": { to: "over-cbet",     state: "no" },
-  "fit-or-fold":     { to: "floats-wide",   state: "no" },
-  "gives-up-turn":   { to: "barrels-off",   state: "no" },
-  "never-bluffs":    { to: "bluffs-rivers", state: "no" },
-  "limps-monsters":  { to: "limps-monster-ns", state: "yes" },   // best-guess destination
+  "over-folds-cbet":   { to: "over-cbet",     state: "no" },
+  "fit-or-fold":       { to: "floats-wide",   state: "no" },
+  "gives-up-turn":     { to: "barrels-off",   state: "no" },
+  "never-bluffs":      { to: "bluffs-rivers", state: "no" },
+  "limps-monsters":    { to: "limps-monster-ns", state: "yes" },   // best-guess destination
+  "never-folds-pre":   { to: "3bet-tight",    state: "no" },       // never folds pre → not tight
+  "range-check-oop":   { to: "check-oop-limped", state: "yes" },   // roll into check-oop
+  "no-river-block":    { to: "protected-block", state: "no" },     // polar vs protected — same axis
+  "min-raise-nuts":    { to: "small-with-weak", state: "no" },     // small = nuts is opposite of small = weak
+  "draw-size":         { to: "size-up-draws", state: "yes" },      // renamed
+  "bluff-raise-flop":  { to: "bluff-raise-f", state: "yes" },      // was single, now F of triad
+  "bluff-xt":          { to: "bluff-xt-t",    state: "yes" },      // XT typically means check-flop bet turn
+  "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // migrate to WS scale (yes state, no number)
+  "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → NS scale
 };
 async function migrateLegacyReads() {
   for (const o of OPP) {
@@ -324,6 +353,14 @@ function oppStats() {
 function updateGroupsDatalist() {
   $("groups").innerHTML = [...new Set(OPP.map((o) => o.group).filter(Boolean))]
     .map((g) => `<option value="${esc(g)}">`).join("");
+}
+
+/* Is a note hand-shaped (worth a Convert button), or a pure tendency comment? */
+function isConvertibleNote(text) {
+  if (!text) return false;
+  const d = parseNoteToDraft(text, "__probe__");
+  const v0 = d.villains[0] || {};
+  return !!(v0.pos || (v0.cards || []).some(Boolean) || (d.board || []).some(Boolean) || (d.actions || []).length);
 }
 
 /* Short chip label for a long exploit when no explicit abbr is typed. */
@@ -599,9 +636,25 @@ function renderLineupSheet() {
   const sheet = $("sheet");
   const refresh = async () => { await saveLineup(); renderLineupSheet(); renderHandEntry(); };
   sheet.querySelectorAll("[data-lsize]").forEach((b) =>
-    b.onclick = async () => { lineupSeats = Number(b.dataset.lsize); await metaSet("lineupSeats", lineupSeats); refresh(); });
+    b.onclick = async () => {
+      lineupSeats = Number(b.dataset.lsize);
+      if (tableLineup.length > lineupSeats) {
+        const dropped = tableLineup.slice(lineupSeats);
+        tableLineup = tableLineup.slice(0, lineupSeats);
+        toast(`Trimmed lineup to ${lineupSeats}. Dropped: ${dropped.map(lineupName).join(", ")}`, 3600);
+      }
+      await metaSet("lineupSeats", lineupSeats);
+      refresh();
+    });
   sheet.querySelectorAll("[data-ladd]").forEach((b) =>
-    b.onclick = () => { tableLineup.push(b.dataset.ladd); refresh(); });
+    b.onclick = () => {
+      if (tableLineup.length >= lineupSeats) {
+        toast(`Table is ${lineupSeats}-handed — increase table size to add more.`, 3200);
+        return;
+      }
+      tableLineup.push(b.dataset.ladd);
+      refresh();
+    });
   sheet.querySelectorAll("[data-lrm]").forEach((b) =>
     b.onclick = () => { tableLineup = tableLineup.filter((x) => x !== b.dataset.lrm); refresh(); });
   sheet.querySelectorAll("[data-lup]").forEach((b) =>
@@ -746,6 +799,18 @@ function renderOppDetail(id) {
   const reads = oppReads(o);
   const readBtn = (id, lbl, bubble) => {
     const st = reads[id];
+    if (isScaleRead(id)) {
+      const v = Math.max(0, Math.min(100, Number(st) || 0));
+      const active = st != null && st !== "";
+      return `<div class="scaleread${active ? " on" : ""}" data-scaleid="${id}">
+        <div class="scaletop">
+          <span class="scalelbl">${esc(lbl)}</span>
+          <span class="scaleval">${active ? v + " · " + scaleBucket(v) : "off"}</span>
+          ${active ? `<button class="chip mini scaleclr" data-scaleclear="${id}" title="Clear">✕</button>` : ""}
+        </div>
+        <input type="range" min="0" max="100" step="1" value="${v}" data-scaleinput="${id}">
+      </div>`;
+    }
     const base = bubble ? "bubble" : "chip mini";
     return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
   };
@@ -753,9 +818,11 @@ function renderOppDetail(id) {
     const groups = READ_GROUPS.filter((g) => g.cat === cat).map((g) =>
       `<div class="readgroup"><span class="rglabel">${esc(g.label)}</span><div class="bubbles">` +
       g.bubbles.map(([id, lbl]) => readBtn(id, lbl, true)).join("") + `</div></div>`).join("");
-    const singles = TENDENCY_TAGS.filter((t) => t.cat === cat && !GROUPED_IDS.has(t.id))
+    const singles = TENDENCY_TAGS.filter((t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
-    return `<div class="tagcat">${cat}</div>${groups}` + (singles ? `<div class="chiprow">${singles}</div>` : "");
+    const scales = TENDENCY_TAGS.filter((t) => t.cat === cat && isScaleRead(t.id))
+      .map((t) => readBtn(t.id, t.label, false)).join("");
+    return `<div class="tagcat">${cat}</div>${groups}` + (singles ? `<div class="chiprow">${singles}</div>` : "") + scales;
   }).join("");
 
   // FEATURE 1 — reads inferred from this opponent's logged hands
@@ -787,7 +854,9 @@ function renderOppDetail(id) {
           <div class="noterowbtns">
             ${n.handId
               ? `<button class="chip mini" data-notegohand>Open hand ↗</button>`
-              : `<button class="chip mini" data-notehand>→ Log hand</button>`}
+              : (isConvertibleNote(n.text)
+                  ? `<button class="chip mini" data-notehand>→ Convert to hand</button>`
+                  : "")}
             <button class="chip mini" data-noteedit>Edit</button>
             <button class="chip mini" data-notedel>Delete</button>
           </div></div>`
@@ -1216,45 +1285,49 @@ function renderTable() {
        </div>`;
   }
 
-  // assignment strip for the focused seat
+  // bottom seat panel is now sheet-driven; keep it empty so it doesn't take space.
   const el = $("he-seatassign");
-  if (!d.focusPos) {
-    el.innerHTML = `<div class="assignhint">Tap a seat to place yourself or a villain.</div>`;
-    return;
-  }
-  const occ = seatOccupant(d.focusPos);
+  if (el) el.innerHTML = "";
+  if (d.focusPos) renderSeatSheet(d.focusPos);
+  else if (sheetGroup === "__seat__") hideSheet();
+}
+
+/* Sheet-based seat editor / assignment (replaces the old bottom panel). */
+function renderSeatSheet(pos) {
+  const d = draft;
+  const occ = seatOccupant(pos);
   const seatV = occ.type === "villain" ? d.villains[occ.idx] : null;
   const seatCards = occ.type === "hero" ? d.heroCards
                    : occ.type === "villain" ? (seatV.cards || [null, null])
                    : null;
+  sheetGroup = "__seat__";
   if (occ.type === "empty") {
     const stats = oppStats();
     const opps = OPP.filter((o) => !o.archived).sort((a, b) =>
       (stats[b.id]?.last || b.updatedAt || 0) - (stats[a.id]?.last || a.updatedAt || 0));
-    const seatedIds = d.villains.filter((v) => v.pos && v.pos !== d.focusPos).map((v) => v.opponentId);
-    el.innerHTML =
-      `<div class="assignhead"><span class="tpos">${d.focusPos}</span>
-        <span class="muted">— place a player</span></div>
-      <div class="chiprow scroll">
-        <button class="chip" data-assign-hero>You</button>` +
+    const seatedIds = d.villains.filter((v) => v.pos && v.pos !== pos).map((v) => v.opponentId);
+    showSheet(
+      `<div class="sheethead"><span class="t">Seat ${esc(pos)}</span>
+         <button data-sheetclose>Close</button></div>
+       <div class="sheetnote">Place a player at this seat.</div>
+       <div class="chiprow" style="max-height:56vh;overflow:auto">
+         <button class="chip" data-assign-hero>You</button>` +
       opps.map((o) => `<button class="chip${seatedIds.includes(o.id) ? " seated" : ""}" data-assign-opp="${o.id}">${esc(o.name)}</button>`).join("") +
-      `</div>`;
+      `</div>`);
     return;
   }
-  // occupied seat editor: Name / Stack / Cards / Remove — cards use the same
-  // sheet-based picker the Board & cards row uses (openGroupSheet).
   const nm = occ.type === "hero" ? "You" : (oppById(seatV.opponentId)?.name || "?");
   const cardGroup = occ.type === "hero" ? "hero" : "v" + occ.idx;
   const cardSlots = seatCards.map((c, i) =>
     `<button class="cslot mini${c ? " filled" : ""}" data-seatcard="${i}" data-cardgroup="${cardGroup}">` +
     (c ? cardHTML(c) : `<span class="lbl">?</span>`) + `</button>`).join("");
-  el.innerHTML =
-    `<div class="seatedit">
+  showSheet(
+    `<div class="sheethead"><span class="t">Seat ${esc(pos)} — ${esc(nm)}</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="seatedit">
        <div class="seatedit-hd">
-         <span class="tpos">${d.focusPos}</span>
-         <span class="seatedit-nm">${esc(nm)}</span>
-         ${occ.type === "villain" ? `<button class="chip mini" data-seatchange>Change</button>` : ""}
-         <button class="chip mini danger" data-seatclear>Remove</button>
+         ${occ.type === "villain" ? `<button class="chip mini" data-seatchange>Change player</button>` : ""}
+         <button class="chip mini danger" data-seatclear>Remove from seat</button>
        </div>
        <div class="seatedit-row">
          <label class="seatedit-fld">
@@ -1266,7 +1339,7 @@ function renderTable() {
            <div class="seatedit-cards">${cardSlots}</div>
          </div>
        </div>
-     </div>`;
+     </div>`);
   const stkIn = $("he-seatstack");
   if (stkIn) stkIn.oninput = () => { draft.effStack = stkIn.value; persistDraft(); };
 }
@@ -1352,6 +1425,17 @@ function parseNoteToDraft(text, opponentId) {
   if (hold) {
     const suits = pickSuits(new Set(), hold.suit);
     d.villains[0].cards = [hold.r1 + suits[0], hold.r2 + suits[1]];
+  } else {
+    // Phil's plural shorthand: "Qs" / "Ks" / "9s" = pair of that rank. Ambiguous
+    // with single-card notation (Q♠), but in note context we treat standalone
+    // rank+s as the plural. Skip if the token sits inside a longer card-ish
+    // string (e.g. "AQs" already matched above, or a board like "QsJhTd").
+    const pm = text.match(/(?:^|[^AKQJT2-9])([AKQJT2-9])s(?![AKQJT2-9hdcs])/);
+    if (pm) {
+      const r = pm[1];
+      const suits = pickSuits(new Set(), "o");
+      d.villains[0].cards = [r + suits[0], r + suits[1]];
+    }
   }
   // board — look for BOARD-shaped token: 3+ ranks maybe followed by suit-code
   const boardTok = text.match(/\b([AKQJT2-9]{3,5})(ss|hh|dd|cc|ds|rr)?\b/);
@@ -1497,6 +1581,21 @@ function deriveLineup(anchor) {
     const pos = ring[(((pIdx + (li - ai)) % L) + L) % L];
     if (p === "hero") draft.heroPos = pos;
     else draft.villains[Number(p.slice(1))].pos = pos;
+  }
+}
+/* Seed Table-mode seats from the saved lineup: put each lineup member on the
+   ring position at the same clockwise index. No-op if no lineup, or if the
+   draft already has villains / a hero seat. */
+function seedTableFromLineup() {
+  if (!lineupActive()) return;
+  if (draft.villains.length || draft.heroPos) return;
+  const ring = seatRing();
+  const n = Math.min(tableLineup.length, ring.length);
+  for (let i = 0; i < n; i++) {
+    const id = tableLineup[i];
+    const pos = ring[i];
+    if (id === "hero") { draft.heroIn = true; draft.heroPos = pos; }
+    else draft.villains.push({ opponentId: id, pos, cards: [null, null] });
   }
 }
 /* When a seat is already anchored this hand, fill any newly-added player in. */
@@ -1779,6 +1878,10 @@ function renderHandEntry() {
   $("he-chipsonly").classList.toggle("hidden", table);
   $("he-table").classList.toggle("hidden", !table);
   $("he-actor").classList.toggle("hidden", table);   // seat replaces the actor toggle
+  // Table mode duplicates blinds/eff in its setup bar — hide the ctxbar copies.
+  ["he-sb", "he-bb", "he-std", "he-effstack"].forEach((id) => {
+    const el = $(id); if (el && el.closest(".ctxfield")) el.closest(".ctxfield").classList.toggle("hidden", table);
+  });
   if (table) renderTable();
 
   // villain picker: Hero + selected always shown; then search results, or recent when idle
@@ -1817,9 +1920,11 @@ function renderHandEntry() {
 
   // position rows — chips reflect today's table size (6/7/8/9-handed).
   // Preserve any legacy position already saved on the draft so it's not hidden.
+  // When there's a straddle, always expose STD as an available seat.
   const ring = seatRing();
   const extras = [d.heroPos, ...d.villains.map((v) => v.pos)].filter((p) => p && !ring.includes(p));
-  const posList = [...ring, ...new Set(extras)];
+  const needsStd = Number(d.std) > 0 && !ring.includes("STD");
+  const posList = [...ring, ...(needsStd ? ["STD"] : []), ...new Set(extras.filter((p) => !(needsStd && p === "STD")))];
   $("he-heropos").closest(".posrow").classList.toggle("hidden", !d.heroIn);
   $("he-heropos").innerHTML = posList.map((p) =>
     `<button class="chip mini${d.heroPos === p ? " on" : ""}" data-hpos="${p}">${p}</button>`).join("");
@@ -1935,7 +2040,7 @@ function bindHandEntry() {
     if (!b) return;
 
     if (b.dataset.mode) {
-      mutate(() => { draft.mode = b.dataset.mode; });
+      mutate(() => { draft.mode = b.dataset.mode; if (draft.mode === "table") seedTableFromLineup(); });
     } else if (b.dataset.seat) {                 // table: BTN assign or focus a seat
       const pos = b.dataset.seat;
       mutate(() => {
@@ -2175,6 +2280,55 @@ function sheetClick(e) {
   if (!b || sheetGroup == null) return;
   if (b.dataset.closesheet !== undefined) { hideSheet(); return; }
 
+  if (sheetGroup === "__seat__") {
+    if (b.dataset.assignHero !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
+        draft.heroPos = pos;
+        draft.heroIn = true;
+      });
+      renderSeatSheet(draft.focusPos);
+      return;
+    }
+    if (b.dataset.assignOpp !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos, id = b.dataset.assignOpp;
+        if (draft.heroPos === pos) draft.heroPos = null;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
+        let v = draft.villains.find((x) => x.opponentId === id);
+        if (v) v.pos = pos;
+        else draft.villains.push({ opponentId: id, pos, cards: [null, null] });
+      });
+      renderSeatSheet(draft.focusPos);
+      return;
+    }
+    if (b.dataset.seatchange !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos;
+        if (draft.heroPos === pos) draft.heroPos = null;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
+      });
+      renderSeatSheet(draft.focusPos);
+      return;
+    }
+    if (b.dataset.seatclear !== undefined) {
+      mutate(() => {
+        const pos = draft.focusPos;
+        if (draft.heroPos === pos) draft.heroPos = null;
+        draft.villains.forEach((v) => { if (v.pos === pos) v.pos = null; });
+        draft.focusPos = null;
+      });
+      hideSheet();
+      return;
+    }
+    if (b.dataset.seatcard !== undefined) {
+      openGroupSheet(b.dataset.cardgroup, Number(b.dataset.seatcard));
+      return;
+    }
+    return;
+  }
+
   if (b.dataset.gslot !== undefined) {           // pick which slot in the group to fill
     openGroupSheet(sheetGroup, Number(b.dataset.gslot));
   } else if (b.dataset.card) {
@@ -2389,6 +2543,15 @@ function bindStatic() {
     renderOppDetail(intoId);
   });
   $("od-tags").onclick = async (e) => {
+    const clr = e.target.closest("[data-scaleclear]");
+    if (clr) {
+      const o = oppById(curOppId);
+      delete oppReads(o)[clr.dataset.scaleclear];
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+      return;
+    }
     const b = e.target.closest("[data-tag]");
     if (!b) return;
     const o = oppById(curOppId);
@@ -2400,6 +2563,24 @@ function bindStatic() {
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
   };
+  $("od-tags").addEventListener("input", async (e) => {
+    const s = e.target.closest("[data-scaleinput]");
+    if (!s) return;
+    const o = oppById(curOppId);
+    const id = s.dataset.scaleinput;
+    const v = Math.max(0, Math.min(100, Number(s.value) || 0));
+    oppReads(o)[id] = v;
+    o.updatedAt = Date.now();
+    // Cheap live update: just refresh the visible readout, don't full-rerender on every drag tick.
+    const row = s.closest(".scaleread");
+    if (row) {
+      row.classList.add("on");
+      const rd = row.querySelector(".scaleval");
+      if (rd) rd.textContent = v + " · " + scaleBucket(v);
+    }
+    clearTimeout($("od-tags")._scaleT);
+    $("od-tags")._scaleT = setTimeout(() => dbPut("opponents", o), 200);
+  });
   $("od-note-add").onclick = async () => {
     const text = $("od-note").value.trim();
     if (!text) return;
