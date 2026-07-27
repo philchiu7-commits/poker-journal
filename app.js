@@ -11,6 +11,7 @@ let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
+let showImpliedReads = {};        // per-opponent toggle for read-implication suggestions
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
@@ -170,6 +171,34 @@ function derivedReads(o) {
     const suffix = sig.state === "no" ? " (NO)" : "";
     return { tagId: sig.id, state: sig.state, key, count: c, label: TAG_BY_ID[sig.id].label + suffix };
   }).filter(Boolean).sort((a, b) => b.count - a.count);
+}
+
+/* FEATURE 1b — implied reads: given the opponent's currently-set reads,
+   surface OTHER reads worth observing (with a probable direction). Sources
+   are the set reads that pointed here; dedup + take direction from the
+   majority of sources. Filtered against already-set reads and readDismissed. */
+function impliedReads(o) {
+  const reads = oppReads(o);
+  const dismissed = new Set(o.readDismissed || []);
+  const targets = {};                          // targetId -> { yes: [srcKeys], no: [srcKeys] }
+  for (const [tagId, state] of Object.entries(reads)) {
+    if (state !== "yes" && state !== "no") continue;
+    const impls = READ_IMPLICATIONS[tagId + ":" + state] || [];
+    const srcKey = tagId + ":" + state;
+    for (const impl of impls) {
+      const [tId, tState] = impl.split(":");
+      if (!TAG_BY_ID[tId] || reads[tId]) continue;
+      const bucket = targets[tId] || (targets[tId] = { yes: [], no: [] });
+      if (tState === "yes" || tState === "no") bucket[tState].push(srcKey);
+    }
+  }
+  return Object.entries(targets).map(([tagId, dirs]) => {
+    const state = dirs.yes.length >= dirs.no.length ? "yes" : "no";
+    const sources = dirs[state];
+    const key = tagId + ":" + state;
+    if (dismissed.has(key)) return null;
+    return { tagId, state, key, sources, label: TAG_BY_ID[tagId].label };
+  }).filter(Boolean).sort((a, b) => b.sources.length - a.sources.length);
 }
 
 /* FEATURE 2 — predictive defaults for hand entry, from history. */
@@ -969,7 +998,7 @@ function renderOppDetail(id) {
   // FEATURE 1 — reads inferred from this opponent's logged hands
   const dReads = derivedReads(o);
   const showD = showDerivedReads[id];
-  $("od-readsugg").innerHTML = dReads.length
+  const dHTML = dReads.length
     ? `<div class="sugghead" data-toggle-dreads>
         <span>Suggested from hands (${dReads.length})</span>
         <span class="toggle-arrow">${showD ? "▼" : "▶"}</span>
@@ -981,6 +1010,31 @@ function renderOppDetail(id) {
              <button class="chip mini" data-ddismiss>Dismiss</button>
            </div></div>`).join("") : "")
     : "";
+
+  // FEATURE 1b — reads implied by other reads Phil has already set
+  const iReads = impliedReads(o);
+  const showI = showImpliedReads[id];
+  const iHTML = iReads.length
+    ? `<div class="sugghead" data-toggle-ireads>
+        <span>Suggested from other reads (${iReads.length})</span>
+        <span class="toggle-arrow">${showI ? "▼" : "▶"}</span>
+      </div>` + (showI ? iReads.map((s) => {
+        const srcLabels = s.sources.map((k) => {
+          const [tId, tSt] = k.split(":");
+          const t = TAG_BY_ID[tId];
+          return t ? `${t.label}${tSt === "no" ? " NO" : ""}` : k;
+        }).join(", ");
+        const dirLbl = s.state === "no" ? " (expect NO)" : "";
+        return `<div class="suggitem" data-itag="${esc(s.tagId)}" data-istate="${esc(s.state)}" data-ikey="${esc(s.key)}">
+           <div class="notetext">💡 <b>${esc(s.label)}</b>${dirLbl} — from ${esc(srcLabels)}</div>
+           <div class="noterowbtns">
+             <button class="chip mini on sgreen" data-iacc>＋ Set ${s.state.toUpperCase()}</button>
+             <button class="chip mini" data-idismiss>Dismiss</button>
+           </div></div>`;
+      }).join("") : "")
+    : "";
+
+  $("od-readsugg").innerHTML = dHTML + iHTML;
 
   $("od-notes").innerHTML = (o.notes || []).map((n) =>
     n.id === editNoteId
@@ -3058,12 +3112,32 @@ function bindStatic() {
       renderOppDetail(curOppId);
       return;
     }
+    if (e.target.closest("[data-toggle-ireads]")) {
+      showImpliedReads[curOppId] = !showImpliedReads[curOppId];
+      renderOppDetail(curOppId);
+      return;
+    }
+    const o = oppById(curOppId);
+    const iItem = e.target.closest("[data-itag]");
+    if (iItem) {
+      const tag = iItem.dataset.itag;
+      const state = iItem.dataset.istate || "yes";
+      const ikey = iItem.dataset.ikey || tag + ":" + state;
+      if (e.target.closest("[data-iacc]")) {
+        oppReads(o)[tag] = state;
+      } else {
+        (o.readDismissed = o.readDismissed || []).push(ikey);
+      }
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+      return;
+    }
     const item = e.target.closest("[data-dtag]");
     if (!item) return;
     const tag = item.dataset.dtag;
     const state = item.dataset.dstate || "yes";
     const dkey = item.dataset.dkey || tag;                   // per-direction dismiss key
-    const o = oppById(curOppId);
     if (e.target.closest("[data-dacc]")) {
       oppReads(o)[tag] = state;                              // accept → set the read (yes or no)
     } else {

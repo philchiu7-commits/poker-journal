@@ -235,6 +235,61 @@ const EXPLOIT_RULES = {
   "force-squid":      { yes: "He forces squid spots — expect wider gambling ranges; value-bet bigger, he pays off chasing." },
 };
 
+/* Read implications: setting `<sourceTag>:<state>` on an opponent suggests other
+   reads worth observing on the same villain, with a probable direction.
+   Suggestions surface as 💡 chips in the reads panel; Phil taps to set the
+   implied state (or picks his own), or dismisses. Filtered against reads
+   already set and against `o.readDismissed`. Direction reflects the causal /
+   correlational link — e.g. linear-3bettor → not-light-3bettor. */
+const READ_IMPLICATIONS = {
+  // preflop opening
+  "open-too-wide:yes":    ["over-cbet:yes", "bluff-till-f:yes", "ep-open-weak:yes"],
+  "ep-open-weak:yes":     ["3bet-tight:yes", "over-folds-3bet:yes"],
+  "attacks-limps:yes":    ["3bets-light:yes", "bluff-raise-f:yes"],
+  "attack-limped-blinds:yes": ["3bets-light:yes"],
+  // limping
+  "limps-are-weak:yes":   ["over-folds-3bet:yes"],
+  "limp-caller:yes":      ["station-f:yes", "check-oop-limped:yes"],
+  "wide-cc:yes":          ["station-f:yes", "floats-wide:yes"],
+  "ep-range-limp:yes":    ["limps-are-weak:yes"],
+  // 3bet
+  "3bet-linear:yes":      ["3bets-light:no", "3bet-tight:yes", "bluffs-rivers:no"],
+  "3bet-polar:yes":       ["can-4bet-light:yes", "bluffs-rivers:yes", "bad-polar:yes"],
+  "3bet-bluff:yes":       ["barrels-off:yes", "bluffs-rivers:yes", "3bets-light:yes"],
+  "3bets-light:yes":      ["bluff-raise-f:yes", "bluff-till-t:yes"],
+  "over-folds-3bet:yes":  ["open-too-wide:yes"],
+  "3bet-tight:yes":       ["raise-nuts-r:yes", "bluffs-rivers:no"],
+  "can-4bet-light:yes":   ["3bet-polar:yes"],
+  // postflop cbet / float
+  "over-cbet:yes":        ["bluff-till-t:yes", "floats-wide:yes"],
+  "over-cbet:no":         ["3bet-tight:yes"],
+  "floats-wide:yes":      ["bluff-raise-t:yes", "bluff-till-t:yes"],
+  "pfr-oop-cbet:yes":     ["over-cbet:yes"],
+  // barrel / bluff
+  "barrels-off:yes":      ["bluffs-rivers:yes", "bad-polar:yes"],
+  "barrels-off:no":       ["bluff-till-f:yes", "over-cbet:yes"],
+  "bluffs-rivers:yes":    ["barrels-off:yes", "bad-polar:yes"],
+  "bluffs-rivers:no":     ["3bet-linear:yes", "raise-nuts-r:yes"],
+  "bluff-till-f:yes":     ["barrels-off:no", "over-cbet:yes"],
+  "bluff-till-t:yes":     ["barrels-off:no"],
+  // range construction
+  "merged:yes":           ["overbets-nuts:no", "small-with-weak:no"],
+  "polar:yes":            ["overbets-nuts:yes", "small-with-weak:yes"],
+  "bad-polar:yes":        ["bluffs-rivers:yes"],
+  "raise-nuts-r:yes":     ["3bet-tight:yes", "bluff-raise-r:no"],
+  // sizing
+  "preflop-sizing:yes":   ["3bet-sizing:yes"],
+  "overbets-nuts:yes":    ["small-with-weak:yes", "polar:yes"],
+  "small-with-weak:yes":  ["overbets-nuts:yes"],
+  "bsti:yes":             ["small-with-weak:no", "merged:yes"],
+  // live tells
+  "snap-call-weak:yes":   ["timing-tells:yes"],
+  "timing-tells:yes":     ["snap-call-weak:yes"],
+  "talks-when-strong:yes": ["timing-tells:yes"],
+  "tilts:yes":            ["force-squid:yes", "bluffcatch-losing:yes"],
+  "force-squid:yes":      ["tilts:yes"],
+};
+
 /* Reusable exploit archetypes — a shared library added onto any opponent from
    the Exploits panel. `abbr` is the short code shown on the front-page card;
    `text` is the full description revealed on tap/hover. */
