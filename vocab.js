@@ -39,8 +39,8 @@ const TENDENCY_TAGS = [
   // preflop — limping / squid
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
-  { id: "limp-scale-ws",        cat: "preflop",  label: "Limp width wS",  kind: "scale" },
-  { id: "limp-scale-ns",        cat: "preflop",  label: "Limp width nS",  kind: "scale" },
+  { id: "limp-scale-ws",        cat: "preflop",  label: "Limp with wS",   kind: "scale" },
+  { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS",   kind: "scale" },
   { id: "limp-wide-multiplier", cat: "preflop",  label: "Goes for multipliers" },
   { id: "wide-cc",              cat: "preflop",  label: "Wide CC" },
   // preflop — 3bet / 4bet (3bet Linear/Polar is a grouped bubble row)

@@ -19,6 +19,7 @@ let lineupSeats = 9;              // table size (6–9); picks which subset of t
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
 const DEFAULT_OPEN_BB = [8, 10, 12, 15];   // standard live-open sizes, in big blinds
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
+let pendingReadWrite = null;      // scale-slider write waiting on the debounce timer
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
@@ -618,8 +619,21 @@ function renderLineupSheet() {
      </div>`).join("") || `<div class="empty">No one seated yet — add players below.</div>`;
   const inLineup = new Set(tableLineup);
   const pool = OPP.filter((o) => !o.archived && !inLineup.has(o.id)).sort((a, b) => a.name.localeCompare(b.name));
-  const heroAdd = inLineup.has("hero") ? "" : `<button class="chip" data-ladd="hero">＋ You</button>`;
-  const sizes = [6, 7, 8, 9].map((n) =>
+  // Bucket by group; ungrouped last. Search filters chips and hides empty groups.
+  const groupsMap = new Map();
+  pool.forEach((o) => {
+    const g = (o.group || "").trim();
+    if (!groupsMap.has(g)) groupsMap.set(g, []);
+    groupsMap.get(g).push(o);
+  });
+  const groupKeys = [...groupsMap.keys()].sort((a, b) => a === "" ? 1 : b === "" ? -1 : a.localeCompare(b));
+  const poolHtml = groupKeys.map((g) => {
+    const chips = groupsMap.get(g).map((o) => `<button class="chip" data-ladd="${o.id}">${esc(o.name)}</button>`).join("");
+    const label = esc(g || "No group");
+    return `<div class="lineup-group" data-group="${esc(g)}"><div class="glabel sub">${label}</div><div class="chiprow">${chips}</div></div>`;
+  }).join("");
+  const heroAdd = inLineup.has("hero") ? "" : `<div class="chiprow" style="margin-bottom:8px"><button class="chip" data-ladd="hero">＋ You</button></div>`;
+  const sizes = [4, 5, 6, 7, 8, 9].map((n) =>
     `<button class="chip mini${lineupSeats === n ? " on" : ""}" data-lsize="${n}">${n}</button>`).join("");
   const overCap = tableLineup.length > lineupSeats
     ? `<div class="sheetnote warn">⚠︎ ${tableLineup.length} players seated but table is ${lineupSeats}-handed. Increase table size or remove players.</div>` : "";
@@ -631,10 +645,22 @@ function renderLineupSheet() {
     <div class="linelist">${rows}</div>
     <div class="glabel" style="margin-top:14px">Add to table (all players)</div>
     <input id="lineup-search" class="vsearch" placeholder="🔍 Search…" autocomplete="off">
-    <div class="chiprow" id="lineup-pool">${heroAdd}${pool.map((o) => `<button class="chip" data-ladd="${o.id}">${esc(o.name)}</button>`).join("")}</div>
+    <div id="lineup-pool">${heroAdd}${poolHtml}</div>
     ${tableLineup.length ? `<button class="secondary" id="lineup-clear" style="margin-top:12px">Clear lineup</button>` : ""}`);
   const sheet = $("sheet");
-  const refresh = async () => { await saveLineup(); renderLineupSheet(); renderHandEntry(); };
+  const refresh = async () => {
+    await saveLineup();
+    // If the current hand hasn't started (no actions/board/cards), let a lineup
+    // edit re-seed the Table tab so it reflects the change.
+    if (draft.mode === "table" && draftIsFresh()) {
+      draft.villains = [];
+      draft.heroPos = null;
+      draft.heroIn = false;
+      seedTableFromLineup();
+    }
+    renderLineupSheet();
+    renderHandEntry();
+  };
   sheet.querySelectorAll("[data-lsize]").forEach((b) =>
     b.onclick = async () => {
       lineupSeats = Number(b.dataset.lsize);
@@ -670,6 +696,11 @@ function renderLineupSheet() {
       if (b.dataset.ladd === "hero") return;
       const o = oppById(b.dataset.ladd);
       b.style.display = (!nq || (o && oppMatches(o, nq))) ? "" : "none";
+    });
+    // hide a group heading entirely if none of its chips are visible
+    sheet.querySelectorAll("#lineup-pool .lineup-group").forEach((g) => {
+      const anyVisible = [...g.querySelectorAll("[data-ladd]")].some((b) => b.style.display !== "none");
+      g.style.display = anyVisible ? "" : "none";
     });
   };
 }
@@ -1185,6 +1216,9 @@ function newDraft() {
     btnPos: null, assignBtn: false,
   };
 }
+// No user input yet — safe to reseed seats from a lineup change.
+const draftIsFresh = () =>
+  !draft.actions.length && !draft.board.some(Boolean) && !draft.heroCards.some(Boolean);
 
 /* Effective BTN position: explicit if set, else derived — last occupied seat in
    the current ring, else "BN" if it's in the ring, else the ring's last seat. */
@@ -1559,6 +1593,8 @@ const lineupActive = () => tableLineup.length >= 2;
 /* Seat rings by table size: which positions are in play. STD (straddle) included
    at 7+ handed to match how Phil's game runs. Clockwise from SB. */
 const SEAT_RINGS = {
+  4: ["SB", "BB", "CO", "BN"],
+  5: ["SB", "BB", "HJ", "CO", "BN"],
   6: ["SB", "BB", "U6", "HJ", "CO", "BN"],
   7: ["SB", "BB", "STD", "U6", "HJ", "CO", "BN"],
   8: ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"],
@@ -1917,13 +1953,11 @@ function renderHandEntry() {
   $("he-lineup-btn").textContent = lineupActive() ? `Lineup · ${tableLineup.length}` : "Lineup";
   $("he-lineup-btn").classList.toggle("on", lineupActive());
 
-  // position rows — chips reflect today's table size (6/7/8/9-handed).
-  // Preserve any legacy position already saved on the draft so it's not hidden.
-  // When there's a straddle, always expose STD as an available seat.
+  // position rows — chips reflect today's table size (4–9-handed).
+  // Preserve any position already saved on the draft so it's not hidden.
   const ring = seatRing();
-  const extras = [d.heroPos, ...d.villains.map((v) => v.pos)].filter((p) => p && !ring.includes(p));
-  const needsStd = Number(d.std) > 0 && !ring.includes("STD");
-  const posList = [...ring, ...(needsStd ? ["STD"] : []), ...new Set(extras.filter((p) => !(needsStd && p === "STD")))];
+  const extras = new Set([d.heroPos, ...d.villains.map((v) => v.pos)].filter((p) => p && !ring.includes(p)));
+  const posList = [...ring, ...extras];
   $("he-heropos").closest(".posrow").classList.toggle("hidden", !d.heroIn);
   $("he-heropos").innerHTML = posList.map((p) =>
     `<button class="chip mini${d.heroPos === p ? " on" : ""}" data-hpos="${p}">${p}</button>`).join("");
@@ -2650,8 +2684,23 @@ function bindStatic() {
       const rd = row.querySelector(".scaleval");
       if (rd) rd.textContent = v + " · " + scaleBucket(v);
     }
+    // Short debounce + a "pending" reference so pagehide can flush before Safari suspends us.
     clearTimeout($("od-tags")._scaleT);
-    $("od-tags")._scaleT = setTimeout(() => dbPut("opponents", o), 200);
+    pendingReadWrite = o;
+    $("od-tags")._scaleT = setTimeout(() => {
+      dbPut("opponents", o);
+      if (pendingReadWrite === o) pendingReadWrite = null;
+    }, 50);
+  });
+  // Also save on 'change' — fires when the drag ends, guarantees a write even if
+  // the debounce timer hasn't fired yet.
+  $("od-tags").addEventListener("change", (e) => {
+    const s = e.target.closest("[data-scaleinput]");
+    if (!s) return;
+    const o = oppById(curOppId);
+    clearTimeout($("od-tags")._scaleT);
+    dbPut("opponents", o);
+    if (pendingReadWrite === o) pendingReadWrite = null;
   });
   $("od-note-add").onclick = async () => {
     const text = $("od-note").value.trim();
@@ -2921,6 +2970,19 @@ async function boot() {
   draft = saved ? Object.assign(newDraft(), saved) : newDraft();
   bindStatic();
   window.addEventListener("hashchange", route);
+  // Flush any pending scale-read write before Safari suspends the tab so
+  // slider changes are never lost when the user backgrounds the app.
+  const flushPendingRead = () => {
+    if (!pendingReadWrite) return;
+    const o = pendingReadWrite;
+    pendingReadWrite = null;
+    clearTimeout($("od-tags")?._scaleT);
+    dbPut("opponents", o);
+  };
+  window.addEventListener("pagehide", flushPendingRead);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingRead();
+  });
   route();
   // ensure an auto-backup exists on first boot (or if it's stale)
   const snap = await metaGet("autoSnapshot");

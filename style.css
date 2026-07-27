@@ -19,7 +19,9 @@ body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 main {
-  padding: 8px 14px calc(86px + env(safe-area-inset-bottom));
+  /* tabbar ~64px + safe-area + comfortable buffer so the last list item
+     is never tucked under the floating nav */
+  padding: 8px 14px calc(110px + env(safe-area-inset-bottom));
   max-width: 540px; margin: 0 auto;
 }
 .hidden { display: none !important; }
