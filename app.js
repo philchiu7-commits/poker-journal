@@ -1362,12 +1362,13 @@ function actorForPos(pos) {
   return o.type === "hero" ? "hero" : o.type === "villain" ? "v" + o.idx : null;
 }
 /* Evenly-spaced slot positions around the felt oval for n seats.
-   Slot 0 = bottom-centre; walks counter-clockwise. */
+   Slot 0 = bottom-centre; walks clockwise so ring [SB, BB, ..., BN] places
+   BN to SB's right (viewer POV) — matches real-table deal order. */
 function slotsFor(n) {
   const cx = 50, cy = 50, rx = 39, ry = 44;
   const slots = [];
   for (let i = 0; i < n; i++) {
-    const a = Math.PI / 2 + (i * 2 * Math.PI) / n;
+    const a = Math.PI / 2 - (i * 2 * Math.PI) / n;
     slots.push([+(cx - rx * Math.cos(a)).toFixed(1), +(cy + ry * Math.sin(a)).toFixed(1)]);
   }
   return slots;
