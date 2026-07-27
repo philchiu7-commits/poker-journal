@@ -3,53 +3,50 @@
 Repo: https://github.com/philchiu7-commits/poker-journal
 Live site auto-deploys from `main` to GitHub Pages.
 
-Do Group 1 first (esp. #11a — save fix — before Group 4 reads inherit the bug).
-Commit per group.
+---
+
+## Open
+
+Nothing outstanding from the July 27 spec. Repo housekeeping only:
+
+- [ ] Decide on `.claude/launch.json` — either `git add .claude/launch.json` (so anyone who clones gets the preview config) or add `.claude/` to `.gitignore`.
+
+## Done in this session
+
+**v55** — lineup polish
+- 4-handed & 5-handed table options; 6-max now shows exactly 6 positions
+- Lineup pool bucketed by opponent `group`; search hides empty groups
+- Lineup edits reseed the Table tab when the current hand is fresh
+
+**v56** — Group 1 bugs
+- #8 More bottom padding so the tab bar can't hide the last list item
+- #9 "Limp width" → "Limp with"
+- #11a Scale-slider write: 50ms debounce + change-event save + pagehide flush
+- #18 Verified in code as already increment-only
+
+**v57** — Group 2 layout & UI
+- #1+#6 Table seats = lineup array length (dynamic `slotsFor(n)`)
+- #3 Hero renders at their actual ring position (no more bottom pinning)
+- #2 Drag-to-reorder lineup (HTML5 DnD + touch fallback)
+- #4 One row per villain with fixed 90px name column + card slots, no wrap
+- #10 Board suit shorthand: `JT9s` / `JT9m` / `JT9r`
+- #14 Hide reads with value 0 or unset
+- #19 Global "Show exploits on list" toggle in opponents header
+
+**v58** — Groups 3-5
+- #5 Squid indicator shows live "X/Y" from lineup + reads
+- #20 `V{n}L` → "vs {n} limpers" in note parser
+- #7 3bet row: added "Bluff" bubble
+- #17 Range row: dropped "Bad polar"
+- #11b/#12/#15/#16 four new reads (Limps are weak, PFR OOP cbet, EP Open weak, Attack limped blinds) with exploit rules
+- #13 Per-read confidence 0-5 chip; auto-defaults to 3 when a read is set; hides at 0
 
 ---
 
-## Group 1 — Bugs
+## How to work on this repo
 
-- [ ] **#8 Bottom nav overlapping content.** Floating tab bar (Opponents / Hand / Hands / Data) cuts off last note. Add bottom padding to scrollable content = nav-bar height + iPhone safe-area inset.
-- [ ] **#9 Typo:** "Limp width" → "Limp with" everywhere ("Limp width wS" → "Limp with wS", etc.).
-- [ ] **#11a Reads not saving reliably.** Audit every read toggle/slider/counter. Persist on every change (not batched). Test: toggle, close Safari, reopen, confirm retained. App uses IndexedDB — confirm writes fire per change.
-- [ ] **#18 "Worked" counter must be increment-only.** Remove any decrement behavior.
+Run Claude Code from `/Users/phil/poker-journal` so `CLAUDE.md` auto-loads:
 
-## Group 2 — Layout & UI
-
-- [ ] **#1 + #6 Table seats = lineup size, always.** Bind seat count to lineup array length, not a fixed default. Permanent.
-- [ ] **#2 Drag to reorder lineup.** Replace ↑↓ with touch drag (SortableJS).
-- [ ] **#3 Hero at actual lineup position** (stop pinning to top).
-- [ ] **#4 Cleaner hand input layout.** One row per villain, fixed-width name column left, two card slots right-aligned. No wrapping. Handle variable-width Chinese names.
-- [ ] **#10 Board shorthand for suits.** Parse trailing letter on flop:
-  - `JT9s` = two of three share a suit (which two + which suit random)
-  - `JT9m` = monotone (random suit)
-  - `JT9r` = rainbow
-- [ ] **#14 Hide reads with value 0** (interacts with #13).
-- [ ] **#19 Show exploits on front page.** Setting or per-opponent toggle.
-
-## Group 3 — Notation & shorthand
-
-- [ ] **#5 Squid indicator as `X/Y`.** X = # villains in lineup tagged "squid", Y = total villains. e.g. "🦑 0/7", "🦑 1/7".
-- [ ] **#20 `V{n}L` = "vs {n} limpers"** in note-to-hand parser.
-
-## Group 4 — New reads
-
-Follow the existing read UI pattern + #11a save fix.
-
-- [ ] **#11b "Limps are weak"**
-- [ ] **#12 "PFR OOP cbet"** (preflop raiser out-of-position cbet)
-- [ ] **#15 "EP Open weak"**
-- [ ] **#16 "Attack limped blinds"**
-
-## Group 5 — Read structure
-
-- [ ] **#7 3bet row: add "Bluff".** linear / polar → linear / polar / bluff.
-- [ ] **#17 Flop reads → "merged / polar"** (replaces existing).
-- [ ] **#13 0–5 accuracy toggle per read.** Stepped button 0→1→2→3→4→5→0. Stored alongside read state. 0 = off for display (see #14).
-
-## Repo housekeeping (carry over)
-
-- [ ] Commit + push the v55 lineup work.
-- [ ] Push the earlier CLAUDE.md commit (`876a652`).
-- [ ] Decide on `.claude/launch.json` (commit or gitignore).
+```bash
+cd /Users/phil/poker-journal && claude
+```
