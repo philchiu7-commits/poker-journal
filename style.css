@@ -285,7 +285,7 @@ textarea.noteedit { margin-bottom: 0; }
 .hgroup { margin-bottom: 13px; }
 .glabel { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
 .posrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.poslabel { color: var(--muted); font-size: 11px; width: 56px; flex: none; text-transform: uppercase;
+.poslabel { color: var(--muted); font-size: 11px; width: 80px; flex: none; text-transform: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .seg { display: flex; background: var(--panel2); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; margin-bottom: 8px; padding: 3px; gap: 3px; }
@@ -402,6 +402,16 @@ textarea.noteedit { margin-bottom: 0; }
 
 .cardsrow { display: flex; flex-direction: column; gap: 9px; }
 .crow { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; min-height: 54px; }
+/* One row per villain/hero: fixed-width name column + card slots, no wrap. */
+.crow.crow-holes {
+  flex-wrap: nowrap; gap: 8px; min-width: 0;
+}
+.crow.crow-holes .cdiv {
+  flex: 0 0 90px; margin: 0; font-size: 12px; text-transform: none; letter-spacing: 0;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.crow.crow-board { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.crow.crow-board::-webkit-scrollbar { display: none; }
 .cslot {
   width: 40px; height: 54px; border-radius: 9px; border: 1px dashed var(--line);
   background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 700;
@@ -523,6 +533,19 @@ textarea.noteedit { margin-bottom: 0; }
   margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
   font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
 }
+
+/* ---- lineup sheet drag reorder ---- */
+.lineitem .draghandle {
+  color: var(--muted); font-size: 18px; padding: 0 6px; cursor: grab;
+  touch-action: none; user-select: none; flex: none;
+}
+.lineitem.dragging { opacity: .5; }
+.lineitem.dragover { outline: 2px dashed var(--accent); outline-offset: -2px; }
+
+/* ---- opponents list controls ---- */
+.showexp-row { margin: 6px 2px 10px; }
+.checkline { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; cursor: pointer; }
+.checkline input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 
 /* ---- tab bar ---- */
 #tabbar {

@@ -20,6 +20,7 @@ let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSiz
 const DEFAULT_OPEN_BB = [8, 10, 12, 15];   // standard live-open sizes, in big blinds
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 let pendingReadWrite = null;      // scale-slider write waiting on the debounce timer
+let showAllExploitsOnList = false;   // global toggle: append every exploit onto opponent rows
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
@@ -378,12 +379,19 @@ function featuredItems(o) {
     o.featured = o.pinnedExploit ? [{ type: "exploit", id: o.pinnedExploit }] : [];
   return o.featured;
 }
+/* A read is "on" if it has a real state — for scale reads, a value > 0.
+   Reads at 0 are treated the same as unset (see #14). */
+const readIsActive = (id, state) => {
+  if (state == null || state === "") return false;
+  return isScaleRead(id) ? Number(state) > 0 : true;
+};
+
 /* Render one featured item as a compact chip (read chip, or abbreviated exploit
    chip whose full text shows on hover); "" if the item no longer exists. */
 function featuredChip(o, it) {
   if (it.type === "read") {
     const state = oppReads(o)[it.id];
-    return state ? readChip(it.id, state) : "";
+    return readIsActive(it.id, state) ? readChip(it.id, state) : "";
   }
   const e = (o.exploits || []).find((x) => x.id === it.id);
   if (!e) return "";
@@ -403,7 +411,20 @@ function oppRowHTML(o, st) {
   // curated card first; fall back to a few set reads before anything's featured
   const feat = featuredItems(o);
   let chips = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("");
-  if (!chips) chips = Object.entries(oppReads(o)).slice(0, 3).map(([id, s]) => readChip(id, s)).join("");
+  if (!chips) chips = Object.entries(oppReads(o))
+    .filter(([id, s]) => readIsActive(id, s))
+    .slice(0, 3).map(([id, s]) => readChip(id, s)).join("");
+  // Global toggle: append every exploit as its own chip so Phil can scan a full
+  // playbook straight from the list without opening the detail view.
+  if (showAllExploitsOnList) {
+    const featuredIds = new Set(feat.filter((it) => it.type === "exploit").map((it) => it.id));
+    const extra = (o.exploits || []).filter((e) => !featuredIds.has(e.id))
+      .map((e) => {
+        const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
+        return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
+      }).join("");
+    chips += extra;
+  }
   const showChips = !oppEditMode && chips;
   const handle = oppEditMode ? `<span class="draghandle" data-drag="${o.id}">⠿</span>` : "";
   const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
@@ -601,6 +622,48 @@ function openSquidPicker(which) {
   });
 }
 
+/* Pointer-based drag-reorder for the lineup sheet — HTML5 DnD is unreliable on
+   iOS Safari, so we watch touch/pointer moves and swap items based on hit-test. */
+function attachTouchReorder(sheet, arr, onDrop) {
+  const items = [...sheet.querySelectorAll(".lineitem[draggable]")];
+  if (!items.length) return;
+  items.forEach((el) => {
+    const handle = el.querySelector(".draghandle");
+    if (!handle) return;
+    handle.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      const startIdx = +el.dataset.lidx;
+      el.classList.add("dragging");
+      const move = (ev) => {
+        const t = ev.touches[0];
+        const under = document.elementFromPoint(t.clientX, t.clientY);
+        const target = under?.closest?.(".lineitem[draggable]");
+        items.forEach((i) => i.classList.remove("dragover"));
+        if (target && target !== el) target.classList.add("dragover");
+      };
+      const end = (ev) => {
+        el.classList.remove("dragging");
+        items.forEach((i) => i.classList.remove("dragover"));
+        const t = ev.changedTouches?.[0];
+        if (t) {
+          const under = document.elementFromPoint(t.clientX, t.clientY);
+          const target = under?.closest?.(".lineitem[draggable]");
+          if (target && target !== el) {
+            const dst = +target.dataset.lidx;
+            const [item] = arr.splice(startIdx, 1);
+            arr.splice(dst, 0, item);
+            onDrop();
+          }
+        }
+        handle.removeEventListener("touchmove", move);
+        handle.removeEventListener("touchend", end);
+      };
+      handle.addEventListener("touchmove", move, { passive: false });
+      handle.addEventListener("touchend", end);
+    }, { passive: false });
+  });
+}
+
 /* Today's table lineup (seat ring): set once, then one anchored position per
    hand fills in the rest. Edited in a live sheet, persisted to meta. */
 const lineupName = (id) => id === "hero" ? "You (Hero)" : (oppById(id)?.name || "?");
@@ -608,12 +671,11 @@ const saveLineup = () => metaSet("tableLineup", tableLineup);
 function openLineupSheet() { renderLineupSheet(); }
 function renderLineupSheet() {
   const rows = tableLineup.map((id, i) =>
-    `<div class="lineitem">
+    `<div class="lineitem" draggable="true" data-lidx="${i}">
+       <span class="draghandle" aria-hidden="true">⠿</span>
        <span class="seatno">${i + 1}</span>
        <span class="mnm">${esc(lineupName(id))}</span>
        <span class="linebtns">
-         <button class="chip mini" data-lup="${i}"${i === 0 ? " disabled" : ""}>↑</button>
-         <button class="chip mini" data-ldown="${i}"${i === tableLineup.length - 1 ? " disabled" : ""}>↓</button>
          <button class="chip mini" data-lrm="${esc(id)}">✕</button>
        </span>
      </div>`).join("") || `<div class="empty">No one seated yet — add players below.</div>`;
@@ -649,7 +711,10 @@ function renderLineupSheet() {
     ${tableLineup.length ? `<button class="secondary" id="lineup-clear" style="margin-top:12px">Clear lineup</button>` : ""}`);
   const sheet = $("sheet");
   const refresh = async () => {
+    // Keep lineupSeats in sync with the lineup array length (source of truth).
+    lineupSeats = effectiveSeats();
     await saveLineup();
+    await metaSet("lineupSeats", lineupSeats);
     // If the current hand hasn't started (no actions/board/cards), let a lineup
     // edit re-seed the Table tab so it reflects the change.
     if (draft.mode === "table" && draftIsFresh()) {
@@ -674,8 +739,8 @@ function renderLineupSheet() {
     });
   sheet.querySelectorAll("[data-ladd]").forEach((b) =>
     b.onclick = () => {
-      if (tableLineup.length >= lineupSeats) {
-        toast(`Table is ${lineupSeats}-handed — increase table size to add more.`, 3200);
+      if (tableLineup.length >= 9) {
+        toast("Table is 9-handed max.", 3200);
         return;
       }
       tableLineup.push(b.dataset.ladd);
@@ -683,10 +748,34 @@ function renderLineupSheet() {
     });
   sheet.querySelectorAll("[data-lrm]").forEach((b) =>
     b.onclick = () => { tableLineup = tableLineup.filter((x) => x !== b.dataset.lrm); refresh(); });
-  sheet.querySelectorAll("[data-lup]").forEach((b) =>
-    b.onclick = () => { const i = +b.dataset.lup; if (i > 0) { [tableLineup[i - 1], tableLineup[i]] = [tableLineup[i], tableLineup[i - 1]]; refresh(); } });
-  sheet.querySelectorAll("[data-ldown]").forEach((b) =>
-    b.onclick = () => { const i = +b.dataset.ldown; if (i < tableLineup.length - 1) { [tableLineup[i + 1], tableLineup[i]] = [tableLineup[i], tableLineup[i + 1]]; refresh(); } });
+  // Drag-to-reorder for the lineup (touch + mouse via HTML5 DnD).
+  let dragSrc = -1;
+  sheet.querySelectorAll(".lineitem[draggable]").forEach((el) => {
+    el.addEventListener("dragstart", (e) => {
+      dragSrc = +el.dataset.lidx;
+      el.classList.add("dragging");
+      e.dataTransfer?.setData("text/plain", String(dragSrc));
+      e.dataTransfer && (e.dataTransfer.effectAllowed = "move");
+    });
+    el.addEventListener("dragend", () => el.classList.remove("dragging"));
+    el.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      el.classList.add("dragover");
+    });
+    el.addEventListener("dragleave", () => el.classList.remove("dragover"));
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      el.classList.remove("dragover");
+      const dst = +el.dataset.lidx;
+      if (dragSrc < 0 || dragSrc === dst) return;
+      const [item] = tableLineup.splice(dragSrc, 1);
+      tableLineup.splice(dst, 0, item);
+      dragSrc = -1;
+      refresh();
+    });
+  });
+  // Touch drag: pointer-based fallback for iPhone Safari (HTML5 DnD is spotty on iOS).
+  attachTouchReorder(sheet, tableLineup, refresh);
   const clr = $("lineup-clear");
   if (clr) clr.onclick = () => { if (confirm("Clear the table lineup?")) { tableLineup = []; refresh(); } };
   const srch = $("lineup-search");
@@ -1251,14 +1340,23 @@ function actorForPos(pos) {
   const o = seatOccupant(pos);
   return o.type === "hero" ? "hero" : o.type === "villain" ? "v" + o.idx : null;
 }
-/* Screen slots around the oval, slot 0 = bottom-centre (hero's seat). */
-const SEAT_SLOTS = [
-  [50, 94], [23, 88], [10, 60], [14, 30], [34, 11], [58, 8], [79, 14], [89, 44], [82, 80],
-];
-/* Rotate POSITIONS so hero's seat is at the bottom; else default order. */
+/* Evenly-spaced slot positions around the felt oval for n seats.
+   Slot 0 = bottom-centre; walks counter-clockwise. */
+function slotsFor(n) {
+  const cx = 50, cy = 50, rx = 39, ry = 44;
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / n;
+    slots.push([+(cx - rx * Math.cos(a)).toFixed(1), +(cy + ry * Math.sin(a)).toFixed(1)]);
+  }
+  return slots;
+}
+/* Felt seat order: one slot per position in the ring (in ring order, no hero
+   rotation). Number of seats always matches the current lineup ring size. */
 function seatOrder() {
-  const hi = draft.heroPos ? POSITIONS.indexOf(draft.heroPos) : 0;
-  return SEAT_SLOTS.map((slot, i) => ({ slot, pos: POSITIONS[(hi + i) % POSITIONS.length] }));
+  const ring = seatRing();
+  const slots = slotsFor(ring.length);
+  return slots.map((slot, i) => ({ slot, pos: ring[i] }));
 }
 
 function renderTable() {
@@ -1472,15 +1570,47 @@ function parseNoteToDraft(text, opponentId) {
     }
   }
   // board — look for BOARD-shaped token: 3+ ranks maybe followed by suit-code
-  const boardTok = text.match(/\b([AKQJT2-9]{3,5})(ss|hh|dd|cc|ds|rr)?\b/);
+  // Suffixes:
+  //   s   = two cards share a random suit (which two + which suit random)
+  //   m   = monotone (all same, random suit)
+  //   r   = rainbow (distinct suits)
+  //   ss/hh/dd/cc = legacy: monotone in that specific suit
+  //   ds  = legacy: first two diamonds, then spade
+  //   rr  = legacy: rainbow
+  const boardTok = text.match(/\b([AKQJT2-9]{3,5})([smr]|ss|hh|dd|cc|ds|rr)?\b/);
   if (boardTok && boardTok[1].length >= 3) {
     const ranks = boardTok[1].split("");
     const used = new Set();
     for (const c of d.villains[0].cards || []) if (c) used.add(c[1]);
     const suitHint = boardTok[2];
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    // Precompute per-index suit assignments for the random-suit hints.
+    let suitPlan = null;
+    if (suitHint === "m") {
+      const s = pick(["s","h","d","c"]);
+      suitPlan = ranks.map(() => s);
+    } else if (suitHint === "r") {
+      // Rainbow: three distinct suits for the first three cards, then random for 4th/5th.
+      const shuffled = ["s","h","d","c"].sort(() => Math.random() - 0.5);
+      suitPlan = ranks.map((_, i) => i < 3 ? shuffled[i] : shuffled[Math.floor(Math.random() * 4)]);
+    } else if (suitHint === "s") {
+      // Two-of-three share a suit: pick which two indices, which shared suit,
+      // and give the odd card a distinct suit.
+      const shared = pick(["s","h","d","c"]);
+      const idxs = [0, 1, 2].sort(() => Math.random() - 0.5);
+      const pair = [idxs[0], idxs[1]];
+      const odd = idxs[2];
+      const others = ["s","h","d","c"].filter((x) => x !== shared);
+      suitPlan = ranks.map((_, i) => {
+        if (i === odd) return pick(others);
+        if (pair.includes(i)) return shared;
+        return pick(["s","h","d","c"]);   // 4th/5th card: random
+      });
+    }
     for (let i = 0; i < ranks.length && i < 5; i++) {
       let suit;
-      if (suitHint === "ss" || suitHint === "hh" || suitHint === "dd" || suitHint === "cc") suit = suitHint[0];
+      if (suitPlan) suit = suitPlan[i];
+      else if (suitHint === "ss" || suitHint === "hh" || suitHint === "dd" || suitHint === "cc") suit = suitHint[0];
       else if (suitHint === "ds") suit = i < 2 ? "d" : "s";
       else suit = ["s","h","d","c"].find((s) => !used.has(s + i));   // best-effort distinct suits
       used.add(suit + i);
@@ -1600,7 +1730,11 @@ const SEAT_RINGS = {
   8: ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"],
   9: ["SB", "BB", "STD", "U8", "U7", "U6", "HJ", "CO", "BN"],
 };
-const seatRing = () => SEAT_RINGS[lineupSeats] || SEAT_RINGS[9];
+/* Seat count = lineup array length (clamped 4..9), falling back to lineupSeats
+   or 9 when no lineup is set. Lineup is the source of truth for table size. */
+const effectiveSeats = () =>
+  Math.max(4, Math.min(9, tableLineup.length || lineupSeats || 9));
+const seatRing = () => SEAT_RINGS[effectiveSeats()] || SEAT_RINGS[9];
 function deriveLineup(anchor) {
   if (!lineupActive()) return;
   const ring = seatRing();
@@ -1966,7 +2100,7 @@ function renderHandEntry() {
     const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
     const chips = posList.map((p) =>
       `<button class="chip mini${v.pos === p ? " on" : ""}" data-vposi="${i}" data-vpos="${p}">${p}</button>`).join("");
-    return `<div class="posrow"><span class="poslabel">${esc(nm.slice(0, 9))}</span><div class="chiprow tight">${chips}</div></div>`;
+    return `<div class="posrow"><span class="poslabel" title="${esc(nm)}">${esc(nm)}</span><div class="chiprow tight">${chips}</div></div>`;
   }).join("");
 
   // action trigger + running list on the main page. The street/actor/act/size
@@ -1983,21 +2117,23 @@ function renderHandEntry() {
     `${draftActorLabel(a.actor)} ${a.act}${a.size ? " " + a.size : ""}`).join(" · ");
   if (sheetGroup === "__act__") renderActionPad();
 
-  // card slots
+  // card slots — one row per villain: fixed-width name column + two card slots.
+  // No wrapping; long / Chinese names truncate with ellipsis so the slots stay aligned.
   const slotBtn = (zone, i, card, lbl) =>
     `<button class="cslot${card ? " filled" : ""}" data-slot="${zone}:${i}">` +
     (card ? cardHTML(card) : `<span class="lbl">${lbl}</span>`) + `</button>`;
-  let ch = `<div class="crow">` +
+  let ch = `<div class="crow crow-board">` +
     d.board.map((c, i) => slotBtn("board", i, c, ["F", "F", "F", "T", "R"][i])).join("") +
-    `</div><div class="crow">`;
-  if (d.heroIn)
-    ch += `<span class="cdiv">hero</span>` + d.heroCards.map((c, i) => slotBtn("hero", i, c, "?")).join("");
+    `</div>`;
+  if (d.heroIn) {
+    ch += `<div class="crow crow-holes"><span class="cdiv">hero</span>` +
+      d.heroCards.map((c, i) => slotBtn("hero", i, c, "?")).join("") + `</div>`;
+  }
   d.villains.forEach((v, i) => {
-    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 6) : "V" + (i + 1);
-    ch += `<span class="cdiv">${esc(nm)}</span>` +
-      (v.cards || [null, null]).map((c, j) => slotBtn("v" + i, j, c, "?")).join("");
+    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
+    ch += `<div class="crow crow-holes"><span class="cdiv">${esc(nm)}</span>` +
+      (v.cards || [null, null]).map((c, j) => slotBtn("v" + i, j, c, "?")).join("") + `</div>`;
   });
-  ch += `</div>`;
   $("he-cards").innerHTML = ch;
 
   // squid pickers (compact buttons at top) — number chosen in a scroll sheet
@@ -2580,6 +2716,15 @@ function bindStatic() {
   $("opp-search").oninput = renderOpponents;
   $("opp-edit").onclick = () => { oppEditMode = !oppEditMode; renderOpponents(); };
   $("opp-add").onclick = () => { $("opp-new").classList.toggle("hidden"); $("opp-new-name").focus(); };
+  const showExpBox = $("opp-showall-exp");
+  if (showExpBox) {
+    showExpBox.checked = showAllExploitsOnList;
+    showExpBox.onchange = async () => {
+      showAllExploitsOnList = showExpBox.checked;
+      await metaSet("showAllExploitsOnList", showAllExploitsOnList);
+      renderOpponents();
+    };
+  }
   $("opp-new-save").onclick = async () => {
     const name = $("opp-new-name").value.trim();
     if (!name) return;
@@ -2955,6 +3100,7 @@ async function boot() {
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
   lineupSeats = (await metaGet("lineupSeats")) || 9;
+  showAllExploitsOnList = !!(await metaGet("showAllExploitsOnList"));
   openSizeStats = (await metaGet("openSizeStats")) || {};
   // migrate old {bb:{size:count}} → recency picks {bb:[{size,ts}]}
   for (const bb of Object.keys(openSizeStats)) {
