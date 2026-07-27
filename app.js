@@ -1877,7 +1877,6 @@ function renderHandEntry() {
     `<button class="${table ? "on" : ""}" data-mode="table">Table</button>`;
   $("he-chipsonly").classList.toggle("hidden", table);
   $("he-table").classList.toggle("hidden", !table);
-  $("he-actor").classList.toggle("hidden", table);   // seat replaces the actor toggle
   // Table mode duplicates blinds/eff in its setup bar — hide the ctxbar copies.
   ["he-sb", "he-bb", "he-std", "he-effstack"].forEach((id) => {
     const el = $(id); if (el && el.closest(".ctxfield")) el.closest(".ctxfield").classList.toggle("hidden", table);
@@ -1936,72 +1935,19 @@ function renderHandEntry() {
     return `<div class="posrow"><span class="poslabel">${esc(nm.slice(0, 9))}</span><div class="chiprow tight">${chips}</div></div>`;
   }).join("");
 
-  // street segment
-  $("he-street").innerHTML = STREETS.map((s) =>
-    `<button class="${d.street === s ? "on" : ""}" data-street="${s}">${s.toUpperCase()}</button>`).join("");
-
-  // actor segment: HERO + one per villain
+  // action trigger + running list on the main page. The street/actor/act/size
+  // controls live in the bottom "Add action" sheet — see renderActionPad().
   const cur = currentActor();
-  const vBtns = d.villains.map((v, i) => {
-    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 9) : "V" + (i + 1);
-    return `<button class="${cur === "v" + i ? "on" : ""}" data-actor="v${i}">${esc(nm)}</button>`;
-  }).join("") || `<button class="${cur === "v0" ? "on" : ""}" data-actor="v0">VILLAIN</button>`;
-  $("he-actor").innerHTML =
-    (d.heroIn ? `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` : "") + vBtns;
-
-  // running pot estimate (rough — see estimatePot)
-  const pe = estimatePot(d, d.actions);
-  const showPot = d.actions.length > 0 && pe.now > 0;
-  $("he-pot").classList.toggle("hidden", !showPot);
-  if (showPot) $("he-pot").textContent = "Pot " + potStr(pe.now);
-
-  // action buttons — situational: options depend on the betting so far this street
-  const acts = d.street === "pre" ? preflopActs() : postflopActs();
-  $("he-acts").innerHTML = acts.map((a) =>
-    `<button data-act="${a}">${actLabel(a)}</button>`).join("");
-
-
-  // size strip (when last action is a sizeable bet/raise/3bet without a size yet)
-  const last = d.actions[d.actions.length - 1];
-  const needSize = last && SIZED_ACTS.includes(last.act) && !last.size;
-  $("he-sizes").classList.toggle("hidden", !needSize);
-  if (needSize) {
-    // resolve relative sizes to chips: pot/bet-so-far BEFORE this pending action
-    const prev = d.actions.slice(0, -1);
-    const base = estimatePot(d, prev);
-    const facing = prev.length && prev[prev.length - 1].street === last.street ? base.curBet : 0;
-    const chipAmt = (s) => {
-      if (/%$/.test(s)) return (parseFloat(s) / 100) * base.now + facing;
-      if (s === "pot") return base.now + facing;
-      if (s === "over") return 1.3 * base.now + facing;
-      if (/^\d+(\.\d+)?x$/i.test(s)) return facing ? parseFloat(s) * facing : 0;
-      return 0;
-    };
-    const bb = Number(d.bb) || 0;
-    let btns;
-    if (isOpenRaise(last) && bb > 0) {
-      // open-raise sized in big blinds (adaptive), resolved to exact chips.
-      // Dedupe: at small blinds two bb sizes can round to the same chip amount —
-      // keep the smaller bb and drop duplicates so every button is distinct.
-      const seen = new Set();
-      const uniq = openSizeButtons(bb).map((n) => ({ n, chips: niceChips(n * bb) }))
-        .filter((x) => !seen.has(x.chips) && seen.add(x.chips));
-      btns = uniq.map(({ n, chips }) =>
-        `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
-        `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`).join("") +
-      `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
-    } else {
-      btns = sizesFor(last).map((s) => {
-        const amt = base.now > 0 ? chipAmt(s) : 0;
-        return `<button class="sizebtn" data-size="${s}"><span class="sz">${s}</span>${amt ? `<span class="amt">${potStr(amt)}</span>` : ""}</button>`;
-      }).join("");
-    }
-    $("he-sizes").innerHTML =
-      `<div class="sizehint">${actLabel(last.act)} size</div>` +
-      `<div class="sizeopts">` + btns +
-      `<label class="sizebtn sizecustom"><input data-sizenum type="number" placeholder="custom" inputmode="numeric"></label>` +
-      `</div>`;
-  }
+  const curLbl = cur ? draftActorLabel(cur) : (table ? "seat a player" : "tap a villain");
+  $("he-openact").innerHTML =
+    `<span class="actopen-hd">${d.street.toUpperCase()}</span>` +
+    `<span class="actopen-mid">＋ Add action</span>` +
+    `<span class="actopen-tl">${esc(curLbl)}</span>`;
+  const acts = d.actions;
+  $("he-actlist").classList.toggle("hidden", !acts.length);
+  if (acts.length) $("he-actlist").textContent = acts.map((a) =>
+    `${draftActorLabel(a.actor)} ${a.act}${a.size ? " " + a.size : ""}`).join(" · ");
+  if (sheetGroup === "__act__") renderActionPad();
 
   // card slots
   const slotBtn = (zone, i, card, lbl) =>
@@ -2030,6 +1976,150 @@ function renderHandEntry() {
   for (const [id, val] of [["he-sb", d.sb], ["he-bb", d.bb],
                            ["he-std", d.std], ["he-effstack", d.effStack]])
     if (document.activeElement !== $(id)) $(id).value = val;
+}
+
+/* --- action-pad sheet (Option 1 wizard): street / actor / act / size --- */
+
+function draftActorLabel(actor) {
+  if (!actor) return "";
+  if (actor === "hero") return "Hero";
+  const i = Number(actor.slice(1));
+  const v = draft.villains[i];
+  const nm = v?.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
+  return nm.slice(0, 12);
+}
+
+function openActionSheet() {
+  sheetGroup = "__act__";
+  showSheet(
+    `<div class="sheethead"><span class="t">Action</span>
+       <button data-sheetclose>Done</button></div>
+     <div class="actionpad-sheet">
+       <div id="he-street" class="seg"></div>
+       <div id="he-pot" class="potline hidden"></div>
+       <div id="he-actor" class="seg"></div>
+       <div id="he-acts" class="actgrid"></div>
+       <div id="he-sizes" class="sizegrid hidden"></div>
+     </div>`);
+  renderActionPad();
+}
+
+function renderActionPad() {
+  const d = draft;
+  const table = d.mode === "table";
+  if (!$("he-street")) return;                       // sheet not open
+
+  $("he-street").innerHTML = STREETS.map((s) =>
+    `<button class="${d.street === s ? "on" : ""}" data-street="${s}">${s.toUpperCase()}</button>`).join("");
+
+  const cur = currentActor();
+  $("he-actor").classList.toggle("hidden", table);
+  const vBtns = d.villains.map((v, i) => {
+    const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 9) : "V" + (i + 1);
+    return `<button class="${cur === "v" + i ? "on" : ""}" data-actor="v${i}">${esc(nm)}</button>`;
+  }).join("") || `<button class="${cur === "v0" ? "on" : ""}" data-actor="v0">VILLAIN</button>`;
+  $("he-actor").innerHTML =
+    (d.heroIn ? `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` : "") + vBtns;
+
+  const pe = estimatePot(d, d.actions);
+  const showPot = d.actions.length > 0 && pe.now > 0;
+  $("he-pot").classList.toggle("hidden", !showPot);
+  if (showPot) $("he-pot").textContent = "Pot " + potStr(pe.now);
+
+  const acts = d.street === "pre" ? preflopActs() : postflopActs();
+  $("he-acts").innerHTML = acts.map((a) =>
+    `<button data-act="${a}">${actLabel(a)}</button>`).join("");
+
+  const last = d.actions[d.actions.length - 1];
+  const needSize = last && SIZED_ACTS.includes(last.act) && !last.size;
+  $("he-sizes").classList.toggle("hidden", !needSize);
+  if (needSize) {
+    const prev = d.actions.slice(0, -1);
+    const base = estimatePot(d, prev);
+    const facing = prev.length && prev[prev.length - 1].street === last.street ? base.curBet : 0;
+    const chipAmt = (s) => {
+      if (/%$/.test(s)) return (parseFloat(s) / 100) * base.now + facing;
+      if (s === "pot") return base.now + facing;
+      if (s === "over") return 1.3 * base.now + facing;
+      if (/^\d+(\.\d+)?x$/i.test(s)) return facing ? parseFloat(s) * facing : 0;
+      return 0;
+    };
+    const bb = Number(d.bb) || 0;
+    let btns;
+    if (isOpenRaise(last) && bb > 0) {
+      const seen = new Set();
+      const uniq = openSizeButtons(bb).map((n) => ({ n, chips: niceChips(n * bb) }))
+        .filter((x) => !seen.has(x.chips) && seen.add(x.chips));
+      btns = uniq.map(({ n, chips }) =>
+        `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
+        `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`).join("") +
+      `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
+    } else {
+      btns = sizesFor(last).map((s) => {
+        const amt = base.now > 0 ? chipAmt(s) : 0;
+        return `<button class="sizebtn" data-size="${s}"><span class="sz">${s}</span>${amt ? `<span class="amt">${potStr(amt)}</span>` : ""}</button>`;
+      }).join("");
+    }
+    $("he-sizes").innerHTML =
+      `<div class="sizehint">${actLabel(last.act)} size</div>` +
+      `<div class="sizeopts">` + btns +
+      `<label class="sizebtn sizecustom"><input data-sizenum type="number" placeholder="custom" inputmode="numeric"></label>` +
+      `</div>`;
+  }
+}
+
+/* Dispatch a click on a street / actor / act / size button. Shared by the
+   view-hand click handler and the action-sheet's sheetClick. Returns true if
+   the button belonged to this dispatcher (so callers can chain). */
+function handActionClick(b) {
+  if (b.dataset.street) {
+    mutate(() => {
+      draft.street = b.dataset.street;
+      const f = firstToAct(draft.street);
+      if (f) draft.actor = f;
+    });
+    return true;
+  }
+  if (b.dataset.actor) {
+    mutate(() => {
+      draft.actor = b.dataset.actor;
+      if (b.dataset.actor.startsWith("v")) draft.lastV = b.dataset.actor;
+    });
+    return true;
+  }
+  if (b.dataset.act) {
+    const actor = currentActor();
+    if (!actor) { toast("Tap a seated player first"); return true; }
+    let openBoard = null;
+    mutate(() => {
+      if (draft.mode !== "table" && actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
+      draft.actions.push({ street: draft.street, actor, act: b.dataset.act, size: null });
+      if (b.dataset.act === "limp") ensureStraddleInPot();
+      if (streetClosed(draft.street) && draft.street !== "river") {
+        const next = STREETS[STREETS.indexOf(draft.street) + 1];
+        draft.street = next;
+        draft.actor = firstToAct(next) || draft.actor;
+        openBoard = next;
+      } else if (draft.mode !== "table") {
+        draft.actor = nextActorByPos(actor) || nextActorChips(actor);
+      }
+    });
+    if (openBoard && groupSlots(openBoard).some((s) => !s.arr[s.i])) {
+      const miss = positionsMissing();
+      if (miss.length) toast("Set positions first: " + miss.join(", "));
+      else openGroupSheet(openBoard);
+    }
+    return true;
+  }
+  if (b.dataset.size) {
+    mutate(() => {
+      const last = draft.actions[draft.actions.length - 1];
+      if (last) last.size = b.dataset.size;
+    });
+    if (b.dataset.bbsize) recordOpenSize(Number(draft.bb) || 0, Number(b.dataset.bbsize));
+    return true;
+  }
+  return false;
 }
 
 /* --- hand-entry interactions (delegated, bound once) --- */
@@ -2138,46 +2228,8 @@ function bindHandEntry() {
         deriveLineup("v" + i);                                               // anchor → others follow
         if (!draft.actions.length) draft.actor = firstToAct(draft.street) || draft.actor;
       });
-    } else if (b.dataset.street) {
-      mutate(() => {
-        draft.street = b.dataset.street;
-        const f = firstToAct(draft.street);
-        if (f) draft.actor = f;
-      });
-    } else if (b.dataset.actor) {
-      mutate(() => {
-        draft.actor = b.dataset.actor;
-        if (b.dataset.actor.startsWith("v")) draft.lastV = b.dataset.actor;
-      });
-    } else if (b.dataset.act) {
-      const actor = currentActor();
-      if (!actor) { toast("Tap a seated player first"); return; }
-      let openBoard = null;
-      mutate(() => {
-        if (draft.mode !== "table" && actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
-        draft.actions.push({ street: draft.street, actor, act: b.dataset.act, size: null });
-        if (b.dataset.act === "limp") ensureStraddleInPot();     // STD is always in a limped pot
-        if (streetClosed(draft.street) && draft.street !== "river") {
-          // betting done → next street, first-to-act up, and prompt for the board
-          const next = STREETS[STREETS.indexOf(draft.street) + 1];
-          draft.street = next;
-          draft.actor = firstToAct(next) || draft.actor;
-          openBoard = next;
-        } else if (draft.mode !== "table") {
-          draft.actor = nextActorByPos(actor) || nextActorChips(actor);
-        }
-      });
-      if (openBoard && groupSlots(openBoard).some((s) => !s.arr[s.i])) {
-        const miss = positionsMissing();
-        if (miss.length) toast("Set positions first: " + miss.join(", "));
-        else openGroupSheet(openBoard);          // straight into entering the flop/turn/river
-      }
-    } else if (b.dataset.size) {
-      mutate(() => {
-        const last = draft.actions[draft.actions.length - 1];
-        if (last) last.size = b.dataset.size;
-      });
-      if (b.dataset.bbsize) recordOpenSize(Number(draft.bb) || 0, Number(b.dataset.bbsize));
+    } else if (handActionClick(b)) {
+      // street / actor / act / size — shared with the action sheet
     } else if (b.dataset.squidpick) {
       openSquidPicker(b.dataset.squidpick);
     } else if (b.dataset.slot) {
@@ -2205,7 +2257,20 @@ function bindHandEntry() {
 
   $("he-undo").onclick = undo;
   $("he-lineup-btn").onclick = openLineupSheet;
+  $("he-openact").onclick = openActionSheet;
   $("he-notehint-clear").onclick = () => { mutate(() => { draft.note = ""; }); };
+  // Custom size input lives inside the action sheet; catch its change there too.
+  $("sheet").addEventListener("change", (e) => {
+    if (e.target.dataset?.sizenum !== undefined) {
+      const v = e.target.value.trim();
+      if (v) {
+        const last = draft.actions[draft.actions.length - 1];
+        if (isOpenRaise(last) && Number(draft.bb) > 0)
+          recordOpenSize(Number(draft.bb), Math.round(Number(v) / Number(draft.bb)));
+        mutate(() => { if (last) last.size = "$" + v; });
+      }
+    }
+  });
   const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   $("he-vsearch").oninput = () => { vSearch = $("he-vsearch").value; renderHandEntry(); };
   $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
@@ -2279,6 +2344,13 @@ function sheetClick(e) {
   const b = e.target.closest("button");
   if (!b || sheetGroup == null) return;
   if (b.dataset.closesheet !== undefined) { hideSheet(); return; }
+
+  if (sheetGroup === "__act__") {
+    // street/actor/act/size buttons are inside the sheet, outside #view-hand,
+    // so route them through the shared hand-button dispatcher.
+    if (handActionClick(b)) return;
+    return;
+  }
 
   if (sheetGroup === "__seat__") {
     if (b.dataset.assignHero !== undefined) {

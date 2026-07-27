@@ -603,3 +603,19 @@ textarea.noteedit { margin-bottom: 0; }
 .chip.on.sscale { background: #1a2b3d; color: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 
 @media (min-width: 460px) { .cardgrid button { font-size: 13px; } }
+
+/* Action trigger — opens the street/actor/action sheet (Option 1 wizard for #11). */
+.actopen {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--accent), var(--accent2)); color: #0a0d12;
+  font-size: 15px; font-weight: 700; box-shadow: 0 1px 6px rgba(91,156,255,.3);
+  cursor: pointer;
+}
+.actopen:active { transform: scale(.99); }
+.actopen-hd { font-size: 11px; letter-spacing: .06em; opacity: .8; background: rgba(0,0,0,.15); padding: 2px 7px; border-radius: 6px; }
+.actopen-mid { text-align: left; }
+.actopen-tl { font-size: 12px; opacity: .8; font-weight: 600; text-align: right; }
+.actlist { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.4; word-break: break-word; }
+.actionpad-sheet { padding-top: 4px; }
+.actionpad-sheet .actgrid { margin-bottom: 8px; }
