@@ -36,6 +36,9 @@ const TENDENCY_TAGS = [
   { id: "limps-monster-ws",     cat: "preflop",  label: "Limps monster wS" },
   { id: "limps-monster-ns",     cat: "preflop",  label: "Limps monster nS" },
   { id: "attacks-limps",        cat: "preflop",  label: "Attacks limps" },
+  { id: "attack-limped-blinds", cat: "preflop",  label: "Attack limped blinds" },
+  { id: "ep-open-weak",         cat: "preflop",  label: "EP Open weak" },
+  { id: "limps-are-weak",       cat: "preflop",  label: "Limps are weak" },
   // preflop — limping / squid
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
@@ -46,6 +49,7 @@ const TENDENCY_TAGS = [
   // preflop — 3bet / 4bet (3bet Linear/Polar is a grouped bubble row)
   { id: "3bet-linear",          cat: "preflop",  label: "3bet linear" },
   { id: "3bet-polar",           cat: "preflop",  label: "3bet polar" },
+  { id: "3bet-bluff",           cat: "preflop",  label: "3bet bluff" },
   { id: "3bets-light",          cat: "preflop",  label: "3bets light" },
   { id: "3bet-tight",           cat: "preflop",  label: "3bet tight" },
   { id: "can-4bet-light",       cat: "preflop",  label: "Can 4bet light" },
@@ -76,6 +80,7 @@ const TENDENCY_TAGS = [
   // postflop — bluffing
   { id: "bluffs-rivers",        cat: "postflop", label: "Bluffs rivers" },       // yes = over-bluffs river, no = big bets = nuts
   // postflop — cbet / float (merged: over-cbet no = overfolds; floats-wide no = fit-or-fold)
+  { id: "pfr-oop-cbet",         cat: "postflop", label: "PFR OOP cbet" },
   { id: "over-cbet",            cat: "postflop", label: "Over cbet" },
   { id: "floats-wide",          cat: "postflop", label: "Floats wide" },
   // postflop — barrel / lead / limped-pot behaviour
@@ -125,6 +130,12 @@ const EXPLOIT_RULES = {
   "limp-caller":     { yes: "Iso big and value-bet relentlessly — he limp-calls then plays fit-or-fold." },
   "3bet-linear":     { yes: "His 3-bet range is linear/value-heavy — fold your bluffs and don't spew; only continue with real hands." },
   "3bet-polar":      { yes: "His 3-bets are polar (nuts or air) — 4-bet-bluff and flat wider; a big chunk is bluff." },
+  "3bet-bluff":      { yes: "His 3-bet range is mostly bluffs — 4-bet-jam wider for value, don't over-fold to his 3-bets." },
+  "limps-are-weak":  { yes: "His limp range is weak — iso-raise big and barrel; he limps then folds to pressure." },
+  "ep-open-weak":    { yes: "His EP opens are weak — 3-bet wider IP, flat and outplay OOP; his opening range is capped." },
+  "attack-limped-blinds": { yes: "He attacks limped pots from the blinds — expect a raise/lead when he's in the SB/BB; don't limp behind lightly." },
+  "pfr-oop-cbet":    { yes: "As the OOP PFR he c-bets too much — float wide and take it away on the turn.",
+                        no:  "As the OOP PFR he under-cbets — his checks are capped; stab when he checks." },
   "over-folds-3bet": { yes: "3-bet him light for the fold — he over-folds to 3-bets.", no: "Don't bluff-3bet — he doesn't fold. 3-bet for value only." },
   "3bets-light":     { yes: "Flat and 4-bet wider vs his 3-bets — they're light." },
   "3bet-tight":      { yes: "His 3-bets are tight/value — fold marginal opens IP, only continue with hands that beat his value range." },

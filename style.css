@@ -534,6 +534,16 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
 }
 
+/* ---- read confidence chip (#13) ---- */
+.readunit { display: inline-flex; align-items: center; gap: 3px; margin: 0 2px 2px 0; }
+.accbtn {
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 999px; min-width: 22px; height: 22px; padding: 0 6px;
+  font-size: 11px; font-weight: 700; cursor: pointer; line-height: 1;
+}
+.accbtn.off { opacity: .45; }
+.scaleread .accbtn { margin-left: 4px; }
+
 /* ---- lineup sheet drag reorder ---- */
 .lineitem .draghandle {
   color: var(--muted); font-size: 18px; padding: 0 6px; cursor: grab;

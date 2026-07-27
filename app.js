@@ -73,7 +73,7 @@ const readChip = (id, state) => {
 };
 /* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
 const READ_GROUPS = [
-  { cat: "preflop",  label: "3bet",       bubbles: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"]] },
+  { cat: "preflop",  label: "3bet",       bubbles: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"], ["3bet-bluff", "Bluff"]] },
   { cat: "preflop",  label: "Limps monster", bubbles: [["limps-monster-ws", "wS"], ["limps-monster-ns", "nS"]] },
   { cat: "postflop", label: "Station",    bubbles: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
   { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
@@ -81,7 +81,7 @@ const READ_GROUPS = [
   { cat: "postflop", label: "Bluff till", bubbles: [["bluff-till-f", "F"], ["bluff-till-t", "T"], ["bluff-till-r", "R"]] },
   { cat: "postflop", label: "Bluff raise", bubbles: [["bluff-raise-f", "F"], ["bluff-raise-t", "T"], ["bluff-raise-r", "R"]] },
   { cat: "postflop", label: "Bluff XT",   bubbles: [["bluff-xt-f", "F"], ["bluff-xt-t", "T"], ["bluff-xt-r", "R"]] },
-  { cat: "postflop", label: "Range",      bubbles: [["merged", "Merged"], ["polar", "Polar"], ["bad-polar", "Bad pol"]] },
+  { cat: "postflop", label: "Range",      bubbles: [["merged", "Merged"], ["polar", "Polar"]] },
 ];
 const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
 
@@ -385,13 +385,25 @@ const readIsActive = (id, state) => {
   if (state == null || state === "") return false;
   return isScaleRead(id) ? Number(state) > 0 : true;
 };
+/* Lazy-init the per-opponent accuracy map. Accuracy is 0..5; treated as
+   "not set" (= show) when undefined so new opponents don't hide their reads. */
+const oppAccuracy = (o) => {
+  if (!o.readAccuracy || typeof o.readAccuracy !== "object") o.readAccuracy = {};
+  return o.readAccuracy;
+};
+/* A read is rendered if it is active AND its confidence is > 0 (or unset). */
+const readIsShown = (o, id) => {
+  if (!readIsActive(id, oppReads(o)[id])) return false;
+  const acc = oppAccuracy(o)[id];
+  return acc == null || acc > 0;
+};
 
 /* Render one featured item as a compact chip (read chip, or abbreviated exploit
    chip whose full text shows on hover); "" if the item no longer exists. */
 function featuredChip(o, it) {
   if (it.type === "read") {
-    const state = oppReads(o)[it.id];
-    return readIsActive(it.id, state) ? readChip(it.id, state) : "";
+    if (!readIsShown(o, it.id)) return "";
+    return readChip(it.id, oppReads(o)[it.id]);
   }
   const e = (o.exploits || []).find((x) => x.id === it.id);
   if (!e) return "";
@@ -412,7 +424,7 @@ function oppRowHTML(o, st) {
   const feat = featuredItems(o);
   let chips = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("");
   if (!chips) chips = Object.entries(oppReads(o))
-    .filter(([id, s]) => readIsActive(id, s))
+    .filter(([id]) => readIsShown(o, id))
     .slice(0, 3).map(([id, s]) => readChip(id, s)).join("");
   // Global toggle: append every exploit as its own chip so Phil can scan a full
   // playbook straight from the list without opening the detail view.
@@ -917,6 +929,13 @@ function renderOppDetail(id) {
   $("od-e-physical").value = o.physical || "";
 
   const reads = oppReads(o);
+  const accuracy = oppAccuracy(o);
+  const accChip = (id, on) => {
+    if (!on) return "";
+    const a = accuracy[id] == null ? 3 : accuracy[id];
+    return `<button class="accbtn${a === 0 ? " off" : ""}" data-acc="${id}"
+              title="Confidence 0-5 (tap to cycle)">${a}</button>`;
+  };
   const readBtn = (id, lbl, bubble) => {
     const st = reads[id];
     if (isScaleRead(id)) {
@@ -926,13 +945,15 @@ function renderOppDetail(id) {
         <div class="scaletop">
           <span class="scalelbl">${esc(lbl)}</span>
           <span class="scaleval">${active ? v + " · " + scaleBucket(v) : "off"}</span>
+          ${accChip(id, active)}
           ${active ? `<button class="chip mini scaleclr" data-scaleclear="${id}" title="Clear">✕</button>` : ""}
         </div>
         <input type="range" min="0" max="100" step="1" value="${v}" data-scaleinput="${id}">
       </div>`;
     }
     const base = bubble ? "bubble" : "chip mini";
-    return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
+    const btn = `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
+    return `<span class="readunit">${btn}${accChip(id, !!st)}</span>`;
   };
   $("od-tags").innerHTML = TAG_CATS.map((cat) => {
     const groups = READ_GROUPS.filter((g) => g.cat === cat).map((g) =>
@@ -1533,6 +1554,9 @@ function pickSuits(hs, wants) { /* pick two suit letters honoring 'o'/'s'/monoto
 function parseNoteToDraft(text, opponentId) {
   const d = newDraft();
   d.villains = [{ opponentId, pos: null, cards: [null, null] }];
+  // Expand "V{n}L" -> "vs {n} limpers" so the shorthand reads clean in
+  // hand summaries and stays parseable by the same downstream tokens.
+  if (text) text = text.replace(/\bV(\d+)L\b/gi, (_, n) => `vs ${n} limpers`);
   d.note = text;
   if (!text) return d;
   // squid
@@ -2136,8 +2160,18 @@ function renderHandEntry() {
   });
   $("he-cards").innerHTML = ch;
 
-  // squid pickers (compact buttons at top) — number chosen in a scroll sheet
-  $("he-squidhave-btn").innerHTML = `🦑<i>${d.squidHave === "" ? "–" : d.squidHave}</i>`;
+  // squid pickers (compact buttons at top) — number chosen in a scroll sheet.
+  // When a lineup is active, prefer showing the live "X/Y" — X = villains in
+  // the lineup tagged force-squid, Y = total villains — instead of the manual
+  // per-hand pick, so the ratio updates as reads change (#5).
+  const squidLabel = () => {
+    if (!lineupActive()) return d.squidHave === "" ? "–" : d.squidHave;
+    const villains = tableLineup.filter((id) => id !== "hero");
+    const y = villains.length;
+    const x = villains.filter((id) => oppById(id)?.reads?.["force-squid"]).length;
+    return `${x}/${y}`;
+  };
+  $("he-squidhave-btn").innerHTML = `🦑<i>${squidLabel()}</i>`;
   $("he-squidleft-btn").innerHTML = `Left<i>${d.squidLeft === "" ? "–" : d.squidLeft}</i>`;
   $("he-squidhave-btn").classList.toggle("set", d.squidHave !== "");
   $("he-squidleft-btn").classList.toggle("set", d.squidLeft !== "");
@@ -2794,10 +2828,25 @@ function bindStatic() {
     renderOppDetail(intoId);
   });
   $("od-tags").onclick = async (e) => {
+    // Accuracy chip: cycle 0 → 1 → 2 → 3 → 4 → 5 → 0.
+    const acc = e.target.closest("[data-acc]");
+    if (acc) {
+      const o = oppById(curOppId);
+      const id = acc.dataset.acc;
+      const map = oppAccuracy(o);
+      const cur = map[id] == null ? 3 : map[id];
+      map[id] = (cur + 1) % 6;
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+      return;
+    }
     const clr = e.target.closest("[data-scaleclear]");
     if (clr) {
       const o = oppById(curOppId);
-      delete oppReads(o)[clr.dataset.scaleclear];
+      const id = clr.dataset.scaleclear;
+      delete oppReads(o)[id];
+      delete oppAccuracy(o)[id];
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
@@ -2809,7 +2858,14 @@ function bindStatic() {
     const reads = oppReads(o);
     const id = b.dataset.tag;
     const ns = nextReadState(id, reads[id]);
-    if (ns) reads[id] = ns; else delete reads[id];
+    if (ns) {
+      reads[id] = ns;
+      const map = oppAccuracy(o);
+      if (map[id] == null) map[id] = 3;  // default confidence when first set
+    } else {
+      delete reads[id];
+      delete oppAccuracy(o)[id];
+    }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
@@ -2821,6 +2877,7 @@ function bindStatic() {
     const id = s.dataset.scaleinput;
     const v = Math.max(0, Math.min(100, Number(s.value) || 0));
     oppReads(o)[id] = v;
+    if (v > 0 && oppAccuracy(o)[id] == null) oppAccuracy(o)[id] = 3;
     o.updatedAt = Date.now();
     // Cheap live update: just refresh the visible readout, don't full-rerender on every drag tick.
     const row = s.closest(".scaleread");
