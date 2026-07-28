@@ -2698,6 +2698,8 @@ function sheetClick(e) {
     const nextEmpty = slots.findIndex((s) => !s.arr[s.i]);
     if (nextEmpty >= 0) openGroupSheet(sheetGroup, nextEmpty);      // keep going within the group
     else if (emptyBefore === 0) openGroupSheet(sheetGroup, sheetActive); // replaced in a full group — stay
+    else if (sheetGroup === "flop" || sheetGroup === "turn" || sheetGroup === "river")
+      openActionSheet();                                           // chain into action pad on the new street
     else hideSheet();                                              // just completed the group
   } else if (b.dataset.clearcard !== undefined) {
     mutate(() => { const s = groupSlots(sheetGroup)[sheetActive]; s.arr[s.i] = null; });
