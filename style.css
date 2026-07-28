@@ -208,6 +208,16 @@ textarea.noteedit { margin-bottom: 0; }
 .adjbtn.on { background: #e0a63a; color: #0a0d12; border-color: #e0a63a; }
 .noteitem.pinned { border-color: var(--accent); }
 .pinbtn.on { background: var(--accent); color: #0a0d12; border-color: var(--accent); }
+.confrow { display: inline-flex; gap: 4px; margin: 6px 0 4px; }
+.confbtn {
+  min-width: 26px; font-size: 12px; font-weight: 700; padding: 3px 0;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+  border-radius: 6px; cursor: pointer;
+}
+.confbtn.on { background: var(--accent); color: #0a0d12; border-color: var(--accent); }
+.readsub { margin: 6px 0 8px; }
+.readsub .rslabel { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 3px; }
+.chiprow.tight { gap: 4px; }
 
 /* front-page card: preview panel + abbreviated exploit chips */
 .cardpanel {

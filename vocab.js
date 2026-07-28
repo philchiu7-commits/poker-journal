@@ -109,6 +109,32 @@ const TENDENCY_TAGS = [
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
+/* Sub-cluster single-read chips within each category so related reads live
+   in one row instead of a flat wall of chips. Any tag not listed drops into
+   an "Other" row at the end of its category. Grouped bubbles (READ_GROUPS)
+   and scale reads render separately and are not covered here. */
+const READ_SUBCATS = {
+  preflop: [
+    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "limps-are-weak", "attack-limped-blinds"] },
+    { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
+    { label: "vs Limp",       ids: ["limp-caller", "lp-limp-weak", "wide-cc"] },
+    { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
+  ],
+  postflop: [
+    { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off", "sp-dis-board"] },
+    { label: "Leads",         ids: ["lead-limped", "check-oop-limped"] },
+    { label: "Range shape",   ids: ["oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers"] },
+  ],
+  sizing: [
+    { label: "Preflop sizing",  ids: ["preflop-sizing", "3bet-sizing"] },
+    { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts"] },
+  ],
+  live: [
+    { label: "Physical / timing", ids: ["timing-tells", "snap-call-weak", "talks-when-strong"] },
+    { label: "Mental state",      ids: ["tilts", "bluffcatch-losing", "force-squid"] },
+  ],
+};
+
 /* Auto-suggested exploits: map a set read to a concrete counter-strategy line.
    Keyed by tag id → { yes, no }. "yes" (green) = tendency confirmed present;
    "no" (red) = confirmed absent (only where the absence is itself exploitable).

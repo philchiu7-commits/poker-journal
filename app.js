@@ -651,7 +651,9 @@ function openGroupAddSheet(group) {
 /* Squid count picker: a scrollable column of numbers (press-and-select). */
 function openSquidPicker(which) {
   const isHave = which === "have";
-  const max = isHave ? 11 : 12;
+  // Cap the picker at n+4 where n is the current table size — a 6-max table
+  // can never have more than 10 squid (5 each). "have" ≤ n+4, "left" ≤ n+4.
+  const max = effectiveSeats() + 4;
   const cur = isHave ? draft.squidHave : draft.squidLeft;
   const title = isHave ? "🦑 Squid — have" : "🦑 Squid — left";
   const nums = ["", ...Array.from({ length: max + 1 }, (_, n) => String(n))];
@@ -993,11 +995,23 @@ function renderOppDetail(id) {
     const groups = READ_GROUPS.filter((g) => g.cat === cat).map((g) =>
       `<div class="readgroup"><span class="rglabel">${esc(g.label)}</span><div class="bubbles">` +
       g.bubbles.map(([id, lbl]) => readBtn(id, lbl, true)).join("") + `</div></div>`).join("");
-    const singles = TENDENCY_TAGS.filter((t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id))
+    // Sub-cluster the flat single reads by theme so related tags sit together.
+    // Anything not listed falls into "Other" at the end.
+    const subgroups = READ_SUBCATS[cat] || [];
+    const usedIds = new Set(subgroups.flatMap((s) => s.ids));
+    const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id);
+    const chipFor = (id) => { const t = TAG_BY_ID[id]; return t && isSingle(t) ? readBtn(t.id, t.label, false) : ""; };
+    const subHTML = subgroups.map((sg) => {
+      const chips = sg.ids.map(chipFor).filter(Boolean).join("");
+      return chips ? `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="chiprow tight">${chips}</div></div>` : "";
+    }).join("");
+    const otherSingles = TENDENCY_TAGS.filter((t) => isSingle(t) && !usedIds.has(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
     const scales = TENDENCY_TAGS.filter((t) => t.cat === cat && isScaleRead(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
-    return `<div class="tagcat">${cat}</div>${groups}` + (singles ? `<div class="chiprow">${singles}</div>` : "") + scales;
+    return `<div class="tagcat">${cat}</div>${groups}${subHTML}` +
+      (otherSingles ? `<div class="readsub"><span class="rslabel">Other</span><div class="chiprow tight">${otherSingles}</div></div>` : "") +
+      scales;
   }).join("");
 
   // FEATURE 1 — reads inferred from this opponent's logged hands
@@ -1058,6 +1072,9 @@ function renderOppDetail(id) {
           </div></div>`
       : `<div class="noteitem${n.adj ? " adj" : ""}${pinned ? " pinned" : ""}" data-exp="${n.id}">
           <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}</div>
+          <div class="confrow" title="Confidence 0–5 that this exploit works on this player">
+            ${[0,1,2,3,4,5].map((v) => `<button class="confbtn${(n.conf ?? 3) === v ? " on" : ""}" data-expconf="${v}">${v}</button>`).join("")}
+          </div>
           <div class="noterowbtns">
             <button class="chip mini pinbtn${pinned ? " on" : ""}" data-exppin title="Show on the opponent list card">${pinned ? "★ Pinned" : "☆ Pin"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
@@ -3071,6 +3088,11 @@ function bindStatic() {
       const n = (o.exploits || []).find((x) => x.id === id);   // show on the opponent list card
       if (n) { n.pinned = !n.pinned; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-expconf]")) {
+      const n = (o.exploits || []).find((x) => x.id === id);   // 0-5 confidence this exploit works on this villain
+      const v = Number(e.target.closest("[data-expconf]").dataset.expconf);
+      if (n && Number.isFinite(v)) { n.conf = v; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;
       o.exploits = (o.exploits || []).filter((n) => n.id !== id);
@@ -3194,6 +3216,9 @@ function setBlind(key, val) {
   blindsDefault[key] = val;
   metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   metaSet("defaultBlinds", { ...blindsDefault });
+  // Straddle changes the ring (adds/removes STD) — re-render the position
+  // pickers and felt so STD appears/disappears immediately.
+  if (key === "std") renderHandEntry();
 }
 
 async function requestDurableStorage() {
