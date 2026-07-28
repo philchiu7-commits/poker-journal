@@ -20,7 +20,6 @@ let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSiz
 const DEFAULT_OPEN_BB = [8, 10, 12, 15];   // standard live-open sizes, in big blinds
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
 let pendingReadWrite = null;      // scale-slider write waiting on the debounce timer
-let showAllExploitsOnList = false;   // global toggle: append every exploit onto opponent rows
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
@@ -464,17 +463,16 @@ function oppRowHTML(o, st) {
   if (!chips) chips = Object.entries(oppReads(o))
     .filter(([id]) => readIsShown(o, id))
     .slice(0, 3).map(([id, s]) => readChip(id, s)).join("");
-  // Global toggle: append every exploit as its own chip so Phil can scan a full
-  // playbook straight from the list without opening the detail view.
-  if (showAllExploitsOnList) {
-    const featuredIds = new Set(feat.filter((it) => it.type === "exploit").map((it) => it.id));
-    const extra = (o.exploits || []).filter((e) => !featuredIds.has(e.id))
-      .map((e) => {
-        const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
-        return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
-      }).join("");
-    chips += extra;
-  }
+  // Pinned exploits appear as chips on the list card. Phil picks which ones
+  // in the opponent detail (star toggle) so the front card stays focused on
+  // the reads that matter for this villain.
+  const featuredIds = new Set(feat.filter((it) => it.type === "exploit").map((it) => it.id));
+  const extra = (o.exploits || []).filter((e) => e.pinned && !featuredIds.has(e.id))
+    .map((e) => {
+      const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
+      return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
+    }).join("");
+  chips += extra;
   const showChips = !oppEditMode && chips;
   const handle = oppEditMode ? `<span class="draghandle" data-drag="${o.id}">⠿</span>` : "";
   const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
@@ -1009,7 +1007,7 @@ function renderOppDetail(id) {
   const showD = showDerivedReads[id];
   const dHTML = dReads.length
     ? `<div class="sugghead" data-toggle-dreads>
-        <span>From logged hands (${dReads.length}) · small sample</span>
+        <span>From logged hands · small sample</span>
         <span class="toggle-arrow">${showD ? "▼" : "▶"}</span>
       </div>` + (showD ? dReads.map((s) =>
         `<div class="suggitem" data-dtag="${esc(s.tagId)}" data-dstate="${esc(s.state || "yes")}" data-dkey="${esc(s.key)}">
@@ -1050,10 +1048,9 @@ function renderOppDetail(id) {
   const scored = exps.filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc);
   const topId = scored.length ? scored[0].e.id : null;
   $("od-exploits").innerHTML = exps.map(({ e: n }) => {
-    const wins = (n.wins || []).length;
-    const tally = wins ? `<span class="wintally" title="Worked ${wins}×">👍 ${wins}</span>` : "";
     const topBadge = n.id === topId ? `<span class="topbadge">top</span>` : "";
     const adjBadge = n.adj ? `<span class="adjbadge" title="This player adjusts to this exploit">⚠︎ ADJ</span>` : "";
+    const pinned = !!n.pinned;
     return n.id === editExploitId
       ? `<div class="noteitem" data-exp="${n.id}">
           <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
@@ -1061,11 +1058,11 @@ function renderOppDetail(id) {
             <button class="chip mini" data-expcancel>Cancel</button>
             <button class="chip mini on sgreen" data-expsave>Save</button>
           </div></div>`
-      : `<div class="noteitem${n.adj ? " adj" : ""}" data-exp="${n.id}">
-          <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}${tally}</div>
+      : `<div class="noteitem${n.adj ? " adj" : ""}${pinned ? " pinned" : ""}" data-exp="${n.id}">
+          <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}</div>
           <div class="noterowbtns">
+            <button class="chip mini pinbtn${pinned ? " on" : ""}" data-exppin title="Show on the opponent list card">${pinned ? "★ Pinned" : "☆ Pin"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
-            <button class="chip mini" data-expwin title="Mark this exploit as having worked">👍 Worked</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
           </div></div>`;
@@ -1363,30 +1360,43 @@ function newDraft() {
     sb: blindsDefault.sb, bb: blindsDefault.bb, std: blindsDefault.std,
     squidHave: "", squidLeft: "",
     mode: "chips", focusPos: null,
-    btnPos: null, assignBtn: false,
+    btnPos: null, assignBtn: false, btnRot: 0,
   };
 }
 // No user input yet — safe to reseed seats from a lineup change.
 const draftIsFresh = () =>
   !draft.actions.length && !draft.board.some(Boolean) && !draft.heroCards.some(Boolean);
 
-/* Effective BTN position: explicit if set, else derived — last occupied seat in
-   the current ring, else "BN" if it's in the ring, else the ring's last seat. */
+/* Effective BTN position: whoever currently sits at the "BN" (button) label.
+   Explicit btnPos wins (from the Assign flow). Rotations move players' pos
+   labels around them, so BN naturally points at whoever holds the button now. */
 function effectiveBtnPos() {
   if (draft.btnPos) return draft.btnPos;
   const ring = seatRing();
-  const seated = ring.filter((p) => seatOccupant(p).type !== "empty");
-  if (seated.length) return seated[seated.length - 1];
   return ring.includes("BN") ? "BN" : ring[ring.length - 1];
 }
+/* Rotating BTN keeps every player in their physical slot: we shift the
+   position labels around them so a player who was at SB now has the button,
+   the old BB is now SB, and so on. Applied via draft.btnRot (seatRing reads
+   it) plus a remap of every player's stored pos so the felt still finds
+   them at their old slot under the new label. */
 function moveBtn(dir) {
-  const ring = seatRing();
-  if (!ring.length) return;
-  const cur = ring.indexOf(effectiveBtnPos());
-  const idx = cur < 0 ? 0 : cur;
-  const next = dir === "cw" ? (idx + 1) % ring.length
-                            : (idx - 1 + ring.length) % ring.length;
-  draft.btnPos = ring[next];
+  const base = baseSeatRing();
+  if (!base.length) return;
+  const oldRot = draft.btnRot || 0;
+  const shift = dir === "cw" ? 1 : -1;
+  const newRot = (((oldRot + shift) % base.length) + base.length) % base.length;
+  const oldRing = rotateRing(base, oldRot);
+  const newRing = rotateRing(base, newRot);
+  const remap = (p) => {
+    const i = oldRing.indexOf(p);
+    return i < 0 ? p : newRing[i];
+  };
+  if (draft.heroPos) draft.heroPos = remap(draft.heroPos);
+  for (const v of draft.villains) if (v.pos) v.pos = remap(v.pos);
+  // Don't touch draft.btnPos — the button is always the "BN" label, and the
+  // remap already moved that label onto whoever now holds the button.
+  draft.btnRot = newRot;
   draft.assignBtn = false;
 }
 
@@ -1799,16 +1809,24 @@ const SEAT_RINGS = {
    or 9 when no lineup is set. Lineup is the source of truth for table size. */
 const effectiveSeats = () =>
   Math.max(4, Math.min(9, tableLineup.length || lineupSeats || 9));
-/* When a straddle is posted the under-the-gun seat becomes STD. Rings already
-   include STD at 7+ seats; at 4–6-max we swap the leftmost UTG label for STD
-   so the picker and action-order both see it. */
-const seatRing = () => {
+/* Base ring for the current table size + straddle. Straddle: at 4–6-max we
+   swap the leftmost UTG label for STD (7+ rings already include STD). */
+const baseSeatRing = () => {
   const base = SEAT_RINGS[effectiveSeats()] || SEAT_RINGS[9];
   if (!Number(draft.std) || base.includes("STD")) return base;
   const r = base.slice();
   r[2] = "STD";     // index 0=SB, 1=BB, 2=leftmost UTG
   return r;
 };
+/* Rotate a ring right by `rot` (each label shifts to the next slot CW).
+   BTN rotation reassigns which position label sits at each physical slot
+   without moving the players — see moveBtn(). */
+const rotateRing = (ring, rot) => {
+  const n = ring.length;
+  const k = (((rot | 0) % n) + n) % n;
+  return k ? ring.slice(n - k).concat(ring.slice(0, n - k)) : ring;
+};
+const seatRing = () => rotateRing(baseSeatRing(), draft.btnRot || 0);
 function deriveLineup(anchor) {
   if (!lineupActive()) return;
   const ring = seatRing();
@@ -2800,15 +2818,6 @@ function bindStatic() {
   $("opp-search").oninput = renderOpponents;
   $("opp-edit").onclick = () => { oppEditMode = !oppEditMode; renderOpponents(); };
   $("opp-add").onclick = () => { $("opp-new").classList.toggle("hidden"); $("opp-new-name").focus(); };
-  const showExpBox = $("opp-showall-exp");
-  if (showExpBox) {
-    showExpBox.checked = showAllExploitsOnList;
-    showExpBox.onchange = async () => {
-      showAllExploitsOnList = showExpBox.checked;
-      await metaSet("showAllExploitsOnList", showAllExploitsOnList);
-      renderOpponents();
-    };
-  }
   $("opp-new-save").onclick = async () => {
     const name = $("opp-new-name").value.trim();
     if (!name) return;
@@ -3060,9 +3069,9 @@ function bindStatic() {
       const n = (o.exploits || []).find((x) => x.id === id);   // villain adjusts to this exploit
       if (n) { n.adj = !n.adj; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
-    } else if (e.target.closest("[data-expwin]")) {
-      const n = (o.exploits || []).find((x) => x.id === id);   // log that it worked (recency-weighted)
-      if (n) { (n.wins = n.wins || []).push(Date.now()); o.updatedAt = Date.now(); await dbPut("opponents", o); }
+    } else if (e.target.closest("[data-exppin]")) {
+      const n = (o.exploits || []).find((x) => x.id === id);   // show on the opponent list card
+      if (n) { n.pinned = !n.pinned; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;
@@ -3207,7 +3216,6 @@ async function boot() {
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
   lineupSeats = (await metaGet("lineupSeats")) || 9;
-  showAllExploitsOnList = !!(await metaGet("showAllExploitsOnList"));
   openSizeStats = (await metaGet("openSizeStats")) || {};
   // migrate old {bb:{size:count}} → recency picks {bb:[{size,ts}]}
   for (const bb of Object.keys(openSizeStats)) {
