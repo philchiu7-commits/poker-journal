@@ -245,32 +245,71 @@ const EXPLOIT_RULES = {
 const COMPOUND_EXPLOIT_RULES = [
   { id: "wide-open-squeeze-target",
     label: "Wide opener + folds to 3-bets",
+    pill: "Squeeze bait", tone: "purple",
     keys: ["open-too-wide:yes", "over-folds-3bet:yes"],
     text: "Squeeze target. 3-bet-bluff him wider IP and from the blinds, especially with blockers. He opens wide, folds when re-raised." },
   { id: "one-and-done-cbetter",
     label: "One-and-done cbetter",
+    pill: "One-and-done", tone: "amber",
     keys: ["over-cbet:yes", "barrels-off:no"],
     text: "Fires reflex cbet then quits. Float ANY flop, stab turn when he checks with any equity, only fold to turn barrels." },
   { id: "wide-caller-sticky-flop",
     label: "Wide caller + sticky flop",
+    pill: "Sticky caller", tone: "red",
     keys: ["wide-cc:yes", "station-f:yes"],
     text: "Cold-calls wide preflop then calls flop with any pair/draw. Cbet SMALL on dry boards, barrel scare turns, don't triple-barrel." },
   { id: "two-street-station",
     label: "Two-street calling station",
+    pill: "Station F+T", tone: "red",
     keys: ["station-f:yes", "station-t:yes"],
     text: "Calls flop AND turn light. Value-bet flop and turn thin with pair+, NEVER double-barrel bluff. Size up river for value." },
   { id: "three-street-station",
     label: "Three-street calling station",
+    pill: "3-street stn", tone: "red",
     keys: ["station-f:yes", "station-t:yes", "station-r:yes"],
     text: "Sticky all three streets. Never bluff. Value-bet every street with any made hand, size up all three, weak top pair is a shove line." },
   { id: "frequent-bluff-raiser",
     label: "Frequent bluff-raiser (flop + turn)",
+    pill: "Bluff-raiser", tone: "teal",
     keys: ["bluff-raise-f:yes", "bluff-raise-t:yes"],
     text: "Raises as a bluff on flop AND turn. Don't fold to raises — call down thin, re-raise mediums for value. Only respect river raises." },
   { id: "sizing-is-a-tell",
     label: "Sizing tells (both directions)",
+    pill: "Sizing tell", tone: "blue",
     keys: ["overbets-nuts:yes", "small-with-weak:yes"],
     text: "Both sizes are reliable. Overbets = value, small = weak. Fold bluff-catchers to big sizings, raise smalls as bluffs, call mediums light." },
+];
+
+/* Single-read pill fallback — priority list scanned in order when no compound
+   rule fires. First matching {id, state} → its pill/tone appears on the felt.
+   Kept SHORT (≤14 chars) so the pill fits under a 78px seat card. Only reads
+   with a clear, exploitable direction are included; ambiguous ones get no
+   pill rather than a misleading one. Tone maps to a colour class in style.css
+   (red=sticky, amber=passive/weak, teal=aggro-bluff, purple=target,
+   blue=informational, gray=nit/tight). */
+const PILL_READS = [
+  { id: "station-r",       state: "yes", pill: "R station",     tone: "red"    },
+  { id: "station-t",       state: "yes", pill: "T station",     tone: "red"    },
+  { id: "station-f",       state: "yes", pill: "F station",     tone: "red"    },
+  { id: "wide-cc",         state: "yes", pill: "Wide caller",   tone: "red"    },
+  { id: "limp-caller",     state: "yes", pill: "Limp-caller",   tone: "red"    },
+  { id: "over-folds-3bet", state: "yes", pill: "Overfolds 3B",  tone: "purple" },
+  { id: "open-too-wide",   state: "yes", pill: "Wide opener",   tone: "purple" },
+  { id: "barrels-off",     state: "no",  pill: "Gives up turn", tone: "amber"  },
+  { id: "floats-wide",     state: "no",  pill: "Fit-or-fold",   tone: "amber"  },
+  { id: "over-cbet",       state: "yes", pill: "Auto-cbetter",  tone: "amber"  },
+  { id: "bluff-raise-t",   state: "yes", pill: "Bluff-raiser",  tone: "teal"   },
+  { id: "bluff-raise-f",   state: "yes", pill: "Bluff-raiser",  tone: "teal"   },
+  { id: "bluff-raise-r",   state: "yes", pill: "River-raiser",  tone: "teal"   },
+  { id: "3bets-light",     state: "yes", pill: "Light 3-bettor",tone: "teal"   },
+  { id: "bluffs-rivers",   state: "yes", pill: "River bluffer", tone: "teal"   },
+  { id: "barrels-off",     state: "yes", pill: "Barrels off",   tone: "teal"   },
+  { id: "3bet-tight",      state: "yes", pill: "Nit 3-bet",     tone: "gray"   },
+  { id: "open-too-wide",   state: "no",  pill: "Tight opener",  tone: "gray"   },
+  { id: "overbets-nuts",   state: "yes", pill: "Big = value",   tone: "blue"   },
+  { id: "small-with-weak", state: "yes", pill: "Small = weak",  tone: "blue"   },
+  { id: "tilts",           state: "yes", pill: "Tilter",        tone: "purple" },
+  { id: "force-squid",     state: "yes", pill: "Squid pusher",  tone: "purple" },
 ];
 
 /* Reusable exploit archetypes — a shared library added onto any opponent from

@@ -85,6 +85,28 @@ const READ_GROUPS = [
 ];
 const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
 
+/* Felt villain-pill engine tag — one-word read summary shown on each seated
+   villain's card. Compound rules win over singles (higher signal), and inside
+   singles the PILL_READS priority list decides. Returns null → no pill row. */
+function pillTag(o) {
+  if (!o) return null;
+  const reads = oppReads(o);
+  for (const rule of COMPOUND_EXPLOIT_RULES) {
+    if (!rule.pill) continue;
+    const hit = rule.keys.every((k) => {
+      const [tId, tState] = k.split(":");
+      const cur = reads[tId];
+      return cur && readBase(cur) === tState;
+    });
+    if (hit) return { text: rule.pill, tone: rule.tone || "gray" };
+  }
+  for (const p of PILL_READS) {
+    const cur = reads[p.id];
+    if (cur && readBase(cur) === p.state) return { text: p.pill, tone: p.tone || "gray" };
+  }
+  return null;
+}
+
 /* Turn the opponent's set reads into concrete exploit suggestions (EXPLOIT_RULES),
    minus any Phil has dismissed or already accepted (keys in o.exploitDismissed). */
 function suggestedExploits(o) {
@@ -1422,8 +1444,8 @@ function renderTable() {
       cls += " vill";
       const v = d.villains[occ.idx];
       const o = oppById(v.opponentId);
-      const rk = o ? Object.keys(oppReads(o))[0] : null;
-      const tag = rk ? `<span class="ttag">${esc(TAG_BY_ID[rk]?.label || rk)}</span>` : "";
+      const pt = pillTag(o);
+      const tag = pt ? `<span class="ttag t-${esc(pt.tone)}">${esc(pt.text)}</span>` : "";
       inner = `<div class="tpill"><span class="tpos">${pos}</span><span class="tnm">${esc(o?.name || "?")}</span>${stackStr ? `<span class="tstack">${stackStr}</span>` : ""}</div>${dBadge}${tag}`;
     } else {
       cls += " empty";

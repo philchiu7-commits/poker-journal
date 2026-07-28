@@ -354,7 +354,16 @@ textarea.noteedit { margin-bottom: 0; }
   box-shadow: 0 1px 3px rgba(0,0,0,.5);
 }
 .tseat { position: absolute; }
-.ttag { display: inline-block; margin-top: 2px; font-size: 9px; color: var(--accent); background: #1c2c47; border-radius: 6px; padding: 0 5px; }
+.ttag { display: inline-block; margin-top: 2px; font-size: 9px; line-height: 1.4;
+  color: var(--accent); background: #1c2c47; border: 1px solid transparent;
+  border-radius: 6px; padding: 0 5px; max-width: 78px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ttag.t-red    { color: #ffb3b3; background: #3a1414; border-color: #7a2323; }
+.ttag.t-amber  { color: #ffd48a; background: #3a2a10; border-color: #7a5320; }
+.ttag.t-teal   { color: #8fe6c9; background: #0f3329; border-color: #1d6e56; }
+.ttag.t-purple { color: #cbc4f6; background: #251f4a; border-color: #4c4290; }
+.ttag.t-blue   { color: #b0d4f4; background: #142a44; border-color: #2a548a; }
+.ttag.t-gray   { color: #d0cec6; background: #2a2926; border-color: #5a5852; }
 
 /* Table-setup control bar under the felt */
 #he-tablesetup { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
