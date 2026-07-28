@@ -428,12 +428,10 @@ const oppAccuracy = (o) => {
   if (!o.readAccuracy || typeof o.readAccuracy !== "object") o.readAccuracy = {};
   return o.readAccuracy;
 };
-/* A read is rendered if it is active AND its confidence is > 0 (or unset). */
-const readIsShown = (o, id) => {
-  if (!readIsActive(id, oppReads(o)[id])) return false;
-  const acc = oppAccuracy(o)[id];
-  return acc == null || acc > 0;
-};
+/* A read is rendered if it is active. (The old readAccuracy=0 "hide me" flag
+   is ignored — the accuracy toggle no longer exists on reads, so respecting
+   it would trap old reads permanently invisible with no way to restore them.) */
+const readIsShown = (o, id) => readIsActive(id, oppReads(o)[id]);
 
 /* Render one featured item as a compact chip (read chip, or abbreviated exploit
    chip whose full text shows on hover); "" if the item no longer exists. */
