@@ -981,15 +981,13 @@ function renderOppDetail(id) {
         <div class="scaletop">
           <span class="scalelbl">${esc(lbl)}</span>
           <span class="scaleval">${active ? v + " · " + scaleBucket(v) : "off"}</span>
-          ${accChip(id, active)}
           ${active ? `<button class="chip mini scaleclr" data-scaleclear="${id}" title="Clear">✕</button>` : ""}
         </div>
         <input type="range" min="0" max="100" step="1" value="${v}" data-scaleinput="${id}">
       </div>`;
     }
     const base = bubble ? "bubble" : "chip mini";
-    const btn = `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
-    return `<span class="readunit">${btn}${accChip(id, !!st)}</span>`;
+    return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
   };
   $("od-tags").innerHTML = TAG_CATS.map((cat) => {
     const groups = READ_GROUPS.filter((g) => g.cat === cat).map((g) =>
