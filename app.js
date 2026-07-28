@@ -130,16 +130,19 @@ function villainStreetActs(h, actor) {
    crosses a (per-signal) threshold and it isn't already set or dismissed. */
 /* Signals: {tagId, state, threshold}. State "no" means the "no" direction of
    the merged read (e.g. gives-up-turn → barrels-off:no). */
+/* Thresholds are deliberately high (5+) because Phil only logs interesting /
+   showdown hands — the sample is biased and small. Lower thresholds fire
+   noise. See project_poker_journal_v2_engine_spec.md. */
 const READ_SIGNALS = [
-  { id: "limp-caller",      state: "yes", th: 2 },
-  { id: "3bets-light",      state: "yes", th: 2 },
-  { id: "barrels-off",      state: "no",  th: 2 },   // was: gives-up-turn
-  { id: "barrels-off",      state: "yes", th: 2 },
-  { id: "over-cbet",        state: "yes", th: 2 },
-  { id: "bluff-raise-f",    state: "yes", th: 2 },
-  { id: "station-f",        state: "yes", th: 3 },
-  { id: "station-t",        state: "yes", th: 3 },
-  { id: "station-r",        state: "yes", th: 2 },
+  { id: "limp-caller",      state: "yes", th: 5 },
+  { id: "3bets-light",      state: "yes", th: 5 },
+  { id: "barrels-off",      state: "no",  th: 5 },   // was: gives-up-turn
+  { id: "barrels-off",      state: "yes", th: 5 },
+  { id: "over-cbet",        state: "yes", th: 5 },
+  { id: "bluff-raise-f",    state: "yes", th: 5 },
+  { id: "station-f",        state: "yes", th: 5 },
+  { id: "station-t",        state: "yes", th: 5 },
+  { id: "station-r",        state: "yes", th: 5 },
 ];
 function derivedReads(o) {
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(o.id));
@@ -971,7 +974,7 @@ function renderOppDetail(id) {
   const showD = showDerivedReads[id];
   const dHTML = dReads.length
     ? `<div class="sugghead" data-toggle-dreads>
-        <span>Suggested from hands (${dReads.length})</span>
+        <span>From logged hands (${dReads.length}) · small sample</span>
         <span class="toggle-arrow">${showD ? "▼" : "▶"}</span>
       </div>` + (showD ? dReads.map((s) =>
         `<div class="suggitem" data-dtag="${esc(s.tagId)}" data-dstate="${esc(s.state || "yes")}" data-dkey="${esc(s.key)}">
