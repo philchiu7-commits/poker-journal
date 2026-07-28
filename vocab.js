@@ -235,6 +235,44 @@ const EXPLOIT_RULES = {
   "force-squid":      { yes: "He forces squid spots — expect wider gambling ranges; value-bet bigger, he pays off chasing." },
 };
 
+/* Compound-read exploit rules — fire only when ALL `keys` (each in
+   "tagId:state" form, state = "yes" or "no") match the opponent's current
+   reads. Merged into suggestedExploits() output above the single-read
+   suggestions, tagged 🎯 in the UI. Each `id` is stable — used as the
+   dismiss key ("cmp:<id>"). Every archetype below has been Phil-approved on
+   real poker theory; do NOT add new ones without his sign-off (see
+   feedback_poker_basics — cross-axis label similarity ≠ correlation). */
+const COMPOUND_EXPLOIT_RULES = [
+  { id: "wide-open-squeeze-target",
+    label: "Wide opener + folds to 3-bets",
+    keys: ["open-too-wide:yes", "over-folds-3bet:yes"],
+    text: "Squeeze target. 3-bet-bluff him wider IP and from the blinds, especially with blockers. He opens wide, folds when re-raised." },
+  { id: "one-and-done-cbetter",
+    label: "One-and-done cbetter",
+    keys: ["over-cbet:yes", "barrels-off:no"],
+    text: "Fires reflex cbet then quits. Float ANY flop, stab turn when he checks with any equity, only fold to turn barrels." },
+  { id: "wide-caller-sticky-flop",
+    label: "Wide caller + sticky flop",
+    keys: ["wide-cc:yes", "station-f:yes"],
+    text: "Cold-calls wide preflop then calls flop with any pair/draw. Cbet SMALL on dry boards, barrel scare turns, don't triple-barrel." },
+  { id: "two-street-station",
+    label: "Two-street calling station",
+    keys: ["station-f:yes", "station-t:yes"],
+    text: "Calls flop AND turn light. Value-bet flop and turn thin with pair+, NEVER double-barrel bluff. Size up river for value." },
+  { id: "three-street-station",
+    label: "Three-street calling station",
+    keys: ["station-f:yes", "station-t:yes", "station-r:yes"],
+    text: "Sticky all three streets. Never bluff. Value-bet every street with any made hand, size up all three, weak top pair is a shove line." },
+  { id: "frequent-bluff-raiser",
+    label: "Frequent bluff-raiser (flop + turn)",
+    keys: ["bluff-raise-f:yes", "bluff-raise-t:yes"],
+    text: "Raises as a bluff on flop AND turn. Don't fold to raises — call down thin, re-raise mediums for value. Only respect river raises." },
+  { id: "sizing-is-a-tell",
+    label: "Sizing tells (both directions)",
+    keys: ["overbets-nuts:yes", "small-with-weak:yes"],
+    text: "Both sizes are reliable. Overbets = value, small = weak. Fold bluff-catchers to big sizings, raise smalls as bluffs, call mediums light." },
+];
+
 /* Reusable exploit archetypes — a shared library added onto any opponent from
    the Exploits panel. `abbr` is the short code shown on the front-page card;
    `text` is the full description revealed on tap/hover. */

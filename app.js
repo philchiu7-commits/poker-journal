@@ -92,6 +92,19 @@ function suggestedExploits(o) {
   const dismissed = new Set(o.exploitDismissed || []);
   const seen = new Set();
   const out = [];
+  // Compound rules first — every key must match. Higher signal → sort above singles.
+  for (const rule of COMPOUND_EXPLOIT_RULES) {
+    const allMatch = rule.keys.every((k) => {
+      const [tId, tState] = k.split(":");
+      const cur = reads[tId];
+      return cur && readBase(cur) === tState;
+    });
+    if (!allMatch) continue;
+    const key = "cmp:" + rule.id;
+    if (dismissed.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, text: rule.label + " — " + rule.text, compound: true });
+  }
   for (const [id, state] of Object.entries(reads)) {
     if (!state) continue;
     const rule = EXPLOIT_RULES[id];
@@ -1043,8 +1056,8 @@ function renderOppDetail(id) {
         <span>Suggested from reads (${suggs.length})</span>
         <span class="toggle-arrow">${showSugg ? "▼" : "▶"}</span>
       </div>` + (showSugg ? suggs.map((s) =>
-        `<div class="suggitem" data-key="${esc(s.key)}">
-           <div class="notetext">💡 ${esc(s.text)}</div>
+        `<div class="suggitem${s.compound ? " suggcompound" : ""}" data-key="${esc(s.key)}">
+           <div class="notetext">${s.compound ? "🎯" : "💡"} ${esc(s.text)}</div>
            <div class="noterowbtns">
              <button class="chip mini on sgreen" data-exacc>＋ Add</button>
              <button class="chip mini" data-exdismiss>Dismiss</button>
