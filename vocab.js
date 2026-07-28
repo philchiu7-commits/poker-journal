@@ -121,9 +121,9 @@ const READ_SUBCATS = {
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
   ],
   postflop: [
-    { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off", "sp-dis-board"] },
+    { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off"] },
     { label: "Leads",         ids: ["lead-limped", "check-oop-limped"] },
-    { label: "Range shape",   ids: ["oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers"] },
+    { label: "Range shape",   ids: ["sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers"] },
   ],
   sizing: [
     { label: "Preflop sizing",  ids: ["preflop-sizing", "3bet-sizing"] },
