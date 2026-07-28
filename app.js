@@ -1799,7 +1799,16 @@ const SEAT_RINGS = {
    or 9 when no lineup is set. Lineup is the source of truth for table size. */
 const effectiveSeats = () =>
   Math.max(4, Math.min(9, tableLineup.length || lineupSeats || 9));
-const seatRing = () => SEAT_RINGS[effectiveSeats()] || SEAT_RINGS[9];
+/* When a straddle is posted the under-the-gun seat becomes STD. Rings already
+   include STD at 7+ seats; at 4–6-max we swap the leftmost UTG label for STD
+   so the picker and action-order both see it. */
+const seatRing = () => {
+  const base = SEAT_RINGS[effectiveSeats()] || SEAT_RINGS[9];
+  if (!Number(draft.std) || base.includes("STD")) return base;
+  const r = base.slice();
+  r[2] = "STD";     // index 0=SB, 1=BB, 2=leftmost UTG
+  return r;
+};
 function deriveLineup(anchor) {
   if (!lineupActive()) return;
   const ring = seatRing();
