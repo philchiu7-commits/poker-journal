@@ -422,15 +422,6 @@ const readIsActive = (id, state) => {
   if (state == null || state === "") return false;
   return isScaleRead(id) ? Number(state) > 0 : true;
 };
-/* Lazy-init the per-opponent accuracy map. Accuracy is 0..5; treated as
-   "not set" (= show) when undefined so new opponents don't hide their reads. */
-const oppAccuracy = (o) => {
-  if (!o.readAccuracy || typeof o.readAccuracy !== "object") o.readAccuracy = {};
-  return o.readAccuracy;
-};
-/* A read is rendered if it is active. (The old readAccuracy=0 "hide me" flag
-   is ignored — the accuracy toggle no longer exists on reads, so respecting
-   it would trap old reads permanently invisible with no way to restore them.) */
 const readIsShown = (o, id) => readIsActive(id, oppReads(o)[id]);
 
 /* Render one featured item as a compact chip (read chip, or abbreviated exploit
@@ -965,13 +956,6 @@ function renderOppDetail(id) {
   $("od-e-physical").value = o.physical || "";
 
   const reads = oppReads(o);
-  const accuracy = oppAccuracy(o);
-  const accChip = (id, on) => {
-    if (!on) return "";
-    const a = accuracy[id] == null ? 3 : accuracy[id];
-    return `<button class="accbtn${a === 0 ? " off" : ""}" data-acc="${id}"
-              title="Confidence 0-5 (tap to cycle)">${a}</button>`;
-  };
   const readBtn = (id, lbl, bubble) => {
     const st = reads[id];
     if (isScaleRead(id)) {
@@ -2151,9 +2135,11 @@ function renderHandEntry() {
   $("he-chipsonly").classList.toggle("hidden", table);
   $("he-table").classList.toggle("hidden", !table);
   // Table mode duplicates blinds/eff in its setup bar — hide the ctxbar copies.
-  ["he-sb", "he-bb", "he-std", "he-effstack"].forEach((id) => {
+  ["he-sb", "he-bb", "he-effstack"].forEach((id) => {
     const el = $(id); if (el && el.closest(".ctxfield")) el.closest(".ctxfield").classList.toggle("hidden", table);
   });
+  // Table mode has its own straddle pill in the setup bar — hide the ctxbar toggle there.
+  $("he-std").classList.toggle("hidden", table);
   if (table) renderTable();
 
   // villain picker: Hero + selected always shown; then search results, or recent when idle
@@ -2256,9 +2242,13 @@ function renderHandEntry() {
   $("he-squidleft-btn").classList.toggle("set", d.squidLeft !== "");
 
   // blinds + eff stack (don't clobber focused inputs)
-  for (const [id, val] of [["he-sb", d.sb], ["he-bb", d.bb],
-                           ["he-std", d.std], ["he-effstack", d.effStack]])
+  for (const [id, val] of [["he-sb", d.sb], ["he-bb", d.bb], ["he-effstack", d.effStack]])
     if (document.activeElement !== $(id)) $(id).value = val;
+  // straddle toggle button — label reflects state, on = 2×BB
+  const stdOn = Number(d.std) > 0;
+  const stdBtn = $("he-std");
+  stdBtn.textContent = stdOn ? `STD ${d.std}` : "STD OFF";
+  stdBtn.classList.toggle("on", stdOn);
 }
 
 /* --- action-pad sheet (Option 1 wizard): street / actor / act / size --- */
@@ -2559,7 +2549,11 @@ function bindHandEntry() {
   $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
   $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
   $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
-  $("he-std").oninput = () => setBlind("std", $("he-std").value);
+  $("he-std").onclick = () => {
+    const on = Number(draft.std) > 0;
+    const bb = Number(draft.bb) || 0;
+    setBlind("std", on ? "" : (bb > 0 ? String(bb * 2) : ""));
+  };
   $("he-save").onclick = () => saveHand();
 }
 
@@ -2765,6 +2759,38 @@ async function saveHand() {
   await metaSet("draftHand", null);
   showSaveToast(primary ? `Saved vs ${primary.name} · tap to undo` : "Hand saved · tap to undo");
   renderHandEntry();
+  maybeNagBackup();
+}
+
+/* Fire a one-tap backup prompt if the last export is >24h old. Only once per app
+   session per day so a rush of saves doesn't spam. */
+let _backupNaggedAt = 0;
+async function maybeNagBackup() {
+  const now = Date.now();
+  if (now - _backupNaggedAt < 3600e3) return;                 // hourly re-nag cap
+  const ts = await metaGet("lastExportAt");
+  if (ts && now - ts < 864e5) return;                         // backed up <24h ago
+  _backupNaggedAt = now;
+  const t = $("toast");
+  const msg = ts ? "Back up? Last file save >24h ago." : "Back up? No file save yet — data lives only on this phone.";
+  t.textContent = msg + " · tap";
+  t.classList.add("wide");
+  t.classList.remove("hidden");
+  t.style.cursor = "pointer";
+  clearTimeout(toast._t);
+  const clear = () => {
+    t.classList.add("hidden"); t.style.cursor = ""; t.onclick = null;
+    t.classList.remove("wide");
+  };
+  toast._t = setTimeout(clear, 6000);
+  t.onclick = async () => {
+    clear();
+    try {
+      const snap = await metaGet("autoSnapshot");
+      if (snap?.data ? await shareBackupData(snap.data) : await exportJSON())
+        toast("Backed up ✓");
+    } catch (e) { if (e?.name !== "AbortError") toast("Backup failed: " + e.message); }
+  };
 }
 /* One-tap undo after Save: within 12s of a save, tapping the toast restores
    the pre-save draft and deletes the just-saved hand. */
@@ -2900,25 +2926,11 @@ function bindStatic() {
     renderOppDetail(intoId);
   });
   $("od-tags").onclick = async (e) => {
-    // Accuracy chip: cycle 0 → 1 → 2 → 3 → 4 → 5 → 0.
-    const acc = e.target.closest("[data-acc]");
-    if (acc) {
-      const o = oppById(curOppId);
-      const id = acc.dataset.acc;
-      const map = oppAccuracy(o);
-      const cur = map[id] == null ? 3 : map[id];
-      map[id] = (cur + 1) % 6;
-      o.updatedAt = Date.now();
-      await dbPut("opponents", o);
-      renderOppDetail(curOppId);
-      return;
-    }
     const clr = e.target.closest("[data-scaleclear]");
     if (clr) {
       const o = oppById(curOppId);
       const id = clr.dataset.scaleclear;
       delete oppReads(o)[id];
-      delete oppAccuracy(o)[id];
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
@@ -2930,14 +2942,8 @@ function bindStatic() {
     const reads = oppReads(o);
     const id = b.dataset.tag;
     const ns = nextReadState(id, reads[id]);
-    if (ns) {
-      reads[id] = ns;
-      const map = oppAccuracy(o);
-      if (map[id] == null) map[id] = 3;  // default confidence when first set
-    } else {
-      delete reads[id];
-      delete oppAccuracy(o)[id];
-    }
+    if (ns) reads[id] = ns;
+    else delete reads[id];
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
@@ -2949,7 +2955,6 @@ function bindStatic() {
     const id = s.dataset.scaleinput;
     const v = Math.max(0, Math.min(100, Number(s.value) || 0));
     oppReads(o)[id] = v;
-    if (v > 0 && oppAccuracy(o)[id] == null) oppAccuracy(o)[id] = 3;
     o.updatedAt = Date.now();
     // Cheap live update: just refresh the visible readout, don't full-rerender on every drag tick.
     const row = s.closest(".scaleread");
@@ -3226,6 +3231,16 @@ async function requestDurableStorage() {
     }
   } catch (e) { /* storage API unavailable — nothing we can do */ }
 }
+
+/* Surface silent JS errors on the phone — cheaper than "why did nothing happen?" */
+window.addEventListener("error", (e) => {
+  const msg = e.error?.message || e.message || "unknown error";
+  try { toast("⚠︎ crash: " + msg, 6000); } catch {}
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = e.reason?.message || String(e.reason || "unknown promise rejection");
+  try { toast("⚠︎ crash: " + msg, 6000); } catch {}
+});
 
 async function boot() {
   await openDB();

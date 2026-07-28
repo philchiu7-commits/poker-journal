@@ -460,6 +460,12 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .ctxpick i { font-style: normal; font-size: 15px; color: var(--text); }
 .ctxpick.set { border-color: var(--accent); }
+.ctxstd {
+  flex: 1 1 0; min-width: 62px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px;
+  color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; cursor: pointer;
+}
+.ctxstd.on { color: var(--text); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, var(--panel2)); }
 
 /* ---- villain search ---- */
 .vsearch {
