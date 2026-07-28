@@ -1072,10 +1072,8 @@ function renderOppDetail(id) {
           </div></div>`
       : `<div class="noteitem${n.adj ? " adj" : ""}${pinned ? " pinned" : ""}" data-exp="${n.id}">
           <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}</div>
-          <div class="confrow" title="Confidence 0–5 that this exploit works on this player">
-            ${[0,1,2,3,4,5].map((v) => `<button class="confbtn${(n.conf ?? 3) === v ? " on" : ""}" data-expconf="${v}">${v}</button>`).join("")}
-          </div>
           <div class="noterowbtns">
+            <button class="chip mini confcycle${(n.conf ?? 3) === 0 ? " off" : ""}" data-expconfcycle title="Confidence 0–5 · tap to cycle">${n.conf ?? 3}</button>
             <button class="chip mini pinbtn${pinned ? " on" : ""}" data-exppin title="Show on the opponent list card">${pinned ? "★ Pinned" : "☆ Pin"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
             <button class="chip mini" data-expedit>Edit</button>
@@ -3088,10 +3086,9 @@ function bindStatic() {
       const n = (o.exploits || []).find((x) => x.id === id);   // show on the opponent list card
       if (n) { n.pinned = !n.pinned; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
-    } else if (e.target.closest("[data-expconf]")) {
-      const n = (o.exploits || []).find((x) => x.id === id);   // 0-5 confidence this exploit works on this villain
-      const v = Number(e.target.closest("[data-expconf]").dataset.expconf);
-      if (n && Number.isFinite(v)) { n.conf = v; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+    } else if (e.target.closest("[data-expconfcycle]")) {
+      const n = (o.exploits || []).find((x) => x.id === id);   // cycle 0→1→2→3→4→5→0 confidence
+      if (n) { n.conf = (((n.conf ?? 3) + 1) % 6); o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;
