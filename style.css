@@ -467,6 +467,17 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .ctxstd.on { color: var(--text); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, var(--panel2)); }
 
+/* Position-kind read: label + selected position + clear */
+.posread {
+  display: inline-flex; align-items: center; gap: 8px; margin: 4px 4px 4px 0;
+  padding: 6px 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  font-size: 13px; color: var(--muted); cursor: pointer;
+}
+.posread.on { color: var(--text); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, var(--panel2)); }
+.posread .prlbl { font-weight: 600; }
+.posread .prval { font-weight: 800; color: var(--text); background: rgba(0,0,0,.18); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.posread .prclear { color: var(--muted); font-size: 14px; padding: 0 2px; }
+
 /* ---- villain search ---- */
 .vsearch {
   width: 100%; margin: 0 0 8px; padding: 9px 12px; box-sizing: border-box;

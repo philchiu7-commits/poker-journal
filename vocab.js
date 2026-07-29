@@ -1,6 +1,6 @@
 /* Shared vocabulary — stable ids; the future exploit engine aggregates these. */
 
-const POSITIONS = ["U8", "U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
+const POSITIONS = ["U9", "U8", "U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
 const ACTS = ["fold", "check", "call", "bet", "raise", "3bet", "limp", "jam"];
 const ACTS_POST = ["fold", "check", "call", "bet", "raise"];
@@ -40,6 +40,10 @@ const TENDENCY_TAGS = [
   { id: "ep-open-weak",         cat: "preflop",  label: "EP Open weak" },
   { id: "limps-are-weak",       cat: "preflop",  label: "Limps are weak" },
   { id: "open-range-w1s",       cat: "preflop",  label: "Open range w1S" },
+  { id: "first-raise-ns",       cat: "preflop",  label: "1st R — nS",     kind: "position" },
+  { id: "first-raise-ws",       cat: "preflop",  label: "1st R — wS",     kind: "position" },
+  { id: "lrr-latest-ns",        cat: "preflop",  label: "Latest LRR — nS", kind: "position" },
+  { id: "lrr-latest-ws",        cat: "preflop",  label: "Latest LRR — wS", kind: "position" },
   // preflop — limping / squid
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
@@ -118,6 +122,8 @@ const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 const READ_SUBCATS = {
   preflop: [
     { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "limps-are-weak", "attack-limped-blinds", "open-range-w1s"] },
+    { label: "First raise",   ids: ["first-raise-ns", "first-raise-ws"] },
+    { label: "Latest LRR",    ids: ["lrr-latest-ns", "lrr-latest-ws"] },
     { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
     { label: "vs Limp",       ids: ["limp-caller", "lp-limp-weak", "wide-cc"] },
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },

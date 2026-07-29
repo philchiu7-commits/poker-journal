@@ -34,6 +34,9 @@ const readCycle = (id) => READ_CYCLE[id] || ["yes", "yes!", "no", "no!"];
 const SCALE_READS = new Set(
   (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "scale").map((t) => t.id));
 const isScaleRead = (id) => SCALE_READS.has(id);
+const POSITION_READS = new Set(
+  (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "position").map((t) => t.id));
+const isPositionRead = (id) => POSITION_READS.has(id);
 const STATE_CLASS = {
   yes: "sgreen", "yes!": "sgreen sstrong",
   no: "sred", "no!": "sred sstrong",
@@ -67,6 +70,9 @@ const readChip = (id, state) => {
   if (isScaleRead(id)) {
     const v = Math.max(0, Math.min(100, Number(state) || 0));
     return `<span class="chip mini on sscale" title="${esc(lbl)}: ${v}/100 (${scaleBucket(v)})">${esc(lbl)} · ${v}</span>`;
+  }
+  if (isPositionRead(id)) {
+    return `<span class="chip mini on sgreen" title="${esc(lbl)}: ${esc(state)}">${esc(lbl)} · ${esc(state)}</span>`;
   }
   return `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(lbl)}</span>`;
 };
@@ -419,7 +425,9 @@ function featuredItems(o) {
    Reads at 0 are treated the same as unset (see #14). */
 const readIsActive = (id, state) => {
   if (state == null || state === "") return false;
-  return isScaleRead(id) ? Number(state) > 0 : true;
+  if (isScaleRead(id)) return Number(state) > 0;
+  if (isPositionRead(id)) return !!String(state).trim();
+  return true;
 };
 const readIsShown = (o, id) => readIsActive(id, oppReads(o)[id]);
 
@@ -634,6 +642,35 @@ function openGroupAddSheet(group) {
       renderOpponents();
     };
   });
+}
+
+/* Position picker for position-kind reads (first-raise, latest-lrr, …).
+   Full POSITIONS grid — Phil may be logging opponents from tables of any size,
+   so all labels stay available. Tap = set + close. */
+function openPositionReadPicker(readId) {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const lbl = TAG_BY_ID[readId]?.label || readId;
+  const cur = oppReads(o)[readId] || "";
+  const btns = POSITIONS.map((p) =>
+    `<button class="chip mini${cur === p ? " on sgreen" : ""}" data-posset="${p}">${p}</button>`).join("");
+  showSheet(`<div class="sheethead"><span class="t">${esc(lbl)}</span>
+      <button class="chip" data-sheetclose>Done</button></div>
+    <div class="sheetnote">Pick the position — updates on tap.</div>
+    <div class="chiprow" style="gap:6px">${btns}</div>
+    ${cur ? `<button class="danger" data-posset="" style="margin-top:12px">Clear</button>` : ""}`);
+  $("sheet").querySelectorAll("[data-posset]").forEach((b) => {
+    b.onclick = async () => {
+      const v = b.dataset.posset;
+      if (v) oppReads(o)[readId] = v;
+      else delete oppReads(o)[readId];
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      hideSheet();
+      renderOppDetail(curOppId);
+    };
+  });
+  $("sheet").querySelector("[data-sheetclose]").onclick = hideSheet;
 }
 
 /* Squid count picker: a scrollable column of numbers (press-and-select). */
@@ -961,6 +998,14 @@ function renderOppDetail(id) {
   const reads = oppReads(o);
   const readBtn = (id, lbl, bubble) => {
     const st = reads[id];
+    if (isPositionRead(id)) {
+      const active = st != null && st !== "";
+      const shown = active ? st : "select";
+      return `<button class="posread${active ? " on" : ""}" data-posread="${id}" title="${esc(lbl)}">
+        <span class="prlbl">${esc(lbl)}</span><span class="prval">${esc(shown)}</span>
+        ${active ? `<span class="prclear" data-posclear="${id}" title="Clear">✕</span>` : ""}
+      </button>`;
+    }
     if (isScaleRead(id)) {
       const v = Math.max(0, Math.min(100, Number(st) || 0));
       const active = st != null && st !== "";
@@ -984,11 +1029,16 @@ function renderOppDetail(id) {
     // Anything not listed falls into "Other" at the end.
     const subgroups = READ_SUBCATS[cat] || [];
     const usedIds = new Set(subgroups.flatMap((s) => s.ids));
-    const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id);
+    // Retired reads — data preserved on old opponents, but no longer offered as a toggle.
+    const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff"]);
+    const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id) && !RETIRED_TAG_IDS.has(t.id);
     const chipFor = (id) => { const t = TAG_BY_ID[id]; return t && isSingle(t) ? readBtn(t.id, t.label, false) : ""; };
     const subHTML = subgroups.map((sg) => {
       const chips = sg.ids.map(chipFor).filter(Boolean).join("");
-      return chips ? `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="chiprow tight">${chips}</div></div>` : "";
+      if (!chips) return "";
+      // Position-read subgroups need to wrap (posread buttons are wider than chips).
+      const rowCls = sg.ids.some(isPositionRead) ? "chiprow" : "chiprow tight";
+      return `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="${rowCls}">${chips}</div></div>`;
     }).join("");
     const otherSingles = TENDENCY_TAGS.filter((t) => isSingle(t) && !usedIds.has(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
@@ -1302,8 +1352,13 @@ function handHTML(h) {
 
 function renderHandsFeed() {
   const hands = [...HANDS].sort((a, b) => b.ts - a.ts);
-  $("hands-list").innerHTML = hands.map((h) => handRowHTML(h)).join("") ||
-    `<div class="empty">No hands yet — log one from the Hand tab.</div>`;
+  // Wrap per-hand so a single bad record can't wipe the whole feed silently.
+  const rows = hands.map((h) => {
+    try { return handRowHTML(h); }
+    catch (e) { return `<div class="lrow" data-hand="${esc(h.id || "")}"><div class="t">⚠ ${esc(e.message || "render failed")}</div><div class="s">${esc(h.id || "no id")}</div></div>`; }
+  }).join("");
+  $("hands-list").innerHTML = rows ||
+    `<div class="empty">No hands yet — log one from the Hand tab. (${HANDS.length} in storage)</div>`;
 }
 
 function renderHandView(id) {
@@ -1800,8 +1855,8 @@ const SEAT_RINGS = {
   5: ["SB", "BB", "HJ", "CO", "BN"],
   6: ["SB", "BB", "U6", "HJ", "CO", "BN"],
   7: ["SB", "BB", "STD", "U7", "HJ", "CO", "BN"],
-  8: ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"],
-  9: ["SB", "BB", "STD", "U8", "U7", "U6", "HJ", "CO", "BN"],
+  8: ["SB", "BB", "STD", "U8", "U7", "HJ", "CO", "BN"],
+  9: ["SB", "BB", "STD", "U9", "U8", "U7", "HJ", "CO", "BN"],
 };
 /* Seat count = lineup array length (clamped 4..9), falling back to lineupSeats
    or 9 when no lineup is set. Lineup is the source of truth for table size. */
@@ -2349,6 +2404,40 @@ function renderActionPad() {
 /* Dispatch a click on a street / actor / act / size button. Shared by the
    view-hand click handler and the action-sheet's sheetClick. Returns true if
    the button belonged to this dispatcher (so callers can chain). */
+/* Chip amount (K) for a size string, or null when the size is relative
+   (multiplier / percentage / Jam) and can't be compared to effstack in isolation. */
+function chipAmountFromSize(size) {
+  if (!size) return null;
+  let m;
+  if ((m = /^\$(\d+(?:\.\d+)?)$/.exec(size))) return Number(m[1]);
+  if ((m = /^(\d+(?:\.\d+)?)k$/i.exec(size))) return Number(m[1]);
+  if (/^\d+(?:\.\d+)?$/.test(size)) return Number(size);
+  return null;
+}
+/* Clamp a chip-sized bet to "Jam" when it meets or exceeds the effective stack. */
+function clampSizeToJam(size) {
+  const eff = Number(draft.effStack) || 0;
+  if (eff <= 0 || !size || size === "Jam") return size;
+  const chips = chipAmountFromSize(size);
+  return (chips !== null && chips >= eff) ? "Jam" : size;
+}
+/* Both players allin? True once someone jammed and a distinct actor called (or
+   re-jammed). Once true, no further action is possible — the pop-up should
+   close so Phil can enter the villain's hand instead of chasing card streets. */
+function bothAllin(actions) {
+  const jammers = new Set();
+  for (const a of actions) {
+    const isJam = a.act === "jam" || a.size === "Jam";
+    if (isJam) {
+      if (jammers.size && !jammers.has(a.actor)) return true;   // 2 different jammers = both allin
+      jammers.add(a.actor);
+      continue;
+    }
+    if (jammers.size && !jammers.has(a.actor) && a.act === "call") return true;
+  }
+  return false;
+}
+
 function handActionClick(b) {
   if (b.dataset.street) {
     mutate(() => {
@@ -2382,6 +2471,11 @@ function handActionClick(b) {
         draft.actor = nextActorByPos(actor) || nextActorChips(actor);
       }
     });
+    if (bothAllin(draft.actions)) {
+      hideSheet();
+      toast("Both allin — add hole cards to complete the hand");
+      return true;
+    }
     if (openBoard && groupSlots(openBoard).some((s) => !s.arr[s.i])) {
       const miss = positionsMissing();
       if (miss.length) toast("Set positions first: " + miss.join(", "));
@@ -2392,9 +2486,10 @@ function handActionClick(b) {
   if (b.dataset.size) {
     mutate(() => {
       const last = draft.actions[draft.actions.length - 1];
-      if (last) last.size = b.dataset.size;
+      if (last) last.size = clampSizeToJam(b.dataset.size);
     });
     if (b.dataset.bbsize) recordOpenSize(Number(draft.bb) || 0, Number(b.dataset.bbsize));
+    if (bothAllin(draft.actions)) { hideSheet(); toast("Both allin — add hole cards to complete the hand"); }
     return true;
   }
   return false;
@@ -2528,7 +2623,8 @@ function bindHandEntry() {
         // a custom open-raise chip amount feeds the adaptive BB buttons
         if (isOpenRaise(last) && Number(draft.bb) > 0)
           recordOpenSize(Number(draft.bb), Math.round(Number(v) / Number(draft.bb)));
-        mutate(() => { if (last) last.size = "$" + v; });
+        mutate(() => { if (last) last.size = clampSizeToJam("$" + v); });
+        if (bothAllin(draft.actions)) { hideSheet(); toast("Both allin — add hole cards to complete the hand"); }
       }
     }
   });
@@ -2545,7 +2641,8 @@ function bindHandEntry() {
         const last = draft.actions[draft.actions.length - 1];
         if (isOpenRaise(last) && Number(draft.bb) > 0)
           recordOpenSize(Number(draft.bb), Math.round(Number(v) / Number(draft.bb)));
-        mutate(() => { if (last) last.size = "$" + v; });
+        mutate(() => { if (last) last.size = clampSizeToJam("$" + v); });
+        if (bothAllin(draft.actions)) { hideSheet(); toast("Both allin — add hole cards to complete the hand"); }
       }
     }
   });
@@ -2942,6 +3039,21 @@ function bindStatic() {
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
+      return;
+    }
+    const pclr = e.target.closest("[data-posclear]");
+    if (pclr) {
+      e.stopPropagation();
+      const o = oppById(curOppId);
+      delete oppReads(o)[pclr.dataset.posclear];
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppDetail(curOppId);
+      return;
+    }
+    const pos = e.target.closest("[data-posread]");
+    if (pos) {
+      openPositionReadPicker(pos.dataset.posread);
       return;
     }
     const b = e.target.closest("[data-tag]");
