@@ -644,6 +644,11 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 14px; z-index: 30; box-shadow: 0 4px 18px rgba(0,0,0,.4); white-space: nowrap;
 }
 #toast.wide { white-space: normal; max-width: min(88vw, 420px); border-radius: 14px; text-align: center; line-height: 1.35; }
+#toast .toastmsg { margin-right: 10px; }
+#toast .toastbtn {
+  background: var(--accent); color: #000; border: 0; border-radius: 999px;
+  padding: 5px 14px; font-weight: 800; font-size: 13px; cursor: pointer;
+}
 
 /* Scale-type read: label + slider + numeric readout. Off = muted. */
 .scaleread {

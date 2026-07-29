@@ -72,7 +72,6 @@ const readChip = (id, state) => {
 };
 /* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
 const READ_GROUPS = [
-  { cat: "preflop",  label: "3bet",       bubbles: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"], ["3bet-bluff", "Bluff"]] },
   { cat: "preflop",  label: "Limps monster", bubbles: [["limps-monster-ws", "wS"], ["limps-monster-ns", "nS"]] },
   { cat: "postflop", label: "Station",    bubbles: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
   { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
@@ -451,7 +450,7 @@ function oppRowHTML(o, st) {
   let chips = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("");
   if (!chips) chips = Object.entries(oppReads(o))
     .filter(([id]) => readIsShown(o, id))
-    .slice(0, 3).map(([id, s]) => readChip(id, s)).join("");
+    .map(([id, s]) => readChip(id, s)).join("");
   // Pinned exploits appear as chips on the list card. Phil picks which ones
   // in the opponent detail (star toggle) so the front card stays focused on
   // the reads that matter for this villain.
@@ -646,8 +645,12 @@ function openSquidPicker(which) {
   const cur = isHave ? draft.squidHave : draft.squidLeft;
   const title = isHave ? "🦑 Squid — have" : "🦑 Squid — left";
   const nums = ["", ...Array.from({ length: max + 1 }, (_, n) => String(n))];
+  const hint = isHave
+    ? "How many squids are on the table right now. 0 = no one has one yet; 1 = one player has posted; …"
+    : "How many squid buy-ins are still available for the table this session.";
   showSheet(`<div class="sheethead"><span class="t">${title}</span>
       <button class="chip" data-sheetclose>Done</button></div>
+    <div class="sheetnote">${hint}</div>
     <div class="numpicker">${nums.map((n) =>
       `<button class="numopt${String(cur) === n ? " on" : ""}" data-num="${n}">${n === "" ? "–" : n}</button>`).join("")}</div>`);
   $("sheet").querySelectorAll("[data-num]").forEach((b) => {
@@ -1055,7 +1058,7 @@ function renderOppDetail(id) {
       : `<div class="noteitem${n.adj ? " adj" : ""}${pinned ? " pinned" : ""}" data-exp="${n.id}">
           <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}</div>
           <div class="noterowbtns">
-            <button class="chip mini confcycle${(n.conf ?? 3) === 0 ? " off" : ""}" data-expconfcycle title="Confidence 0–5 · tap to cycle">${n.conf ?? 3}</button>
+            <button class="chip mini confcycle${(n.conf ?? 0) === 0 ? " off" : ""}" data-expconfcycle title="Confidence 0–5 · tap to cycle">${n.conf ?? 0}</button>
             <button class="chip mini pinbtn${pinned ? " on" : ""}" data-exppin title="Show on the opponent list card">${pinned ? "★ Pinned" : "☆ Pin"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
             <button class="chip mini" data-expedit>Edit</button>
@@ -1796,7 +1799,7 @@ const SEAT_RINGS = {
   4: ["SB", "BB", "CO", "BN"],
   5: ["SB", "BB", "HJ", "CO", "BN"],
   6: ["SB", "BB", "U6", "HJ", "CO", "BN"],
-  7: ["SB", "BB", "STD", "U6", "HJ", "CO", "BN"],
+  7: ["SB", "BB", "STD", "U7", "HJ", "CO", "BN"],
   8: ["SB", "BB", "STD", "U7", "U6", "HJ", "CO", "BN"],
   9: ["SB", "BB", "STD", "U8", "U7", "U6", "HJ", "CO", "BN"],
 };
@@ -2230,7 +2233,9 @@ function renderHandEntry() {
   // the lineup tagged force-squid, Y = total villains — instead of the manual
   // per-hand pick, so the ratio updates as reads change (#5).
   const squidLabel = () => {
-    if (!lineupActive()) return d.squidHave === "" ? "–" : d.squidHave;
+    // Manual pick always wins — the ratio was only meant as a default hint.
+    if (d.squidHave !== "") return String(d.squidHave);
+    if (!lineupActive()) return "–";
     const villains = tableLineup.filter((id) => id !== "hero");
     const y = villains.length;
     const x = villains.filter((id) => oppById(id)?.reads?.["force-squid"]).length;
@@ -2797,25 +2802,28 @@ async function maybeNagBackup() {
 let lastSaveUndo = null;
 function showSaveToast(msg) {
   const t = $("toast");
-  t.textContent = msg;
-  t.classList.toggle("wide", msg.length > 24);
+  // Explicit Undo button — the whole toast is still tappable, but a visible
+  // button makes the affordance obvious.
+  t.innerHTML = `<span class="toastmsg">${esc(msg.replace(" · tap to undo", ""))}</span><button class="toastbtn" data-undo>Undo</button>`;
+  t.classList.add("wide");
   t.classList.remove("hidden");
   t.style.cursor = "pointer";
   const start = Date.now();
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => { t.classList.add("hidden"); t.style.cursor = ""; }, 12000);
-  t.onclick = async () => {
+  toast._t = setTimeout(() => { t.classList.add("hidden"); t.style.cursor = ""; t.classList.remove("wide"); t.textContent = ""; }, 12000);
+  const doUndo = async () => {
     if (!lastSaveUndo || Date.now() - lastSaveUndo.ts > 15000 || Date.now() - start > 12000) return;
     const { draft: prev, handId } = lastSaveUndo;
     lastSaveUndo = null;
     await dbDel("hands", handId);
     HANDS = HANDS.filter((h) => h.id !== handId);
     draft = prev;
-    t.classList.add("hidden"); t.style.cursor = ""; t.onclick = null;
+    t.classList.add("hidden"); t.style.cursor = ""; t.onclick = null; t.classList.remove("wide"); t.textContent = "";
     await metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
     renderHandEntry();
     toast("Restored");
   };
+  t.onclick = doUndo;
 }
 
 /* --- edit an existing hand: load into draft --- */
@@ -3093,7 +3101,7 @@ function bindStatic() {
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expconfcycle]")) {
       const n = (o.exploits || []).find((x) => x.id === id);   // cycle 0→1→2→3→4→5→0 confidence
-      if (n) { n.conf = (((n.conf ?? 3) + 1) % 6); o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      if (n) { n.conf = (((n.conf ?? 0) + 1) % 6); o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;

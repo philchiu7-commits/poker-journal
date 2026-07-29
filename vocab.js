@@ -39,6 +39,7 @@ const TENDENCY_TAGS = [
   { id: "attack-limped-blinds", cat: "preflop",  label: "Attack limped blinds" },
   { id: "ep-open-weak",         cat: "preflop",  label: "EP Open weak" },
   { id: "limps-are-weak",       cat: "preflop",  label: "Limps are weak" },
+  { id: "open-range-w1s",       cat: "preflop",  label: "Open range w1S" },
   // preflop — limping / squid
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
@@ -98,6 +99,7 @@ const TENDENCY_TAGS = [
   { id: "size-up-draws",        cat: "sizing",   label: "Size up with draws" },
   { id: "small-with-weak",      cat: "sizing",   label: "Small = weak" },
   { id: "overbets-nuts",        cat: "sizing",   label: "Sizes up with nuts" },
+  { id: "inelastic-sizing",     cat: "sizing",   label: "Inelastic sizing" },
   // live
   { id: "tilts",                cat: "live",     label: "Tilts after losses" },
   { id: "timing-tells",         cat: "live",     label: "Timing tells" },
@@ -115,7 +117,7 @@ const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
    and scale reads render separately and are not covered here. */
 const READ_SUBCATS = {
   preflop: [
-    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "limps-are-weak", "attack-limped-blinds"] },
+    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "limps-are-weak", "attack-limped-blinds", "open-range-w1s"] },
     { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
     { label: "vs Limp",       ids: ["limp-caller", "lp-limp-weak", "wide-cc"] },
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
@@ -123,11 +125,11 @@ const READ_SUBCATS = {
   postflop: [
     { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off"] },
     { label: "Leads",         ids: ["lead-limped", "check-oop-limped"] },
-    { label: "Range shape",   ids: ["sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers"] },
+    { label: "Range shape",   ids: ["sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers", "bad-polar"] },
   ],
   sizing: [
     { label: "Preflop sizing",  ids: ["preflop-sizing", "3bet-sizing"] },
-    { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts"] },
+    { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
   ],
   live: [
     { label: "Physical / timing", ids: ["timing-tells", "snap-call-weak", "talks-when-strong"] },
@@ -250,6 +252,10 @@ const EXPLOIT_RULES = {
                         no:  "His overbets aren't always the nuts — bluff-catch them, they're polarized with bluffs mixed in." },
   "small-with-weak": { yes: "His small bets are weak — raise them; save calls for his big bets.",
                         no:  "His small bets aren't weak — could be a trap or block. Don't spew-raise smalls." },
+  "inelastic-sizing": { yes: "His fold frequency doesn't change with your sizing — size up big for value and down small for bluffs, both work.",
+                        no:  "He is elastic — folds more to big bets. Use small sizings when you want a call, big sizings for folds." },
+  "open-range-w1s":   { yes: "With 1 squid he opens wider than usual — 3-bet him lighter IP, defend blinds wider, expect junk in his range.",
+                        no:  "With 1 squid he opens tighter than usual — respect his opens, fold marginal 3-bet-bluff spots." },
   // live
   "tilts":            { yes: "When he's stuck and tilting, widen value bets — he plays too many hands and pays off." },
   "timing-tells":     { yes: "Watch his timing — snap vs tank is a strength tell. Size bluffs and value to it." },
