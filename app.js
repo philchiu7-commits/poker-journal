@@ -379,6 +379,13 @@ function showSheet(html) {
 function hideSheet() {
   $("sheet").classList.add("hidden");
   $("sheet-backdrop").classList.add("hidden");
+  sheetGroup = null;
+  // Closing any sheet clears the focused table seat so a subsequent action
+  // isn't misattributed to that seat via currentActor's focusPos branch (bug #8).
+  if (typeof draft !== "undefined" && draft && draft.focusPos != null) {
+    draft.focusPos = null;
+    metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+  }
 }
 
 /* ---------- routing ---------- */
@@ -535,6 +542,27 @@ function dominantAction(mix) {
   for (const [act, n] of Object.entries(mix)) if (n > bestN) { best = act; bestN = n; }
   return best;
 }
+/* Build a CSS background for a hand-class cell: solid when there's one action,
+   hard-stop horizontal stripes proportional to each action's count when the
+   same class was played multiple ways. */
+function actionMixBackground(mix) {
+  if (!mix) return null;
+  const rankAct = { jam: 5, "5bet": 5, "4bet": 4, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+  const entries = Object.entries(mix).sort((a, b) => (rankAct[b[0]] || 0) - (rankAct[a[0]] || 0));
+  const total = entries.reduce((s, [, n]) => s + n, 0);
+  if (!total) return null;
+  if (entries.length === 1) return ACT_COLORS[entries[0][0]] || "#4fa66a";
+  const stops = [];
+  let acc = 0;
+  for (const [act, n] of entries) {
+    const col = ACT_COLORS[act] || "#5a6068";
+    const start = (acc / total) * 100;
+    acc += n;
+    const end = (acc / total) * 100;
+    stops.push(`${col} ${start.toFixed(1)}% ${end.toFixed(1)}%`);
+  }
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
 /* Render mode: "freq" (heat by count) or "act" (dominant preflop action). */
 let rangeGridMode = "freq";
 function renderRangeGrid(oppId) {
@@ -553,9 +581,8 @@ function renderRangeGrid(oppId) {
           const alpha = 0.25 + 0.75 * (n / (maxCount || 1));
           style = `background: rgba(93,180,120,${alpha}); color: #fff;`;
         } else {
-          const dom = dominantAction(actions[cls]);
-          const col = dom ? ACT_COLORS[dom] || "#4fa66a" : "#5a6068";
-          style = `background: ${col}; color: #fff;`;
+          const bg = actionMixBackground(actions[cls]) || "#5a6068";
+          style = `background: ${bg}; color: #fff;`;
         }
       }
       // Show hit-count badge when a hand appeared 2+ times (frequency mode); tiny
@@ -567,6 +594,7 @@ function renderRangeGrid(oppId) {
   $("od-rangegrid").innerHTML = `<div class="rggrid">${cells.join("")}</div>`;
   const legend = rangeGridMode === "act"
     ? Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
+      + `<span class="rglegnote">split cell = same hand, different action</span>`
     : `<span class="rglegnote">${total} shown hand${total === 1 ? "" : "s"} · darker = more frequent</span>`;
   $("od-rangelegend").innerHTML = legend;
   $("od-rg-freq").classList.toggle("on", rangeGridMode === "freq");
@@ -1714,8 +1742,11 @@ function renderTable() {
   // bottom seat panel is now sheet-driven; keep it empty so it doesn't take space.
   const el = $("he-seatassign");
   if (el) el.innerHTML = "";
-  if (d.focusPos) renderSeatSheet(d.focusPos);
-  else if (sheetGroup === "__seat__") hideSheet();
+  // Only refresh the seat sheet when it's the active sheet — otherwise a card
+  // pick (sheetGroup === "v0"/"hero"/etc) re-renders through renderTable and
+  // clobbers the card grid, closing the picker after one card (bug #9).
+  if (d.focusPos && (sheetGroup == null || sheetGroup === "__seat__")) renderSeatSheet(d.focusPos);
+  else if (!d.focusPos && sheetGroup === "__seat__") hideSheet();
 }
 
 /* Sheet-based seat editor / assignment (replaces the old bottom panel). */
@@ -1791,10 +1822,21 @@ function heroPresent(d) {
   return d.mode === "table" ? d.heroPos != null : d.heroIn;
 }
 function currentActor() {
-  if (draft.mode === "table")
-    return draft.focusPos ? actorForPos(draft.focusPos) : null;
+  if (draft.mode === "table") {
+    if (draft.focusPos) return actorForPos(draft.focusPos);
+    // No seat focused — fall through to position-based first-to-act so
+    // Add Action after positions are set attributes to the correct seat.
+    return firstToAct(draft.street) || null;
+  }
   let a = draft.actor;
   if (!draft.heroIn && a === "hero") a = null;
+  // No actor picked yet? Use position-based first-to-act so chips mode
+  // opens on the correct seat (was falling to v0, which broke HU where the
+  // SB acts first preflop — bug #7).
+  if (!a) {
+    const f = firstToAct(draft.street);
+    if (f) return f;
+  }
   return a || (draft.villains.length ? "v0" : (draft.heroIn ? "hero" : null));
 }
 /* Chips-mode auto-alternate: hero↔villain, or cycle villains when hero is out. */
