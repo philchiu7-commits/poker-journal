@@ -1227,16 +1227,16 @@ function renderOppDetail(id) {
     const subHTML = subgroups.map((sg) => {
       const chips = sg.ids.map(chipFor).filter(Boolean).join("");
       if (!chips) return "";
-      // Position-read subgroups need to wrap (posread buttons are wider than chips).
-      const rowCls = sg.ids.some(isPositionRead) ? "chiprow" : "chiprow tight";
-      return `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="${rowCls}">${chips}</div></div>`;
+      // All read subgroups wrap so every read stays visible without horizontal
+      // scrolling (Phil: "shows all reads so can be second row").
+      return `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="chiprow readwrap">${chips}</div></div>`;
     }).join("");
     const otherSingles = TENDENCY_TAGS.filter((t) => isSingle(t) && !usedIds.has(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
     const scales = TENDENCY_TAGS.filter((t) => t.cat === cat && isScaleRead(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
     return `<div class="tagcat">${cat}</div>${groups}${subHTML}` +
-      (otherSingles ? `<div class="readsub"><span class="rslabel">Other</span><div class="chiprow tight">${otherSingles}</div></div>` : "") +
+      (otherSingles ? `<div class="readsub"><span class="rslabel">Other</span><div class="chiprow readwrap">${otherSingles}</div></div>` : "") +
       scales;
   }).join("");
 
