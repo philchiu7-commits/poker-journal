@@ -483,15 +483,12 @@ textarea.noteedit { margin-bottom: 0; }
   border-radius: 8px; padding: 3px 6px; font-size: 13px; font-weight: 700;
 }
 
-/* Range grid — 13×13 preflop hand matrix, one block per position */
-.rgblock { margin-top: 10px; }
-.rgblock:first-child { margin-top: 4px; }
-.rgblockhead {
-  display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px;
-  padding-bottom: 3px; border-bottom: 1px solid var(--line);
+/* Range grid — 13×13 preflop hand matrix, one position at a time */
+.rgpicker { margin-bottom: 8px; }
+.rgpicker .chip i {
+  font-style: normal; margin-left: 4px; font-size: 10px; opacity: .7;
 }
-.rgpos { font-weight: 700; font-size: 13px; color: var(--text); letter-spacing: .3px; }
-.rgcount { font-size: 11px; color: var(--muted); }
+.rgblock { margin-top: 4px; }
 .rggrid {
   display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px;
   width: 100%; aspect-ratio: 1 / 1;
@@ -510,6 +507,22 @@ textarea.noteedit { margin-bottom: 0; }
 .rglegitem { display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize; }
 .rgswatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .rglegnote { font-size: 12px; color: var(--muted); }
+
+/* Hand-history line inside list rows — poker-log style, condensed */
+.hh-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px; color: var(--muted); line-height: 1.6;
+}
+.hh-street { display: inline-flex; align-items: center; gap: 3px; }
+.hh-st { color: var(--text); font-weight: 700; letter-spacing: .3px; margin-right: 2px; font-size: 11px; text-transform: uppercase; }
+.hh-line .ctile { transform: scale(.85); margin: 0 -1px; }
+.hh-arr { color: rgba(255,255,255,.35); font-weight: 400; margin: 0 1px; }
+.hh-sep { color: rgba(255,255,255,.25); font-weight: 700; padding: 0 4px; }
+.hh-who { font-weight: 700; font-size: 10px; margin-right: 1px; padding: 0 3px; border-radius: 4px; }
+.hh-hero { background: rgba(120,140,200,.22); color: #a8b5d8; }
+.hh-v { background: rgba(224,90,90,.18); color: #ed8a8a; }
+.hh-line b { color: var(--text); font-weight: 600; }
 
 /* Hands-panel filter strip — 5 dimensions, chips carry live counts */
 .handfilters { margin-bottom: 8px; }

@@ -513,11 +513,12 @@ function handClass(cards) {
   return hi + lo + (s1 === s2 ? "s" : "o");
 }
 /* Aggregate a villain's shown hands into per-position freq + preflop action mix.
-   Each position gets its own {freq, actions} bucket; hands with no recorded pos
-   fall into "—". */
+   4bet/5bet/jam collapse into a single "4bet+" bucket so the palette can spend
+   its distinct colours on more meaningful action categories. */
+const ACT_GROUP = { "5bet": "4bet+", "4bet": "4bet+", "jam": "4bet+" };
 function villainRangeData(oppId) {
   const byPos = {};
-  const rankAct = { jam: 5, "5bet": 5, "4bet": 4, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+  const rankAct = { "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
   for (const h of HANDS) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (idx < 0) continue;
@@ -530,17 +531,22 @@ function villainRangeData(oppId) {
     bucket.total++;
     const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
     let top = null;
-    for (const a of pre) if (!top || (rankAct[a.act] || 0) > (rankAct[top.act] || 0)) top = a;
+    for (const a of pre) {
+      const g = ACT_GROUP[a.act] || a.act;
+      const r = rankAct[g] || 0;
+      if (!top || r > top.r) top = { g, r };
+    }
     if (top) {
       bucket.actions[hc] = bucket.actions[hc] || {};
-      bucket.actions[hc][top.act] = (bucket.actions[hc][top.act] || 0) + 1;
+      bucket.actions[hc][top.g] = (bucket.actions[hc][top.g] || 0) + 1;
     }
   }
   return byPos;
 }
-/* GTO Wizard-ish palette for preflop actions. Neutral text for legibility. */
-const ACT_COLORS = { raise: "#e05a5a", "3bet": "#c94848", "4bet": "#a83636", "5bet": "#8a2626", jam: "#6a1010",
-                     call: "#4fa66a", limp: "#e5a04a", check: "#4fb0b0", fold: "#3c4149" };
+/* Distinct-hue palette so raise / 3bet / 4bet+ don't blur into three shades
+   of the same red. Warm amber = open, bright red = 3bet, purple = 4bet+. */
+const ACT_COLORS = { raise: "#e59c3d", "3bet": "#d94848", "4bet+": "#8a3fb2",
+                     call: "#4faf6a", limp: "#4fb0b0", check: "#6a75a0", fold: "#3c4149" };
 function dominantAction(mix) {
   if (!mix) return null;
   let best = null, bestN = 0;
@@ -552,7 +558,7 @@ function dominantAction(mix) {
    same class was played multiple ways. */
 function actionMixBackground(mix) {
   if (!mix) return null;
-  const rankAct = { jam: 5, "5bet": 5, "4bet": 4, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+  const rankAct = { "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
   const entries = Object.entries(mix).sort((a, b) => (rankAct[b[0]] || 0) - (rankAct[a[0]] || 0));
   const total = entries.reduce((s, [, n]) => s + n, 0);
   if (!total) return null;
@@ -588,6 +594,7 @@ function gridCellsHTML(freq, actions) {
   }
   return cells.join("");
 }
+let rangeGridPos = null;
 function renderRangeGrid(oppId) {
   const byPos = villainRangeData(oppId);
   const positions = Object.keys(byPos).sort((a, b) => {
@@ -602,17 +609,21 @@ function renderRangeGrid(oppId) {
     $("od-rangelegend").innerHTML = "";
     return;
   }
-  const html = positions.map((pos) => {
-    const { freq, actions, total } = byPos[pos];
-    return `<div class="rgblock">
-      <div class="rgblockhead"><span class="rgpos">${esc(pos)}</span><span class="rgcount">${total} hand${total === 1 ? "" : "s"}</span></div>
+  if (!positions.includes(rangeGridPos)) rangeGridPos = positions[0];
+  const picker = positions.map((p) => {
+    const on = p === rangeGridPos ? " on" : "";
+    return `<button class="chip mini${on}" data-rgpos="${esc(p)}">${esc(p)}<i>${byPos[p].total}</i></button>`;
+  }).join("");
+  const { freq, actions, total } = byPos[rangeGridPos];
+  $("od-rangegrid").innerHTML = `
+    <div class="rgpicker chiprow tight">${picker}</div>
+    <div class="rgblock">
       <div class="rggrid">${gridCellsHTML(freq, actions)}</div>
     </div>`;
-  }).join("");
-  $("od-rangegrid").innerHTML = html;
   $("od-rangelegend").innerHTML =
-    Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
-    + `<span class="rglegnote">split cell = same hand, different action</span>`;
+    `<span class="rglegnote">${rangeGridPos} · ${total} hand${total === 1 ? "" : "s"}</span>`
+    + Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
+    + `<span class="rglegnote">split cell = mixed action</span>`;
 }
 
 /* ================= Opponents list ================= */
@@ -1400,25 +1411,93 @@ function abbrevAct(a) {
   const code = ACT_ABBR[a.act] || a.act;
   return code + (sz ? (/^\d/.test(sz) ? "" : " ") + sz : "") + street;
 }
-/* Row in a hands list. With `oppId`, lead with THAT villain's position,
-   hole cards, and defining action instead of just names. */
+/* Compressed hand-history line for a list row, in the standard poker-log
+   style: "Pre 40K → 3B 120K → C · Flop K♠7♥2♣: X → B60% → F". Actor
+   initials prefix each token when the hand has more than one actor.
+   Multi-street chains are joined with · separators. Board cards for later
+   streets appear inline (turn, river). */
+function handHistoryLine(h) {
+  const acts = h.actions || [];
+  if (!acts.length) return "";
+  const twoSided = acts.some((a) => a.actor !== acts[0].actor);
+  const actorInit = (a) => {
+    if (!twoSided) return "";
+    if (a.actor === "hero") return "H·";
+    return "V" + (Number(a.actor.slice(1)) + 1) + "·";
+  };
+  const abbr = (a) => {
+    if (a.act === "jam" || a.size === "Jam") return "Jam";
+    const code = { fold: "F", check: "X", call: "C", limp: "L", bet: "B",
+                   raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B" }[a.act] || a.act;
+    const sz = a.size ? sizeLabel(a.size).replace(/\s/g, "") : "";
+    return code + sz;
+  };
+  const b = h.board || [];
+  const streetPrefix = { pre: "Pre", flop: "Flop", turn: "Turn", river: "River" };
+  const parts = [];
+  for (const st of STREETS) {
+    const sa = acts.filter((a) => a.street === st);
+    if (!sa.length) continue;
+    let head = streetPrefix[st];
+    if (st === "flop" && b.slice(0, 3).some(Boolean))
+      head += " " + b.slice(0, 3).filter(Boolean).map((c) => c.slice(0,-1) + c.slice(-1)).join("");
+    else if (st === "turn" && b[3]) head += " " + b[3];
+    else if (st === "river" && b[4]) head += " " + b[4];
+    const chain = sa.map((a) => actorInit(a) + abbr(a)).join(" → ");
+    parts.push(head + " " + chain);
+  }
+  return parts.join(" · ");
+}
+function handHistoryLineHTML(h) {
+  const acts = h.actions || [];
+  if (!acts.length) return "";
+  const twoSided = acts.some((a) => a.actor !== acts[0].actor);
+  const actorInit = (a) => {
+    if (!twoSided) return "";
+    if (a.actor === "hero") return `<span class="hh-who hh-hero">H</span>`;
+    return `<span class="hh-who hh-v">V${Number(a.actor.slice(1)) + 1}</span>`;
+  };
+  const abbr = (a) => {
+    if (a.act === "jam" || a.size === "Jam") return `<b>Jam</b>`;
+    const code = { fold: "F", check: "X", call: "C", limp: "L", bet: "B",
+                   raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B" }[a.act] || a.act;
+    const sz = a.size ? sizeLabel(a.size).replace(/\s/g, "") : "";
+    return `<b>${esc(code)}</b>${sz ? esc(sz) : ""}`;
+  };
+  const b = h.board || [];
+  const streetPrefix = { pre: "Pre", flop: "Flop", turn: "Turn", river: "River" };
+  const boardTiles = (cards) => cards.filter(Boolean).map((c) => tileHTML(c)).join("");
+  const parts = [];
+  for (const st of STREETS) {
+    const sa = acts.filter((a) => a.street === st);
+    if (!sa.length) continue;
+    let head = `<span class="hh-st">${streetPrefix[st]}</span>`;
+    if (st === "flop" && b.slice(0, 3).some(Boolean)) head += boardTiles(b.slice(0, 3));
+    else if (st === "turn" && b[3]) head += boardTiles([b[3]]);
+    else if (st === "river" && b[4]) head += boardTiles([b[4]]);
+    const chain = sa.map((a) => actorInit(a) + abbr(a)).join(`<span class="hh-arr">→</span>`);
+    parts.push(`<span class="hh-street">${head}${chain}</span>`);
+  }
+  return parts.join(`<span class="hh-sep">·</span>`);
+}
+/* Row in a hands list, in the standard hand-history style. With `oppId`,
+   lead with THAT villain's position + hole cards; on the general feed, lead
+   with the villain lineup. Bottom line: compressed street-by-street action. */
 function handRowHTML(h, oppId) {
   const res = heroResult(h);
   const dot = res ? `<span class="dot ${res}"></span>` : "";
   const squid = h.squid?.have != null ? `<span class="hr-squid">${h.squid.have}🦑</span>` : "";
-  const boardH = (h.board || []).some(Boolean) ? tilesHTML(h.board) + " " : "";
-  const sub = `<div class="s">${boardH}${esc(handSummary(h))}</div>`;
+  const historyH = handHistoryLineHTML(h);
+  const sub = historyH ? `<div class="s hh-line">${historyH}</div>` : "";
   if (oppId) {
     const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (i >= 0) {
       const v = h.villains[i];
-      const seq = actionSeq(h, "v" + i);
       const bits = [
         v.pos ? `<span class="hv-pos">${esc(v.pos)}</span>` : "",
         v.cards && v.cards.some(Boolean) ? tilesHTML(v.cards) : "",
-        seq ? `<span class="hr-act">${esc(seq)}</span>` : "",
       ].filter(Boolean).join("");
-      if (bits) return `<div class="lrow" data-hand="${h.id}">
+      return `<div class="lrow" data-hand="${h.id}">
         <div class="t hr-t">${dot}${bits}${squid}</div>${sub}
       </div>`;
     }
@@ -1972,23 +2051,55 @@ function parseNoteToDraft(text, opponentId) {
       d.board[i] = ranks[i] + suit;
     }
   }
-  // preflop headline action — set a single villain action if it's clear
-  const act = text.match(PRE_ACT_RX);
-  if (act) {
-    const a = act[1];
-    let push = null;
-    if (a === "Open") push = { act: "raise" };
-    else if (a === "Iso")  push = { act: "raise" };
-    else if (a === "3b")   push = { act: "3bet" };
-    else if (a === "4b")   push = { act: "raise" };
-    else if (a === "Lc")   push = { act: "limp" };   // limp-call: villain limped; then called a raise (rest is manual)
-    else if (a === "Lrr")  push = { act: "limp" };   // limp-reraise: first action was limp
-    else if (a === "Ld" || a === "Lb") push = { act: "limp" };   // lead/limp-bet: assume villain limped pre first
-    else if (a === "limp" || a === "Ls") push = { act: "limp" };
-    // size adjacent to the action (e.g. "Open 60k", "Iso 90k")
-    const sizeMatch = text.match(new RegExp(a + "\\s*(\\d{1,3})[Kk]?\\b"));
-    const size = sizeMatch ? sizeMatch[1] + "k" : null;
-    if (push) d.actions.push({ street: "pre", actor: "v0", act: push.act, size });
+  // preflop action chain — walk the note in order, extract every recognized
+  // token, and resolve sizing math (3b 3x after Open 40k → 120k) so the parsed
+  // hand matches what filling it in manually would produce.
+  //
+  // Actor heuristic: notes are villain-centric, so the villain's own action
+  // (Open/3b/4b/Lrr/limp) is v0; a matching counteraction on the OTHER side
+  // (an opposing 3b or "call"/"cc" written after) is hero. Not perfect for
+  // multiway pots but right for the common headline case.
+  const ACT_MAP = {
+    Open: { act: "raise",   who: "v0" },
+    Iso:  { act: "raise",   who: "v0" },
+    "3b": { act: "3bet",    who: "v0" },
+    "4b": { act: "4bet",    who: "v0" },
+    Lrr:  { act: "limp",    who: "v0" },   // limp then reraise; reraise pushed below
+    Lc:   { act: "limp",    who: "v0" },
+    Ld:   { act: "limp",    who: "v0" },
+    Lb:   { act: "limp",    who: "v0" },
+    limp: { act: "limp",    who: "v0" },
+    Ls:   { act: "limp",    who: "v0" },
+    cc:   { act: "call",    who: "hero" },
+    call: { act: "call",    who: "hero" },
+  };
+  const CHAIN_RX = /\b(Open|Iso|Lrr|Lc|Ld|Lb|Ls|limp|3b|4b|cc|call)(?:\s*(\d{1,4})[Kk]?\b|\s*(\d(?:\.\d+)?)[xX]\b)?/g;
+  const chain = [];
+  let cm;
+  while ((cm = CHAIN_RX.exec(text)) !== null) {
+    const tok = cm[1], numK = cm[2], mult = cm[3];
+    const spec = ACT_MAP[tok]; if (!spec) continue;
+    let size = null;
+    if (numK) size = numK + "k";
+    else if (mult) size = mult + "x";
+    chain.push({ tok, act: spec.act, who: spec.who, size });
+    // "Lrr" is the pair (limp, then raise) — push a follow-up raise entry.
+    if (tok === "Lrr") chain.push({ tok: "Lrr-raise", act: "3bet", who: "v0", size });
+  }
+  // Resolve multipliers into chip amounts using the most recent raise size in
+  // the chain. Preserve the "Nx" storage too — estimatePot uses that — but
+  // convert isolated multipliers on 3b/4b/Lrr when a chip-anchored open exists.
+  let lastK = null;
+  for (const step of chain) {
+    if (step.size && /^\d+k$/.test(step.size)) lastK = parseFloat(step.size);
+    else if (step.size && /^\d+(\.\d+)?x$/.test(step.size) && lastK != null) {
+      const mult = parseFloat(step.size);
+      lastK = Math.round(lastK * mult);
+      step.size = lastK + "k";
+    }
+  }
+  for (const step of chain) {
+    d.actions.push({ street: "pre", actor: step.who, act: step.act, size: step.size || null });
   }
   return d;
 }
@@ -3220,6 +3331,12 @@ function bindStatic() {
     if (dim === "sd") handFilters.sd = !handFilters.sd;
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
+  };
+  $("od-rangegrid").onclick = (e) => {
+    const b = e.target.closest("[data-rgpos]");
+    if (!b) return;
+    rangeGridPos = b.dataset.rgpos;
+    if (curOppId) renderRangeGrid(curOppId);
   };
   $("od-hf-clear").onclick = () => { resetHandFilters(); if (curOppId) renderOppDetail(curOppId); };
   $("od-exploit-tmpl").onclick = openTemplateSheet;
