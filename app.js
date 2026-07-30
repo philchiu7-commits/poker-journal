@@ -512,9 +512,11 @@ function handClass(cards) {
   const hi = i1 < i2 ? r1 : r2, lo = i1 < i2 ? r2 : r1;
   return hi + lo + (s1 === s2 ? "s" : "o");
 }
-/* Aggregate a villain's shown hands into per-class frequency + preflop action mix. */
+/* Aggregate a villain's shown hands into per-position freq + preflop action mix.
+   Each position gets its own {freq, actions} bucket; hands with no recorded pos
+   fall into "—". */
 function villainRangeData(oppId) {
-  const freq = {}, actions = {};
+  const byPos = {};
   const rankAct = { jam: 5, "5bet": 5, "4bet": 4, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
   for (const h of HANDS) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
@@ -522,16 +524,19 @@ function villainRangeData(oppId) {
     const v = h.villains[idx];
     const hc = handClass(v.cards);
     if (!hc) continue;
-    freq[hc] = (freq[hc] || 0) + 1;
+    const pos = v.pos || "—";
+    const bucket = byPos[pos] = byPos[pos] || { freq: {}, actions: {}, total: 0 };
+    bucket.freq[hc] = (bucket.freq[hc] || 0) + 1;
+    bucket.total++;
     const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
     let top = null;
     for (const a of pre) if (!top || (rankAct[a.act] || 0) > (rankAct[top.act] || 0)) top = a;
     if (top) {
-      actions[hc] = actions[hc] || {};
-      actions[hc][top.act] = (actions[hc][top.act] || 0) + 1;
+      bucket.actions[hc] = bucket.actions[hc] || {};
+      bucket.actions[hc][top.act] = (bucket.actions[hc][top.act] || 0) + 1;
     }
   }
-  return { freq, actions };
+  return byPos;
 }
 /* GTO Wizard-ish palette for preflop actions. Neutral text for legibility. */
 const ACT_COLORS = { raise: "#e05a5a", "3bet": "#c94848", "4bet": "#a83636", "5bet": "#8a2626", jam: "#6a1010",
@@ -563,12 +568,9 @@ function actionMixBackground(mix) {
   }
   return `linear-gradient(90deg, ${stops.join(", ")})`;
 }
-/* Render mode: "freq" (heat by count) or "act" (dominant preflop action). */
-let rangeGridMode = "freq";
-function renderRangeGrid(oppId) {
-  const { freq, actions } = villainRangeData(oppId);
-  const total = Object.values(freq).reduce((s, n) => s + n, 0);
-  const maxCount = Object.values(freq).reduce((m, n) => Math.max(m, n), 0);
+/* One 13×13 grid per position the villain has been seen at, coloured by
+   dominant preflop action (split cells show mixed strategies). */
+function gridCellsHTML(freq, actions) {
   const cells = [];
   for (let i = 0; i < RANKS.length; i++) {
     for (let j = 0; j < RANKS.length; j++) {
@@ -577,28 +579,40 @@ function renderRangeGrid(oppId) {
       const n = freq[cls] || 0;
       let style = "background: #1a1d23; color: #4b5057;";
       if (n > 0) {
-        if (rangeGridMode === "freq") {
-          const alpha = 0.25 + 0.75 * (n / (maxCount || 1));
-          style = `background: rgba(93,180,120,${alpha}); color: #fff;`;
-        } else {
-          const bg = actionMixBackground(actions[cls]) || "#5a6068";
-          style = `background: ${bg}; color: #fff;`;
-        }
+        const bg = actionMixBackground(actions[cls]) || "#5a6068";
+        style = `background: ${bg}; color: #fff;`;
       }
-      // Show hit-count badge when a hand appeared 2+ times (frequency mode); tiny
-      // count also visible on action-mode cells so Phil can see sample size.
       const badge = n > 1 ? `<span class="rgn">${n}</span>` : "";
       cells.push(`<div class="rgcell" style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}${badge}</div>`);
     }
   }
-  $("od-rangegrid").innerHTML = `<div class="rggrid">${cells.join("")}</div>`;
-  const legend = rangeGridMode === "act"
-    ? Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
-      + `<span class="rglegnote">split cell = same hand, different action</span>`
-    : `<span class="rglegnote">${total} shown hand${total === 1 ? "" : "s"} · darker = more frequent</span>`;
-  $("od-rangelegend").innerHTML = legend;
-  $("od-rg-freq").classList.toggle("on", rangeGridMode === "freq");
-  $("od-rg-act").classList.toggle("on", rangeGridMode === "act");
+  return cells.join("");
+}
+function renderRangeGrid(oppId) {
+  const byPos = villainRangeData(oppId);
+  const positions = Object.keys(byPos).sort((a, b) => {
+    const ia = POSITIONS.indexOf(a), ib = POSITIONS.indexOf(b);
+    if (ia < 0 && ib < 0) return a.localeCompare(b);
+    if (ia < 0) return 1;
+    if (ib < 0) return -1;
+    return ia - ib;
+  });
+  if (!positions.length) {
+    $("od-rangegrid").innerHTML = `<div class="empty">No shown hands yet.</div>`;
+    $("od-rangelegend").innerHTML = "";
+    return;
+  }
+  const html = positions.map((pos) => {
+    const { freq, actions, total } = byPos[pos];
+    return `<div class="rgblock">
+      <div class="rgblockhead"><span class="rgpos">${esc(pos)}</span><span class="rgcount">${total} hand${total === 1 ? "" : "s"}</span></div>
+      <div class="rggrid">${gridCellsHTML(freq, actions)}</div>
+    </div>`;
+  }).join("");
+  $("od-rangegrid").innerHTML = html;
+  $("od-rangelegend").innerHTML =
+    Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
+    + `<span class="rglegnote">split cell = same hand, different action</span>`;
 }
 
 /* ================= Opponents list ================= */
@@ -671,11 +685,13 @@ function oppOrderCmp(stats) {
 }
 
 function oppRowHTML(o, st) {
-  // curated card first; fall back to a few set reads before anything's featured
+  // curated card first; otherwise show only STRONG reads (yes!/no!) so the
+  // card doesn't drown in every tag Phil ever set. Phil will curate per-opp
+  // later via the featured-card sheet.
   const feat = featuredItems(o);
   let chips = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("");
   if (!chips) chips = Object.entries(oppReads(o))
-    .filter(([id]) => readIsShown(o, id))
+    .filter(([id, s]) => isStrongRead(s) && readIsShown(o, id))
     .map(([id, s]) => readChip(id, s)).join("");
   // Pinned exploits appear as chips on the list card. Phil picks which ones
   // in the opponent detail (star toggle) so the front card stays focused on
@@ -3198,8 +3214,6 @@ function bindStatic() {
   // opponent detail
   $("od-edit").onclick = () => $("od-editform").classList.toggle("hidden");
   $("od-card-edit").onclick = openCardSheet;
-  $("od-rg-freq").onclick = () => { rangeGridMode = "freq"; if (curOppId) renderRangeGrid(curOppId); };
-  $("od-rg-act").onclick = () => { rangeGridMode = "act"; if (curOppId) renderRangeGrid(curOppId); };
   $("od-handfilters").onclick = (e) => {
     const c = e.target.closest("[data-hf]"); if (!c) return;
     const dim = c.dataset.hf, v = c.dataset.hfv;
