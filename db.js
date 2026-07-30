@@ -50,8 +50,31 @@ const dbDel = async (store, id) => {
 const dbByIndex = (store, index, value) =>
   _tx(store, "readonly", (s) => s.index(index).getAll(value));
 
-const metaGet = async (key) => (await dbGet("meta", key))?.value ?? null;
-const metaSet = (key, value) => dbPut("meta", { key, value });
+/* Small-meta values (blinds default, lineup, seats, collapsed groups, last export)
+   also mirror to localStorage as a survival copy — if iOS Safari nukes IDB,
+   the app still boots with the user's live-game context intact. Big values
+   (autoSnapshot with full JSON dump) skip the mirror to stay under the quota. */
+const META_MIRROR_MAX_BYTES = 8000;
+const _mirrorKey = (k) => "pj.meta." + k;
+function _mirrorSet(key, value) {
+  try {
+    const s = JSON.stringify(value);
+    if (s.length > META_MIRROR_MAX_BYTES) { localStorage.removeItem(_mirrorKey(key)); return; }
+    localStorage.setItem(_mirrorKey(key), s);
+  } catch {}
+}
+function _mirrorGet(key) {
+  try { const s = localStorage.getItem(_mirrorKey(key)); return s == null ? null : JSON.parse(s); }
+  catch { return null; }
+}
+const metaGet = async (key) => {
+  const idbVal = (await dbGet("meta", key))?.value;
+  if (idbVal != null) return idbVal;
+  const mirror = _mirrorGet(key);
+  if (mirror != null) { dbPut("meta", { key, value: mirror }).catch(() => {}); return mirror; }
+  return null;
+};
+const metaSet = (key, value) => { _mirrorSet(key, value); return dbPut("meta", { key, value }); };
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID()
   : Date.now().toString(36) + Math.random().toString(36).slice(2));

@@ -558,7 +558,10 @@ function renderRangeGrid(oppId) {
           style = `background: ${col}; color: #fff;`;
         }
       }
-      cells.push(`<div class="rgcell" style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}</div>`);
+      // Show hit-count badge when a hand appeared 2+ times (frequency mode); tiny
+      // count also visible on action-mode cells so Phil can see sample size.
+      const badge = n > 1 ? `<span class="rgn">${n}</span>` : "";
+      cells.push(`<div class="rgcell" style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}${badge}</div>`);
     }
   }
   $("od-rangegrid").innerHTML = `<div class="rggrid">${cells.join("")}</div>`;
