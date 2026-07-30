@@ -112,38 +112,52 @@ function pillTag(o) {
 }
 
 /* Turn the opponent's set reads into concrete exploit suggestions (EXPLOIT_RULES),
-   minus any Phil has dismissed or already accepted (keys in o.exploitDismissed). */
+   minus any Phil has dismissed or already accepted (keys in o.exploitDismissed).
+   Weighted: yes!/no! (strong) count more than yes/no; compound rules count more
+   than singles. Suggestions sort best-first. Compounds require at least one
+   strong key so a wall of weak reads doesn't produce a confident-looking exploit. */
+const isStrongRead = (state) => state === "yes!" || state === "no!";
 function suggestedExploits(o) {
   const reads = oppReads(o);
   const dismissed = new Set(o.exploitDismissed || []);
   const seen = new Set();
   const out = [];
-  // Compound rules first — every key must match. Higher signal → sort above singles.
   for (const rule of COMPOUND_EXPLOIT_RULES) {
+    let anyStrong = false;
+    let strongCount = 0;
     const allMatch = rule.keys.every((k) => {
       const [tId, tState] = k.split(":");
       const cur = reads[tId];
-      return cur && readBase(cur) === tState;
+      if (!cur || readBase(cur) !== tState) return false;
+      if (isStrongRead(cur)) { anyStrong = true; strongCount++; }
+      return true;
     });
     if (!allMatch) continue;
+    if (!anyStrong) continue;                                // compounds need ≥1 strong signal
     const key = "cmp:" + rule.id;
     if (dismissed.has(key) || seen.has(key)) continue;
     seen.add(key);
-    out.push({ key, text: rule.label + " — " + rule.text, compound: true });
+    // Compound base weight 6; +2 per additional strong key past the first.
+    const weight = 6 + Math.max(0, strongCount - 1) * 2;
+    out.push({ key, text: rule.label + " — " + rule.text, compound: true, weight, strong: true });
   }
   for (const [id, state] of Object.entries(reads)) {
     if (!state) continue;
     const rule = EXPLOIT_RULES[id];
     if (!rule) continue;
     const useAny = !!rule.any;
-    const base = readBase(state);                            // "yes!"→"yes", "no!"→"no"
+    const base = readBase(state);
     const text = useAny ? rule.any : rule[base];
     if (!text) continue;
     const key = id + ":" + (useAny ? "any" : base);
     if (dismissed.has(key) || seen.has(key)) continue;
     seen.add(key);
-    out.push({ key, text });
+    // Singles: strong=4, regular=2. "any"-kind rules are position/scale reads
+    // where strength doesn't apply — treat as 2.
+    const weight = useAny ? 2 : (isStrongRead(state) ? 4 : 2);
+    out.push({ key, text, weight, strong: isStrongRead(state) });
   }
+  out.sort((a, b) => (b.weight || 0) - (a.weight || 0));
   return out;
 }
 
@@ -381,6 +395,81 @@ function route() {
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
      hands: renderHandsFeed, handview: () => renderHandView(arg), data: renderData })[v]();
   window.scrollTo(0, 0);
+}
+
+/* ================= Range grid (13×13) ================= */
+/* Cards → 169-hand class: "AA", "AKs", "AKo", … */
+function handClass(cards) {
+  if (!cards || !cards[0] || !cards[1]) return null;
+  const r1 = cards[0][0], r2 = cards[1][0], s1 = cards[0][1], s2 = cards[1][1];
+  if (r1 === r2) return r1 + r2;
+  const i1 = RANKS.indexOf(r1), i2 = RANKS.indexOf(r2);
+  const hi = i1 < i2 ? r1 : r2, lo = i1 < i2 ? r2 : r1;
+  return hi + lo + (s1 === s2 ? "s" : "o");
+}
+/* Aggregate a villain's shown hands into per-class frequency + preflop action mix. */
+function villainRangeData(oppId) {
+  const freq = {}, actions = {};
+  const rankAct = { jam: 5, "5bet": 5, "4bet": 4, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+  for (const h of HANDS) {
+    const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+    if (idx < 0) continue;
+    const v = h.villains[idx];
+    const hc = handClass(v.cards);
+    if (!hc) continue;
+    freq[hc] = (freq[hc] || 0) + 1;
+    const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
+    let top = null;
+    for (const a of pre) if (!top || (rankAct[a.act] || 0) > (rankAct[top.act] || 0)) top = a;
+    if (top) {
+      actions[hc] = actions[hc] || {};
+      actions[hc][top.act] = (actions[hc][top.act] || 0) + 1;
+    }
+  }
+  return { freq, actions };
+}
+/* GTO Wizard-ish palette for preflop actions. Neutral text for legibility. */
+const ACT_COLORS = { raise: "#e05a5a", "3bet": "#c94848", "4bet": "#a83636", "5bet": "#8a2626", jam: "#6a1010",
+                     call: "#4fa66a", limp: "#e5a04a", check: "#4fb0b0", fold: "#3c4149" };
+function dominantAction(mix) {
+  if (!mix) return null;
+  let best = null, bestN = 0;
+  for (const [act, n] of Object.entries(mix)) if (n > bestN) { best = act; bestN = n; }
+  return best;
+}
+/* Render mode: "freq" (heat by count) or "act" (dominant preflop action). */
+let rangeGridMode = "freq";
+function renderRangeGrid(oppId) {
+  const { freq, actions } = villainRangeData(oppId);
+  const total = Object.values(freq).reduce((s, n) => s + n, 0);
+  const maxCount = Object.values(freq).reduce((m, n) => Math.max(m, n), 0);
+  const cells = [];
+  for (let i = 0; i < RANKS.length; i++) {
+    for (let j = 0; j < RANKS.length; j++) {
+      const hi = RANKS[i], lo = RANKS[j];
+      const cls = i === j ? hi + hi : (i < j ? hi + lo + "s" : lo + hi + "o");
+      const n = freq[cls] || 0;
+      let style = "background: #1a1d23; color: #4b5057;";
+      if (n > 0) {
+        if (rangeGridMode === "freq") {
+          const alpha = 0.25 + 0.75 * (n / (maxCount || 1));
+          style = `background: rgba(93,180,120,${alpha}); color: #fff;`;
+        } else {
+          const dom = dominantAction(actions[cls]);
+          const col = dom ? ACT_COLORS[dom] || "#4fa66a" : "#5a6068";
+          style = `background: ${col}; color: #fff;`;
+        }
+      }
+      cells.push(`<div class="rgcell" style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}</div>`);
+    }
+  }
+  $("od-rangegrid").innerHTML = `<div class="rggrid">${cells.join("")}</div>`;
+  const legend = rangeGridMode === "act"
+    ? Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
+    : `<span class="rglegnote">${total} shown hand${total === 1 ? "" : "s"} · darker = more frequent</span>`;
+  $("od-rangelegend").innerHTML = legend;
+  $("od-rg-freq").classList.toggle("on", rangeGridMode === "freq");
+  $("od-rg-act").classList.toggle("on", rangeGridMode === "act");
 }
 
 /* ================= Opponents list ================= */
@@ -642,35 +731,6 @@ function openGroupAddSheet(group) {
       renderOpponents();
     };
   });
-}
-
-/* Position picker for position-kind reads (first-raise, latest-lrr, …).
-   Full POSITIONS grid — Phil may be logging opponents from tables of any size,
-   so all labels stay available. Tap = set + close. */
-function openPositionReadPicker(readId) {
-  const o = oppById(curOppId);
-  if (!o) return;
-  const lbl = TAG_BY_ID[readId]?.label || readId;
-  const cur = oppReads(o)[readId] || "";
-  const btns = POSITIONS.map((p) =>
-    `<button class="chip mini${cur === p ? " on sgreen" : ""}" data-posset="${p}">${p}</button>`).join("");
-  showSheet(`<div class="sheethead"><span class="t">${esc(lbl)}</span>
-      <button class="chip" data-sheetclose>Done</button></div>
-    <div class="sheetnote">Pick the position — updates on tap.</div>
-    <div class="chiprow" style="gap:6px">${btns}</div>
-    ${cur ? `<button class="danger" data-posset="" style="margin-top:12px">Clear</button>` : ""}`);
-  $("sheet").querySelectorAll("[data-posset]").forEach((b) => {
-    b.onclick = async () => {
-      const v = b.dataset.posset;
-      if (v) oppReads(o)[readId] = v;
-      else delete oppReads(o)[readId];
-      o.updatedAt = Date.now();
-      await dbPut("opponents", o);
-      hideSheet();
-      renderOppDetail(curOppId);
-    };
-  });
-  $("sheet").querySelector("[data-sheetclose]").onclick = hideSheet;
 }
 
 /* Squid count picker: a scrollable column of numbers (press-and-select). */
@@ -1000,11 +1060,13 @@ function renderOppDetail(id) {
     const st = reads[id];
     if (isPositionRead(id)) {
       const active = st != null && st !== "";
-      const shown = active ? st : "select";
-      return `<button class="posread${active ? " on" : ""}" data-posread="${id}" title="${esc(lbl)}">
-        <span class="prlbl">${esc(lbl)}</span><span class="prval">${esc(shown)}</span>
-        ${active ? `<span class="prclear" data-posclear="${id}" title="Clear">✕</span>` : ""}
-      </button>`;
+      const opts = ['<option value="">–</option>']
+        .concat(POSITIONS.map((p) => `<option value="${p}"${st === p ? " selected" : ""}>${p}</option>`))
+        .join("");
+      return `<label class="posread${active ? " on" : ""}" title="${esc(lbl)}">
+        <span class="prlbl">${esc(lbl)}</span>
+        <select class="prselect" data-posselect="${id}">${opts}</select>
+      </label>`;
     }
     if (isScaleRead(id)) {
       const v = Math.max(0, Math.min(100, Number(st) || 0));
@@ -1122,18 +1184,22 @@ function renderOppDetail(id) {
     ? `<div class="sugghead" data-toggle-sugg>
         <span>Suggested from reads (${suggs.length})</span>
         <span class="toggle-arrow">${showSugg ? "▼" : "▶"}</span>
-      </div>` + (showSugg ? suggs.map((s) =>
-        `<div class="suggitem${s.compound ? " suggcompound" : ""}" data-key="${esc(s.key)}">
-           <div class="notetext">${s.compound ? "🎯" : "💡"} ${esc(s.text)}</div>
+      </div>` + (showSugg ? suggs.map((s) => {
+        const icon = s.compound ? "🎯" : (s.strong ? "⭐" : "💡");
+        return `<div class="suggitem${s.compound ? " suggcompound" : ""}${s.strong ? " suggstrong" : ""}" data-key="${esc(s.key)}">
+           <div class="notetext">${icon} ${esc(s.text)}</div>
            <div class="noterowbtns">
              <button class="chip mini on sgreen" data-exacc>＋ Add</button>
              <button class="chip mini" data-exdismiss>Dismiss</button>
-           </div></div>`).join("") : "")
+           </div></div>`;
+      }).join("") : "")
     : "";
 
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
   $("od-hands").innerHTML = hands.map((h) => handRowHTML(h, id)).join("") ||
     `<div class="empty">No hands logged.</div>`;
+
+  renderRangeGrid(id);
 }
 
 /* ================= Hand rendering (rows + full text) ================= */
@@ -2987,6 +3053,8 @@ function bindStatic() {
   // opponent detail
   $("od-edit").onclick = () => $("od-editform").classList.toggle("hidden");
   $("od-card-edit").onclick = openCardSheet;
+  $("od-rg-freq").onclick = () => { rangeGridMode = "freq"; if (curOppId) renderRangeGrid(curOppId); };
+  $("od-rg-act").onclick = () => { rangeGridMode = "act"; if (curOppId) renderRangeGrid(curOppId); };
   $("od-exploit-tmpl").onclick = openTemplateSheet;
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);
@@ -3041,21 +3109,6 @@ function bindStatic() {
       renderOppDetail(curOppId);
       return;
     }
-    const pclr = e.target.closest("[data-posclear]");
-    if (pclr) {
-      e.stopPropagation();
-      const o = oppById(curOppId);
-      delete oppReads(o)[pclr.dataset.posclear];
-      o.updatedAt = Date.now();
-      await dbPut("opponents", o);
-      renderOppDetail(curOppId);
-      return;
-    }
-    const pos = e.target.closest("[data-posread]");
-    if (pos) {
-      openPositionReadPicker(pos.dataset.posread);
-      return;
-    }
     const b = e.target.closest("[data-tag]");
     if (!b) return;
     const o = oppById(curOppId);
@@ -3068,6 +3121,18 @@ function bindStatic() {
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
   };
+  $("od-tags").addEventListener("change", async (e) => {
+    const ps = e.target.closest("[data-posselect]");
+    if (!ps) return;
+    const o = oppById(curOppId);
+    const id = ps.dataset.posselect;
+    const v = ps.value;
+    if (v) oppReads(o)[id] = v;
+    else delete oppReads(o)[id];
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(curOppId);
+  });
   $("od-tags").addEventListener("input", async (e) => {
     const s = e.target.closest("[data-scaleinput]");
     if (!s) return;
