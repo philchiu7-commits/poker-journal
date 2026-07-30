@@ -543,10 +543,11 @@ function villainRangeData(oppId) {
   }
   return byPos;
 }
-/* Distinct-hue palette so raise / 3bet / 4bet+ don't blur into three shades
-   of the same red. Warm amber = open, bright red = 3bet, purple = 4bet+. */
-const ACT_COLORS = { raise: "#e59c3d", "3bet": "#d94848", "4bet+": "#8a3fb2",
-                     call: "#4faf6a", limp: "#4fb0b0", check: "#6a75a0", fold: "#3c4149" };
+/* GTO-Wizard-style palette: reds for aggression (open→3bet→4bet+ deepening),
+   bright green for call, yellow for limp (distinct from the green so wide
+   limpers stand apart from wide callers), light gray for fold. */
+const ACT_COLORS = { raise: "#d64848", "3bet": "#a02828", "4bet+": "#5a1414",
+                     call: "#6bbf6b", limp: "#e5c04a", check: "#7a95b0", fold: "#7c8794" };
 function dominantAction(mix) {
   if (!mix) return null;
   let best = null, bestN = 0;
@@ -1411,72 +1412,50 @@ function abbrevAct(a) {
   const code = ACT_ABBR[a.act] || a.act;
   return code + (sz ? (/^\d/.test(sz) ? "" : " ") + sz : "") + street;
 }
-/* Compressed hand-history line for a list row, in the standard poker-log
-   style: "Pre 40K → 3B 120K → C · Flop K♠7♥2♣: X → B60% → F". Actor
-   initials prefix each token when the hand has more than one actor.
-   Multi-street chains are joined with · separators. Board cards for later
-   streets appear inline (turn, river). */
-function handHistoryLine(h) {
-  const acts = h.actions || [];
-  if (!acts.length) return "";
-  const twoSided = acts.some((a) => a.actor !== acts[0].actor);
-  const actorInit = (a) => {
-    if (!twoSided) return "";
-    if (a.actor === "hero") return "H·";
-    return "V" + (Number(a.actor.slice(1)) + 1) + "·";
-  };
-  const abbr = (a) => {
-    if (a.act === "jam" || a.size === "Jam") return "Jam";
-    const code = { fold: "F", check: "X", call: "C", limp: "L", bet: "B",
-                   raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B" }[a.act] || a.act;
-    const sz = a.size ? sizeLabel(a.size).replace(/\s/g, "") : "";
-    return code + sz;
-  };
-  const b = h.board || [];
-  const streetPrefix = { pre: "Pre", flop: "Flop", turn: "Turn", river: "River" };
-  const parts = [];
-  for (const st of STREETS) {
-    const sa = acts.filter((a) => a.street === st);
-    if (!sa.length) continue;
-    let head = streetPrefix[st];
-    if (st === "flop" && b.slice(0, 3).some(Boolean))
-      head += " " + b.slice(0, 3).filter(Boolean).map((c) => c.slice(0,-1) + c.slice(-1)).join("");
-    else if (st === "turn" && b[3]) head += " " + b[3];
-    else if (st === "river" && b[4]) head += " " + b[4];
-    const chain = sa.map((a) => actorInit(a) + abbr(a)).join(" → ");
-    parts.push(head + " " + chain);
-  }
-  return parts.join(" · ");
+/* Plain-English hand-history line for a list row — reads like a live-poker
+   log: "Pre: raise 40K, 3-bet 120K, call · Flop K♠7♥2♣: check, bet 160K,
+   fold". Multipliers ("3x") and pot-percent sizes ("50%") are resolved to
+   chip amounts via estimatePot so every visible size is a K count. Actor
+   labels are omitted — order alone reads clearly in a two-player context. */
+function fmtK(n) {
+  if (!n) return "";
+  if (n >= 10) return Math.round(n) + "K";
+  return (Math.round(n * 10) / 10) + "K";
 }
 function handHistoryLineHTML(h) {
   const acts = h.actions || [];
   if (!acts.length) return "";
-  const twoSided = acts.some((a) => a.actor !== acts[0].actor);
-  const actorInit = (a) => {
-    if (!twoSided) return "";
-    if (a.actor === "hero") return `<span class="hh-who hh-hero">H</span>`;
-    return `<span class="hh-who hh-v">V${Number(a.actor.slice(1)) + 1}</span>`;
-  };
-  const abbr = (a) => {
-    if (a.act === "jam" || a.size === "Jam") return `<b>Jam</b>`;
-    const code = { fold: "F", check: "X", call: "C", limp: "L", bet: "B",
-                   raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B" }[a.act] || a.act;
-    const sz = a.size ? sizeLabel(a.size).replace(/\s/g, "") : "";
-    return `<b>${esc(code)}</b>${sz ? esc(sz) : ""}`;
+  const pe = estimatePot(h, acts);
+  const verb = (a, i) => {
+    if (a.act === "jam" || a.size === "Jam") return "jam";
+    if (a.act === "fold")  return "fold";
+    if (a.act === "check") return "check";
+    const amt = pe.perAct[i] ? fmtK(pe.perAct[i]) : (a.size ? sizeLabel(a.size).replace(/\s/g, "") : "");
+    switch (a.act) {
+      case "call":  return amt ? "call " + amt : "call";
+      case "limp":  return "limp";
+      case "bet":   return amt ? "bet " + amt : "bet";
+      case "raise": return amt ? "raise " + amt : "raise";
+      case "3bet":  return amt ? "3-bet " + amt : "3-bet";
+      case "4bet":  return amt ? "4-bet " + amt : "4-bet";
+      case "5bet":  return amt ? "5-bet " + amt : "5-bet";
+      default:      return a.act;
+    }
   };
   const b = h.board || [];
   const streetPrefix = { pre: "Pre", flop: "Flop", turn: "Turn", river: "River" };
   const boardTiles = (cards) => cards.filter(Boolean).map((c) => tileHTML(c)).join("");
   const parts = [];
+  const idxAll = acts.map((_, i) => i);
   for (const st of STREETS) {
-    const sa = acts.filter((a) => a.street === st);
-    if (!sa.length) continue;
+    const idxs = idxAll.filter((i) => acts[i].street === st);
+    if (!idxs.length) continue;
     let head = `<span class="hh-st">${streetPrefix[st]}</span>`;
     if (st === "flop" && b.slice(0, 3).some(Boolean)) head += boardTiles(b.slice(0, 3));
     else if (st === "turn" && b[3]) head += boardTiles([b[3]]);
     else if (st === "river" && b[4]) head += boardTiles([b[4]]);
-    const chain = sa.map((a) => actorInit(a) + abbr(a)).join(`<span class="hh-arr">→</span>`);
-    parts.push(`<span class="hh-street">${head}${chain}</span>`);
+    const chain = idxs.map((i) => `<span class="hh-verb">${esc(verb(acts[i], i))}</span>`).join(`<span class="hh-comma">,</span> `);
+    parts.push(`<span class="hh-street">${head}<span class="hh-colon">:</span> ${chain}</span>`);
   }
   return parts.join(`<span class="hh-sep">·</span>`);
 }

@@ -508,21 +508,21 @@ textarea.noteedit { margin-bottom: 0; }
 .rgswatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .rglegnote { font-size: 12px; color: var(--muted); }
 
-/* Hand-history line inside list rows — poker-log style, condensed */
+/* Hand-history line inside list rows — plain-English poker log */
 .hh-line {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 12px; color: var(--muted); line-height: 1.6;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px;
+  font-size: 13px; color: var(--text); line-height: 1.55;
 }
-.hh-street { display: inline-flex; align-items: center; gap: 3px; }
-.hh-st { color: var(--text); font-weight: 700; letter-spacing: .3px; margin-right: 2px; font-size: 11px; text-transform: uppercase; }
-.hh-line .ctile { transform: scale(.85); margin: 0 -1px; }
-.hh-arr { color: rgba(255,255,255,.35); font-weight: 400; margin: 0 1px; }
-.hh-sep { color: rgba(255,255,255,.25); font-weight: 700; padding: 0 4px; }
-.hh-who { font-weight: 700; font-size: 10px; margin-right: 1px; padding: 0 3px; border-radius: 4px; }
-.hh-hero { background: rgba(120,140,200,.22); color: #a8b5d8; }
-.hh-v { background: rgba(224,90,90,.18); color: #ed8a8a; }
-.hh-line b { color: var(--text); font-weight: 600; }
+.hh-street { display: inline-flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.hh-st {
+  color: var(--muted); font-weight: 700; letter-spacing: .5px;
+  font-size: 10px; text-transform: uppercase; margin-right: 1px;
+}
+.hh-line .ctile { transform: scale(.85); margin: 0 -1px; align-self: center; }
+.hh-colon { color: var(--muted); margin-right: 2px; }
+.hh-verb { color: var(--text); }
+.hh-comma { color: rgba(255,255,255,.4); margin-left: -2px; }
+.hh-sep { color: rgba(255,255,255,.25); font-weight: 700; padding: 0 2px; }
 
 /* Hands-panel filter strip — 5 dimensions, chips carry live counts */
 .handfilters { margin-bottom: 8px; }
