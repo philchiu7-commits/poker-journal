@@ -388,6 +388,8 @@ const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", hands:
 function route() {
   const [view, arg] = (location.hash || "#opponents").slice(1).split("/");
   const v = VIEWS.includes(view) ? view : "opponents";
+  // Leaving a specific opponent, or navigating to a different one → drop filters.
+  if (v !== "opp" || arg !== curOppId) resetHandFilters();
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
@@ -395,6 +397,102 @@ function route() {
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
      hands: renderHandsFeed, handview: () => renderHandView(arg), data: renderData })[v]();
   window.scrollTo(0, 0);
+}
+
+/* ================= Hands-panel filters (per opponent detail) =================
+   Multi-select within a dimension (OR), AND across dimensions. Cleared on
+   navigation away by resetHandFilters(). */
+let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false };
+const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false }; };
+const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd;
+/* Villain seat → coarse bucket for filtering (BTN/CO/HJ/EP/Blinds/Straddle). */
+function posBucket(pos) {
+  if (!pos) return null;
+  if (pos === "BN") return "BTN";
+  if (pos === "CO") return "CO";
+  if (pos === "HJ") return "HJ";
+  if (pos === "SB" || pos === "BB") return "Blinds";
+  if (pos === "STD") return "STD";
+  if (/^U\d$/.test(pos)) return "EP";
+  return null;
+}
+/* Pot type by count of preflop raises across everyone. */
+function potBucket(h) {
+  const pre = (h.actions || []).filter((a) => a.street === "pre");
+  const raises = pre.filter((a) => a.act === "raise" || a.act === "3bet" || a.act === "4bet" || a.act === "5bet" || a.act === "jam").length;
+  if (raises === 0) return "Limped";
+  if (raises === 1) return "SRP";
+  if (raises === 2) return "3BP";
+  return "4BP+";
+}
+/* Squid state bucket from h.squid.have. */
+function squidBucket(h) {
+  const n = h?.squid?.have;
+  if (n == null) return "nS";
+  if (n === 0) return "nS";
+  if (n === 1) return "w1S";
+  return "w2S+";
+}
+/* This villain's preflop role. Priority: jam > raise > call > limp > check/fold → null. */
+function villainRole(h, oppId) {
+  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  if (idx < 0) return null;
+  const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
+  if (!pre.length) return null;
+  if (pre.some((a) => ["raise", "3bet", "4bet", "5bet", "jam"].includes(a))) return "PFR";
+  if (pre.includes("limp")) return "Limp";
+  if (pre.includes("call")) return "PFC";
+  return null;
+}
+function handMatchesFilters(h, oppId) {
+  const f = handFilters;
+  if (f.sd && !h.showdown) return false;
+  if (f.pot.size && !f.pot.has(potBucket(h))) return false;
+  if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
+  if (f.role.size) {
+    const r = villainRole(h, oppId);
+    if (!r || !f.role.has(r)) return false;
+  }
+  if (f.pos.size) {
+    const v = (h.villains || []).find((x) => x.opponentId === oppId);
+    const b = posBucket(v?.pos);
+    if (!b || !f.pos.has(b)) return false;
+  }
+  return true;
+}
+const POS_BUCKETS = ["BTN", "CO", "HJ", "EP", "Blinds", "STD"];
+const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
+const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
+const ROLE_BUCKETS = ["PFR", "PFC", "Limp"];
+function renderHandFilters(oppId, allHands) {
+  const f = handFilters;
+  /* Live counts for each chip — reflect *what would remain* if this chip flipped,
+     with every OTHER dimension's current filter still applied. */
+  const countIf = (dim, val) => {
+    const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role) };
+    if (dim === "sd") trial.sd = val;
+    else { const s = new Set(trial[dim]); s.add(val); trial[dim] = s; }
+    const save = handFilters; handFilters = trial;
+    const n = allHands.filter((h) => handMatchesFilters(h, oppId)).length;
+    handFilters = save;
+    return n;
+  };
+  const chip = (dim, val, label) => {
+    const on = dim === "sd" ? f.sd : f[dim].has(val);
+    const n = countIf(dim, val);
+    return `<button class="hfchip${on ? " on" : ""}" data-hf="${dim}" data-hfv="${esc(val ?? "")}">${esc(label)}<i>${n}</i></button>`;
+  };
+  const row = (label, dim, vals) =>
+    `<div class="hfrow"><span class="hflbl">${label}</span><div class="chiprow tight">${vals.map((v) => chip(dim, v, v)).join("")}</div></div>`;
+  $("od-handfilters").innerHTML =
+    row("Pos", "pos", POS_BUCKETS) +
+    row("Pot", "pot", POT_BUCKETS) +
+    row("Squid", "squid", SQUID_BUCKETS) +
+    row("Role", "role", ROLE_BUCKETS) +
+    `<div class="hfrow"><span class="hflbl">Show</span><div class="chiprow tight">
+      <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1">Showdown<i>${allHands.filter((h) => h.showdown).length}</i></button>
+    </div></div>`;
+  $("od-hf-clear").classList.toggle("hidden", !handFiltersActive());
 }
 
 /* ================= Range grid (13×13) ================= */
@@ -1195,9 +1293,11 @@ function renderOppDetail(id) {
       }).join("") : "")
     : "";
 
-  const hands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
+  const allHands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
+  renderHandFilters(id, allHands);
+  const hands = handFiltersActive() ? allHands.filter((h) => handMatchesFilters(h, id)) : allHands;
   $("od-hands").innerHTML = hands.map((h) => handRowHTML(h, id)).join("") ||
-    `<div class="empty">No hands logged.</div>`;
+    (allHands.length ? `<div class="empty">No hands match these filters. ${allHands.length} total — try clearing.</div>` : `<div class="empty">No hands logged.</div>`);
 
   renderRangeGrid(id);
 }
@@ -3055,6 +3155,14 @@ function bindStatic() {
   $("od-card-edit").onclick = openCardSheet;
   $("od-rg-freq").onclick = () => { rangeGridMode = "freq"; if (curOppId) renderRangeGrid(curOppId); };
   $("od-rg-act").onclick = () => { rangeGridMode = "act"; if (curOppId) renderRangeGrid(curOppId); };
+  $("od-handfilters").onclick = (e) => {
+    const c = e.target.closest("[data-hf]"); if (!c) return;
+    const dim = c.dataset.hf, v = c.dataset.hfv;
+    if (dim === "sd") handFilters.sd = !handFilters.sd;
+    else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
+    if (curOppId) renderOppDetail(curOppId);
+  };
+  $("od-hf-clear").onclick = () => { resetHandFilters(); if (curOppId) renderOppDetail(curOppId); };
   $("od-exploit-tmpl").onclick = openTemplateSheet;
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);

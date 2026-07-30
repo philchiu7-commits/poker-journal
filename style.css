@@ -498,6 +498,22 @@ textarea.noteedit { margin-bottom: 0; }
 .rgswatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .rglegnote { font-size: 12px; color: var(--muted); }
 
+/* Hands-panel filter strip — 5 dimensions, chips carry live counts */
+.handfilters { margin-bottom: 8px; }
+.hfrow { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.hflbl {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+  min-width: 42px; font-weight: 700;
+}
+.hfchip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px;
+  background: var(--panel2); border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.hfchip i { font-style: normal; font-size: 10px; background: rgba(0,0,0,.28); color: var(--muted); padding: 1px 6px; border-radius: 999px; }
+.hfchip.on { background: color-mix(in oklab, var(--accent) 22%, var(--panel2)); border-color: var(--accent); color: var(--text); }
+.hfchip.on i { color: var(--text); background: rgba(0,0,0,.35); }
+
 /* ---- villain search ---- */
 .vsearch {
   width: 100%; margin: 0 0 8px; padding: 9px 12px; box-sizing: border-box;
