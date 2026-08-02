@@ -38,6 +38,7 @@ const TENDENCY_TAGS = [
   { id: "attacks-limps",        cat: "preflop",  label: "Attacks limps" },
   { id: "attack-limped-blinds", cat: "preflop",  label: "Attack limped blinds" },
   { id: "ep-open-weak",         cat: "preflop",  label: "EP Open weak" },
+  { id: "open-small-pp-ep",     cat: "preflop",  label: "Open smallPP EP" },
   { id: "limps-are-weak",       cat: "preflop",  label: "Limps are weak" },
   { id: "open-range-w1s",       cat: "preflop",  label: "Open range w1S" },
   { id: "first-raise-ns",       cat: "preflop",  label: "1st R — nS",     kind: "position" },
@@ -121,7 +122,7 @@ const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
    and scale reads render separately and are not covered here. */
 const READ_SUBCATS = {
   preflop: [
-    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "limps-are-weak", "attack-limped-blinds", "open-range-w1s"] },
+    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s"] },
     { label: "First raise",   ids: ["first-raise-ns", "first-raise-ws"] },
     { label: "LRR",           ids: ["lrr-latest-ns", "lrr-latest-ws"] },
     { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
@@ -179,6 +180,7 @@ const EXPLOIT_RULES = {
                         no:  "Limps aren't weak — respect them, don't over-iso; some are trap hands." },
   "ep-open-weak":    { yes: "His EP opens are weak — 3-bet wider IP, flat and outplay OOP; his opening range is capped.",
                         no:  "EP opens are strong/tight — fold marginals from LP, don't 3-bet-bluff him from EP." },
+  "open-small-pp-ep":{ yes: "Opens small pairs from EP — his EP opens include 22–99, so his range is wider/weaker than nut-heavy. 3-bet IP, set-mine small pairs against him deep." },
   "attack-limped-blinds": { yes: "He attacks limped pots from the blinds — expect a raise/lead when he's in the SB/BB; don't limp behind lightly.",
                         no:  "He doesn't attack limped pots from the blinds — limp behind wider when he's SB/BB." },
   "pfr-oop-cbet":    { yes: "As the OOP PFR he c-bets too much — float wide and take it away on the turn.",

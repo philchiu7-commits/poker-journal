@@ -35,7 +35,7 @@
 
 <!-- ===== Opponent detail ===== -->
 <section id="view-opp" class="hidden">
-  <header class="vhead">
+  <header class="vhead sticky">
     <button class="backbtn" data-back>‹</button>
     <h1 id="od-name"></h1>
     <button id="od-edit" class="iconbtn" title="Edit">✎</button>
@@ -57,11 +57,6 @@
     </div>
   </div>
   <div class="panel">
-    <div class="ptitle">Reads</div>
-    <div id="od-readsugg" class="list"></div>
-    <div id="od-tags"></div>
-  </div>
-  <div class="panel">
     <div class="cardpanel-head"><span class="ptitle">Exploits</span>
       <button id="od-exploit-tmpl" class="linkbtn">＋ Template</button></div>
     <div class="noterow">
@@ -70,6 +65,11 @@
     </div>
     <div id="od-exsugg" class="list"></div>
     <div id="od-exploits" class="list"></div>
+  </div>
+  <div class="panel">
+    <div class="ptitle">Reads</div>
+    <div id="od-readsugg" class="list"></div>
+    <div id="od-tags"></div>
   </div>
   <div class="panel">
     <div class="cardpanel-head"><span class="ptitle">Notes</span>

@@ -32,6 +32,13 @@ main {
 
 /* ---- headers ---- */
 .vhead { display: flex; align-items: center; gap: 10px; padding: 10px 0 8px; }
+.vhead.sticky {
+  position: sticky; top: 0; z-index: 5;
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 78%, rgba(13,15,20,0) 100%);
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  padding-bottom: 10px;
+  margin: 0 -14px 4px; padding-left: 14px; padding-right: 14px;
+}
 .vhead h1 { margin: 0; font-size: 20px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .iconbtn {
   background: var(--panel2); color: var(--accent); border: 1px solid var(--line);
@@ -485,6 +492,20 @@ textarea.noteedit { margin-bottom: 0; }
 
 /* Range grid — 13×13 preflop hand matrix, one position at a time */
 .rgpicker { margin-bottom: 8px; }
+.rgcell.tappable { cursor: pointer; }
+.rgcell.tappable:active { transform: scale(.95); }
+.vsquid {
+  margin-left: 6px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--muted); font-size: 12px; cursor: pointer; align-self: center;
+  line-height: 1;
+}
+.vsquid.on { background: #2a2438; color: var(--text); border-color: #a566e0; }
+.rgcell-hands { max-height: 60vh; overflow-y: auto; }
+.notereview { display: flex; flex-direction: column; gap: 10px; }
+.notereview .nrsec { display: flex; gap: 10px; align-items: baseline; }
+.notereview .nrlbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; flex: none; width: 68px; }
+.notereview .nrval { flex: 1; font-size: 13px; word-break: break-word; }
+.notereview .nrval.mono { font-family: ui-monospace, SF Mono, Menlo, monospace; font-size: 12px; }
 .rgpicker .chip i {
   font-style: normal; margin-left: 4px; font-size: 10px; opacity: .7;
 }
@@ -655,9 +676,11 @@ textarea.noteedit { margin-bottom: 0; }
 /* ---- tab bar ---- */
 #tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  display: flex; background: rgba(20,23,30,.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  display: flex; background: rgba(20,23,30,.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  padding-left: max(8px, env(safe-area-inset-left));
+  padding-right: max(8px, env(safe-area-inset-right));
 }
 #tabbar button {
   flex: 1; background: none; border: 0; color: var(--muted); font-size: 11px;

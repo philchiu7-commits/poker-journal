@@ -11,6 +11,7 @@ let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
+let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
@@ -299,6 +300,44 @@ const READ_LEGACY_MAP = {
   "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // migrate to WS scale (yes state, no number)
   "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → NS scale
 };
+/* One-time backfill: re-parse notes that were already converted to hands and,
+   when the new parser extracts a squid state the saved hand doesn't have,
+   patch the hand. Doesn't overwrite existing squid data — additive only.
+   Also stamps villain-level squid (v.squid) when the note gives it. */
+async function migrateNoteConvertedSquid() {
+  const marker = await metaGet("migrations.noteSquidV1");
+  if (marker) return;
+  const handById = Object.fromEntries(HANDS.map((h) => [h.id, h]));
+  let patched = 0;
+  for (const o of OPP) {
+    for (const n of (o.notes || [])) {
+      if (!n.handId || !n.text) continue;
+      const h = handById[n.handId]; if (!h) continue;
+      const parsed = parseNoteToDraft(n.text, o.id);
+      let dirty = false;
+      // hand-level squid: only fill if missing
+      const sq = h.squid || {};
+      if (sq.have == null && parsed.squidHave !== "") {
+        h.squid = { ...sq, have: Number(parsed.squidHave) };
+        dirty = true;
+      }
+      if ((h.squid?.left == null) && parsed.squidLeft !== "") {
+        h.squid = { ...(h.squid || {}), left: Number(parsed.squidLeft) };
+        dirty = true;
+      }
+      // villain-level squid (v0 in parsed maps to the note's opponent)
+      const parsedV = parsed.villains[0];
+      const idx = (h.villains || []).findIndex((v) => v.opponentId === o.id);
+      if (idx >= 0 && parsedV && parsedV.squid != null && h.villains[idx].squid == null) {
+        h.villains[idx].squid = parsedV.squid;
+        dirty = true;
+      }
+      if (dirty) { h.updatedAt = Date.now(); await dbPut("hands", h); patched++; }
+    }
+  }
+  await metaSet("migrations.noteSquidV1", { ts: Date.now(), patched });
+}
+
 async function migrateLegacyReads() {
   for (const o of OPP) {
     const r = oppReads(o);
@@ -418,7 +457,8 @@ function posBucket(pos) {
   if (pos === "BN") return "BTN";
   if (pos === "CO") return "CO";
   if (pos === "HJ") return "HJ";
-  if (pos === "SB" || pos === "BB") return "Blinds";
+  if (pos === "SB") return "SB";
+  if (pos === "BB") return "BB";
   if (pos === "STD") return "STD";
   if (/^U\d$/.test(pos)) return "EP";
   return null;
@@ -467,7 +507,9 @@ function handMatchesFilters(h, oppId) {
   }
   return true;
 }
-const POS_BUCKETS = ["BTN", "CO", "HJ", "EP", "Blinds", "STD"];
+const POS_BUCKETS_ALL = ["BTN", "CO", "HJ", "EP", "SB", "BB", "STD"];
+const posBuckets = (allHands) => POS_BUCKETS_ALL.filter((b) =>
+  b !== "STD" || allHands.some((h) => (h.villains || []).some((v) => v.pos === "STD")));
 const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
 const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
 const ROLE_BUCKETS = ["PFR", "PFC", "Limp"];
@@ -492,7 +534,7 @@ function renderHandFilters(oppId, allHands) {
   const row = (label, dim, vals) =>
     `<div class="hfrow"><span class="hflbl">${label}</span><div class="chiprow tight">${vals.map((v) => chip(dim, v, v)).join("")}</div></div>`;
   $("od-handfilters").innerHTML =
-    row("Pos", "pos", POS_BUCKETS) +
+    row("Pos", "pos", posBuckets(allHands)) +
     row("Pot", "pot", POT_BUCKETS) +
     row("Squid", "squid", SQUID_BUCKETS) +
     row("Role", "role", ROLE_BUCKETS) +
@@ -516,9 +558,17 @@ function handClass(cards) {
    4bet/5bet/jam collapse into a single "4bet+" bucket so the palette can spend
    its distinct colours on more meaningful action categories. */
 const ACT_GROUP = { "5bet": "4bet+", "4bet": "4bet+", "jam": "4bet+" };
+/* A villain limp-raise (Lrr) in the action stream = a `limp` on preflop
+   followed by a `3bet` (or higher) by the same actor. Detect and label as
+   "Lrr" so the range grid can spend a distinct hue on this trap line. */
+function limpReraiseClass(preActs) {
+  const hasLimp = preActs.some((a) => a === "limp");
+  const hasReraise = preActs.some((a) => ["3bet", "4bet", "5bet", "jam"].includes(a));
+  return hasLimp && hasReraise;
+}
 function villainRangeData(oppId) {
   const byPos = {};
-  const rankAct = { "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+  const rankAct = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
   for (const h of HANDS) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (idx < 0) continue;
@@ -530,11 +580,15 @@ function villainRangeData(oppId) {
     bucket.freq[hc] = (bucket.freq[hc] || 0) + 1;
     bucket.total++;
     const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
+    const preActs = pre.map((a) => a.act);
     let top = null;
-    for (const a of pre) {
-      const g = ACT_GROUP[a.act] || a.act;
-      const r = rankAct[g] || 0;
-      if (!top || r > top.r) top = { g, r };
+    if (limpReraiseClass(preActs)) top = { g: "Lrr", r: rankAct.Lrr };
+    else {
+      for (const a of pre) {
+        const g = ACT_GROUP[a.act] || a.act;
+        const r = rankAct[g] || 0;
+        if (!top || r > top.r) top = { g, r };
+      }
     }
     if (top) {
       bucket.actions[hc] = bucket.actions[hc] || {};
@@ -545,8 +599,9 @@ function villainRangeData(oppId) {
 }
 /* GTO-Wizard-style palette: reds for aggression (open→3bet→4bet+ deepening),
    bright green for call, yellow for limp (distinct from the green so wide
-   limpers stand apart from wide callers), light gray for fold. */
-const ACT_COLORS = { raise: "#d64848", "3bet": "#a02828", "4bet+": "#5a1414",
+   limpers stand apart from wide callers), light gray for fold. Lrr (limp-
+   reraise) gets a deep magenta so trap lines stand out from vanilla 3bets. */
+const ACT_COLORS = { Lrr: "#b048c0", raise: "#d64848", "3bet": "#a02828", "4bet+": "#5a1414",
                      call: "#6bbf6b", limp: "#e5c04a", check: "#7a95b0", fold: "#7c8794" };
 function dominantAction(mix) {
   if (!mix) return null;
@@ -559,7 +614,7 @@ function dominantAction(mix) {
    same class was played multiple ways. */
 function actionMixBackground(mix) {
   if (!mix) return null;
-  const rankAct = { "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+  const rankAct = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
   const entries = Object.entries(mix).sort((a, b) => (rankAct[b[0]] || 0) - (rankAct[a[0]] || 0));
   const total = entries.reduce((s, [, n]) => s + n, 0);
   if (!total) return null;
@@ -590,12 +645,65 @@ function gridCellsHTML(freq, actions) {
         style = `background: ${bg}; color: #fff;`;
       }
       const badge = n > 1 ? `<span class="rgn">${n}</span>` : "";
-      cells.push(`<div class="rgcell" style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}${badge}</div>`);
+      const attrs = n > 0 ? ` data-rgcell="${cls}" role="button"` : "";
+      cells.push(`<div class="rgcell${n > 0 ? " tappable" : ""}"${attrs} style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}${badge}</div>`);
     }
   }
   return cells.join("");
 }
 let rangeGridPos = null;
+/* Sheet: side-by-side view of a note's raw text and the parsed draft it will
+   become. Lets Phil verify shorthand → hand conversion before committing, and
+   catch cases where the parser missed something. */
+function openNoteReviewSheet(note, oppId) {
+  const d = parseNoteToDraft(note.text, oppId);
+  const v0 = d.villains[0] || {};
+  const posLbl = v0.pos || "—";
+  const cardsLbl = (v0.cards || []).some(Boolean) ? cardsStr(v0.cards) : "—";
+  const boardLbl = (d.board || []).filter(Boolean).join(" ") || "—";
+  const squidBits = [];
+  if (d.squidHave !== "") squidBits.push(`table ${d.squidHave}🦑`);
+  if (d.squidLeft !== "") squidBits.push(`${d.squidLeft} left`);
+  if (v0.squid != null) squidBits.push(`this villain ${v0.squid}🦑`);
+  const squidLbl = squidBits.join(" · ") || "—";
+  const actLbl = (d.actions || []).length
+    ? d.actions.map((a) => `${a.street}:${a.actor} ${a.act}${a.size ? " " + a.size : ""}`).join("<br>")
+    : "—";
+  sheetGroup = "__notereview__";
+  showSheet(
+    `<div class="sheethead"><span class="t">Review parse</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="notereview">
+       <div class="nrsec"><span class="nrlbl">Raw</span><div class="nrval mono">${esc(note.text || "")}</div></div>
+       <div class="nrsec"><span class="nrlbl">Position</span><div class="nrval">${esc(posLbl)}</div></div>
+       <div class="nrsec"><span class="nrlbl">Cards</span><div class="nrval">${esc(cardsLbl)}</div></div>
+       <div class="nrsec"><span class="nrlbl">Board</span><div class="nrval">${esc(boardLbl)}</div></div>
+       <div class="nrsec"><span class="nrlbl">Squid</span><div class="nrval">${esc(squidLbl)}</div></div>
+       <div class="nrsec"><span class="nrlbl">Actions</span><div class="nrval">${actLbl}</div></div>
+       <div class="row">
+         <button class="secondary" data-nrconvert data-noteid="${esc(note.id)}">Open in editor</button>
+       </div>
+     </div>`);
+}
+/* Sheet: tap a filled range-grid cell → list the villain's actual hands that
+   fall into that hand-class + current position filter. Each row navigates to
+   the hand detail on tap. */
+function openRangeCellSheet(oppId, hc) {
+  const hands = HANDS.filter((h) => {
+    const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+    if (idx < 0) return false;
+    const v = h.villains[idx];
+    if (rangeGridPos && v.pos !== rangeGridPos) return false;
+    return handClass(v.cards) === hc;
+  }).sort((a, b) => b.ts - a.ts);
+  const rows = hands.map((h) => handRowHTML(h, oppId)).join("")
+    || `<div class="empty">No matching hands.</div>`;
+  sheetGroup = "__rgcell__";
+  showSheet(
+    `<div class="sheethead"><span class="t">${esc(hc)} · ${esc(rangeGridPos || "any")} · ${hands.length}</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="list rgcell-hands">${rows}</div>`);
+}
 function renderRangeGrid(oppId) {
   const byPos = villainRangeData(oppId);
   const positions = Object.keys(byPos).sort((a, b) => {
@@ -1286,26 +1394,39 @@ function renderOppDetail(id) {
 
   $("od-readsugg").innerHTML = dHTML;
 
-  $("od-notes").innerHTML = (o.notes || []).map((n) =>
-    n.id === editNoteId
-      ? `<div class="noteitem" data-note="${n.id}">
-          <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
-          <div class="noterowbtns">
-            <button class="chip mini" data-notecancel>Cancel</button>
-            <button class="chip mini on" data-notesave>Save</button>
-          </div></div>`
-      : `<div class="noteitem" data-note="${n.id}">
-          <div class="notetext">${n.handId ? '<span class="convtag">✓ hand</span> ' : ""}${esc(n.text)}</div>
-          <div class="noterowbtns">
-            ${n.handId
-              ? `<button class="chip mini" data-notegohand>Open hand ↗</button>`
-              : (isConvertibleNote(n.text)
-                  ? `<button class="chip mini" data-notehand>→ Convert to hand</button>`
-                  : "")}
-            <button class="chip mini" data-noteedit>Edit</button>
-            <button class="chip mini" data-notedel>Delete</button>
-          </div></div>`
-  ).join("") || `<div class="empty">No notes yet.</div>`;
+  {
+    const allNotes = o.notes || [];
+    const converted = allNotes.filter((n) => n.handId);
+    const showConv = !!showConvertedNotes[id];
+    const visibleNotes = showConv ? allNotes : allNotes.filter((n) => !n.handId);
+    const toggleHTML = converted.length
+      ? `<div class="sugghead" data-toggle-convnotes>
+           <span>${showConv ? "Hide" : "Show"} converted (${converted.length})</span>
+           <span class="toggle-arrow">${showConv ? "▼" : "▶"}</span>
+         </div>` : "";
+    const notesHTML = visibleNotes.map((n) =>
+      n.id === editNoteId
+        ? `<div class="noteitem" data-note="${n.id}">
+            <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
+            <div class="noterowbtns">
+              <button class="chip mini" data-notecancel>Cancel</button>
+              <button class="chip mini on" data-notesave>Save</button>
+            </div></div>`
+        : `<div class="noteitem" data-note="${n.id}">
+            <div class="notetext">${n.handId ? '<span class="convtag">✓ hand</span> ' : ""}${esc(n.text)}</div>
+            <div class="noterowbtns">
+              ${n.handId
+                ? `<button class="chip mini" data-notegohand>Open hand ↗</button>`
+                : (isConvertibleNote(n.text)
+                    ? `<button class="chip mini" data-notehand>→ Convert to hand</button>
+                       <button class="chip mini" data-notereview>Review parse</button>`
+                    : "")}
+              <button class="chip mini" data-noteedit>Edit</button>
+              <button class="chip mini" data-notedel>Delete</button>
+            </div></div>`
+    ).join("");
+    $("od-notes").innerHTML = toggleHTML + (notesHTML || `<div class="empty">No notes yet.</div>`);
+  }
 
   // FEATURE 4 — order exploits: ones the villain ADJUSTS to first, then by
   // effectiveness (recency-weighted "Worked" taps)
@@ -1683,7 +1804,7 @@ function newDraft() {
     id: null, ts: null,
     villains: [],
     heroPos: null, heroCards: [null, null],
-    heroIn: true,
+    heroIn: false,   // Hero opts in explicitly via the "You" chip
     board: [null, null, null, null, null],
     actions: [], street: "pre", actor: null, lastV: "v0",
     note: "", effStack: predictEffStack(),
@@ -1930,14 +2051,23 @@ function nextActorChips(actor) {
    Extracts what's reliable from Phil's rough notes: position, holding, board,
    squid state, and the villain's headline preflop action. Anything ambiguous
    is left for manual entry (the raw note stays as draft.note). */
-const POS_RX = /\b(U8|U7|U6|HJ|CO|BN|SB|BB|SD|STD)\b/;
+const POS_RX = /\b(U9|U8|U7|U6|HJ|CO|BN|SB|BB|SD|STD|EP)\b/;
 const HOLDING_RX = /\b([AKQJT2-9])([AKQJT2-9])([so])?\b/g;    // A9o, A9s, 66
-const SQUID_RX = /\b(nS|wS|w\d{1,2}S|w\/?\d{1,2}S|\d{1,2}\/\d{1,2})\b/i;
-const PRE_ACT_RX = /\b(Open|Iso|Lrr|Lc|Ld|3b|4b|Lb|limp|Ls)\b/;
+/* Squid patterns:
+   - nS = 0 squids (nobody)
+   - wS = at least one squid (default 1)
+   - w2S = 2 squids up (or w/2S)
+   - 0/5, 2/5 = have/left pair (0/5squid → nobody has one; 5 left)
+   - 2rdS / 3rdS / 4thS = ordinal squid count → previous (n-1) already up */
+const SQUID_RX = /\b(nS|wS|w\d{1,2}S|w\/?\d{1,2}S|\d{1,2}\/\d{1,2}|\d(?:st|nd|rd|th)S)(?:squid)?\b/i;
+const PRE_ACT_RX = /\b(Open|Iso|Lrr|Lc|Ld|3b|4b|Lb|limp|Ls|oL)\b/;
 const SUIT_RX = /(ss|hh|dd|cc|ds|rr)/;                        // board suit hints
+const EP_DEFAULT = "U8";                                       // "EP" without a number → deepest EP in a std 8-max game
 function parsePosToken(tok) {
   if (!tok) return null;
-  return tok === "SD" ? "STD" : tok;
+  if (tok === "SD") return "STD";
+  if (tok === "EP") return EP_DEFAULT;
+  return tok;
 }
 function pickSuits(hs, wants) { /* pick two suit letters honoring 'o'/'s'/monotone hints */
   const all = ["s", "h", "d", "c"];
@@ -1948,20 +2078,32 @@ function pickSuits(hs, wants) { /* pick two suit letters honoring 'o'/'s'/monoto
 }
 function parseNoteToDraft(text, opponentId) {
   const d = newDraft();
-  d.villains = [{ opponentId, pos: null, cards: [null, null] }];
+  d.villains = [{ opponentId, pos: null, cards: [null, null], squid: null }];
   // Expand "V{n}L" -> "vs {n} limpers" so the shorthand reads clean in
   // hand summaries and stays parseable by the same downstream tokens.
   if (text) text = text.replace(/\bV(\d+)L\b/gi, (_, n) => `vs ${n} limpers`);
   d.note = text;
   if (!text) return d;
-  // squid
+  // squid — sets hand-level squid state AND the villain's personal count
+  // when the note gives us an ordinal ("3rdS" → this player already has 2).
   const sq = text.match(SQUID_RX);
   if (sq) {
     const s = sq[1].replace("w/", "w").toLowerCase();
-    if (s === "ns") d.squidHave = "0";
-    else if (s === "ws") d.squidHave = "1";
+    if (s === "ns") { d.squidHave = "0"; d.villains[0].squid = 0; }
+    else if (s === "ws") { d.squidHave = "1"; d.villains[0].squid = 1; }
     else if (/^w\d/.test(s)) d.squidHave = s.slice(1).replace("s", "");
-    else if (/^\d+\/\d+$/.test(s)) { const [h, l] = s.split("/"); d.squidHave = h; d.squidLeft = l; }
+    else if (/^\d+\/\d+$/.test(s)) {
+      const [h, l] = s.split("/");
+      d.squidHave = h;
+      d.squidLeft = l;
+      if (h === "0") d.villains[0].squid = 0;
+    }
+    else if (/^\d(st|nd|rd|th)s$/.test(s)) {
+      // "3rdS" = 3rd squid coming to him → he already has 2.
+      const n = parseInt(s[0], 10) - 1;
+      d.villains[0].squid = n;
+      if (!d.squidHave) d.squidHave = String(Math.max(n, 1));
+    }
   }
   // position — first token from a "AvB" (subject is first)
   const m = text.match(/\b(U8|U7|U6|HJ|CO|BN|SB|SD|STD|BB)v(U8|U7|U6|HJ|CO|BN|SB|SD|STD|BB)\b/);
@@ -2045,31 +2187,45 @@ function parseNoteToDraft(text, opponentId) {
   // (an opposing 3b or "call"/"cc" written after) is hero. Not perfect for
   // multiway pots but right for the common headline case.
   const ACT_MAP = {
-    Open: { act: "raise",   who: "v0" },
-    Iso:  { act: "raise",   who: "v0" },
-    "3b": { act: "3bet",    who: "v0" },
-    "4b": { act: "4bet",    who: "v0" },
-    Lrr:  { act: "limp",    who: "v0" },   // limp then reraise; reraise pushed below
-    Lc:   { act: "limp",    who: "v0" },
-    Ld:   { act: "limp",    who: "v0" },
-    Lb:   { act: "limp",    who: "v0" },
-    limp: { act: "limp",    who: "v0" },
-    Ls:   { act: "limp",    who: "v0" },
-    cc:   { act: "call",    who: "hero" },
-    call: { act: "call",    who: "hero" },
+    Open:  { act: "raise",   who: "v0" },
+    open:  { act: "raise",   who: "v0" },
+    raise: { act: "raise",   who: "v0" },
+    Raise: { act: "raise",   who: "v0" },
+    Iso:   { act: "raise",   who: "v0" },
+    "3b":  { act: "3bet",    who: "v0" },
+    "4b":  { act: "4bet",    who: "v0" },
+    Lrr:   { act: "limp",    who: "v0" },   // limp then reraise; reraise pushed below
+    Lc:    { act: "limp",    who: "v0" },
+    Ld:    { act: "limp",    who: "v0" },
+    Lb:    { act: "limp",    who: "v0" },
+    limp:  { act: "limp",    who: "v0" },
+    L:     { act: "limp",    who: "v0" },
+    oL:    { act: "limp",    who: "v0" },   // overlimp — same act, different context marker
+    Ls:    { act: "limp",    who: "v0" },
+    cc:    { act: "call",    who: "v0" },   // cold-call — villain calling a raise
+    call:  { act: "call",    who: "hero" }, // "call" from hero's POV
   };
-  const CHAIN_RX = /\b(Open|Iso|Lrr|Lc|Ld|Lb|Ls|limp|3b|4b|cc|call)(?:\s*(\d{1,4})[Kk]?\b|\s*(\d(?:\.\d+)?)[xX]\b)?/g;
+  // Two regexes so limp-family tokens (limp/L/oL/Lc/Ld/Lb/Ls/Lrr) don't greedily
+  // swallow a following number as their size — those actions are un-sized in
+  // Phil's shorthand, and a following "88" is almost always a holding.
+  const SIZED_CHAIN_RX = /\b(Open|open|raise|Raise|Iso|3b|4b|cc|call)(?:\s*(\d{1,4})[Kk]?\b|\s*(\d(?:\.\d+)?)[xX]\b)?/g;
+  const UNSIZED_CHAIN_RX = /\b(Lrr|Lc|Ld|Lb|Ls|oL|limp|L)\b/g;
+  // Walk both regexes and merge by match index so tokens stay in source order.
+  const raw = [];
+  let cmm;
+  while ((cmm = SIZED_CHAIN_RX.exec(text)) !== null) raw.push({ i: cmm.index, tok: cmm[1], numK: cmm[2], mult: cmm[3] });
+  while ((cmm = UNSIZED_CHAIN_RX.exec(text)) !== null) raw.push({ i: cmm.index, tok: cmm[1], numK: null, mult: null });
+  raw.sort((a, b) => a.i - b.i);
   const chain = [];
-  let cm;
-  while ((cm = CHAIN_RX.exec(text)) !== null) {
-    const tok = cm[1], numK = cm[2], mult = cm[3];
+  for (const cm of raw) {
+    const { tok, numK, mult } = cm;
     const spec = ACT_MAP[tok]; if (!spec) continue;
     let size = null;
     if (numK) size = numK + "k";
     else if (mult) size = mult + "x";
     chain.push({ tok, act: spec.act, who: spec.who, size });
     // "Lrr" is the pair (limp, then raise) — push a follow-up raise entry.
-    if (tok === "Lrr") chain.push({ tok: "Lrr-raise", act: "3bet", who: "v0", size });
+    if (tok === "Lrr") chain.push({ tok: "Lrr-raise", act: "3bet", who: "v0", size: null });
   }
   // Resolve multipliers into chip amounts using the most recent raise size in
   // the chain. Preserve the "Nx" storage too — estimatePot uses that — but
@@ -2208,13 +2364,23 @@ const SEAT_RINGS = {
 const effectiveSeats = () =>
   Math.max(4, Math.min(9, tableLineup.length || lineupSeats || 9));
 /* Base ring for the current table size + straddle. Straddle: at 4–6-max we
-   swap the leftmost UTG label for STD (7+ rings already include STD). */
+   swap the leftmost UTG label for STD (7+ rings already include STD). When
+   straddle is off, STD is remapped to the deepest UTG label for that seat
+   count so no STD seat is offered anywhere in the UI (Phil's global rule). */
+const UTG_FOR_SEATS = { 7: "U7", 8: "U8", 9: "U9" };
 const baseSeatRing = () => {
   const base = SEAT_RINGS[effectiveSeats()] || SEAT_RINGS[9];
-  if (!Number(draft.std) || base.includes("STD")) return base;
-  const r = base.slice();
-  r[2] = "STD";     // index 0=SB, 1=BB, 2=leftmost UTG
-  return r;
+  const stdOn = Number(draft.std) > 0;
+  if (stdOn) {
+    if (base.includes("STD")) return base;
+    const r = base.slice();
+    r[2] = "STD";
+    return r;
+  }
+  if (!base.includes("STD")) return base;
+  const seats = effectiveSeats();
+  const utg = UTG_FOR_SEATS[seats] || "U6";
+  return base.map((p) => p === "STD" ? utg : p).filter((p, i, arr) => arr.indexOf(p) === i);
 };
 /* Rotate a ring right by `rot` (each label shifts to the next slot CW).
    BTN rotation reassigns which position label sits at each physical slot
@@ -2552,9 +2718,10 @@ function renderHandEntry() {
   const active = OPP.filter((o) => !o.archived);
   const nq = vSearch.trim().toLowerCase().replace(/\s+/g, "");
   const heroChip = `<button class="chip heroic${d.heroIn ? " on" : ""}" data-heroin>You</button>`;
+  const addAnonChip = `<button class="chip" data-addanon title="Add an unnamed villain to this hand">＋ V</button>`;
   const chip = (o, on) =>
     `<button class="chip${on ? " on" : ""}" data-vopp="${o.id}">${esc(o.name)}</button>`;
-  let html = heroChip;
+  let html = heroChip + addAnonChip;
   if (nq) {
     // search takes over: pinyin-aware filter over everyone
     const matched = active.filter((o) => oppMatches(o, nq)).sort(byRecent);
@@ -2623,8 +2790,14 @@ function renderHandEntry() {
   }
   d.villains.forEach((v, i) => {
     const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?") : "V" + (i + 1);
+    // Per-villain squid slot — a compact cycling chip (–, 0, 1, 2, 3) next to
+    // their hole-card slots. Records how many squids THIS player already has;
+    // decoupled from the hand-level squid.have (which is table state).
+    const sq = v.squid == null ? "–" : String(v.squid);
     ch += `<div class="crow crow-holes"><span class="cdiv">${esc(nm)}</span>` +
-      (v.cards || [null, null]).map((c, j) => slotBtn("v" + i, j, c, "?")).join("") + `</div>`;
+      (v.cards || [null, null]).map((c, j) => slotBtn("v" + i, j, c, "?")).join("") +
+      `<button class="vsquid${v.squid != null ? " on" : ""}" data-vsquid="${i}" title="This villain's squid count">🦑${sq}</button>` +
+      `</div>`;
   });
   $("he-cards").innerHTML = ch;
 
@@ -2821,6 +2994,18 @@ function handActionClick(b) {
       toast("Both allin — add hole cards to complete the hand");
       return true;
     }
+    // Global end-hand rules: one live player remaining (everyone else folded),
+    // or river checked/called through with betting closed.
+    if (liveActors().length < 2) {
+      hideSheet();
+      toast("Hand over — one player remaining");
+      return true;
+    }
+    if (draft.street === "river" && streetClosed("river")) {
+      hideSheet();
+      toast("Hand over — showdown");
+      return true;
+    }
     if (openBoard && groupSlots(openBoard).some((s) => !s.arr[s.i])) {
       const miss = positionsMissing();
       if (miss.length) toast("Set positions first: " + miss.join(", "));
@@ -2924,6 +3109,10 @@ function bindHandEntry() {
           autoDeriveLineup();   // if a seat is already anchored, fill this villain in
         }
       });
+    } else if (b.dataset.addanon !== undefined) {  // add anonymous villain (no opponent id)
+      mutate(() => {
+        draft.villains.push({ opponentId: null, pos: null, cards: [null, null] });
+      });
     } else if (b.dataset.hpos) {
       mutate(() => {
         const p = b.dataset.hpos;
@@ -2950,6 +3139,14 @@ function bindHandEntry() {
       // street / actor / act / size — shared with the action sheet
     } else if (b.dataset.squidpick) {
       openSquidPicker(b.dataset.squidpick);
+    } else if (b.dataset.vsquid !== undefined) {
+      // Cycle this villain's squid count: – → 0 → 1 → 2 → 3 → –
+      const i = Number(b.dataset.vsquid);
+      mutate(() => {
+        const v = draft.villains[i]; if (!v) return;
+        const cur = v.squid;
+        v.squid = cur == null ? 0 : (cur >= 3 ? null : cur + 1);
+      });
     } else if (b.dataset.slot) {
       const g = groupForSlot(b.dataset.slot);
       if (["flop", "turn", "river"].includes(g)) {
@@ -2993,7 +3190,15 @@ function bindHandEntry() {
   });
   const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   $("he-vsearch").oninput = () => { vSearch = $("he-vsearch").value; renderHandEntry(); };
-  $("he-effstack").oninput = () => { draft.effStack = $("he-effstack").value; persistDraft(); };
+  $("he-effstack").oninput = () => {
+    draft.effStack = $("he-effstack").value;
+    persistDraft();
+    // Reclamp any sized bet that now exceeds the new stack to "Jam", and
+    // re-render the action sheet so Jam buttons / bb-size chips reflect
+    // the fresh effective stack immediately.
+    draft.actions.forEach((a) => { if (a.size) a.size = clampSizeToJam(a.size); });
+    if (sheetGroup === "__act__") renderActionPad();
+  };
   $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
   $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
   $("he-std").onclick = () => {
@@ -3065,6 +3270,26 @@ function openGroupSheet(g, active) {
 }
 
 function sheetClick(e) {
+  if (sheetGroup === "__rgcell__") {
+    const r = e.target.closest("[data-hand]");
+    if (r) { hideSheet(); location.hash = "#handview/" + r.dataset.hand; return; }
+  }
+  if (sheetGroup === "__notereview__") {
+    const nb = e.target.closest("[data-nrconvert]");
+    if (nb && curOppId) {
+      const noteId = nb.dataset.noteid;
+      const o = oppById(curOppId);
+      const n = (o?.notes || []).find((x) => x.id === noteId);
+      if (n) {
+        draft = parseNoteToDraft(n.text, curOppId);
+        autoDeriveLineup();
+        metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+        hideSheet();
+        location.hash = "#hand";
+      }
+      return;
+    }
+  }
   const b = e.target.closest("button");
   if (!b || sheetGroup == null) return;
   if (b.dataset.closesheet !== undefined) { hideSheet(); return; }
@@ -3178,7 +3403,8 @@ async function saveHand() {
     heroPos: hIn ? d.heroPos : null,
     heroCards: hIn && d.heroCards.some(Boolean) ? d.heroCards : null,
     villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
-      cards: (v.cards || []).some(Boolean) ? v.cards : null })),
+      cards: (v.cards || []).some(Boolean) ? v.cards : null,
+      squid: v.squid == null ? null : Number(v.squid) })),
     villainIds: d.villains.map((v) => v.opponentId).filter(Boolean),
     board: d.board, actions: d.actions,
     effStack: d.effStack ? Number(d.effStack) : null,
@@ -3206,7 +3432,6 @@ async function saveHand() {
   await metaSet("draftHand", null);
   showSaveToast(primary ? `Saved vs ${primary.name} · tap to undo` : "Hand saved · tap to undo");
   renderHandEntry();
-  maybeNagBackup();
 }
 
 /* Fire a one-tap backup prompt if the last export is >24h old. Only once per app
@@ -3275,7 +3500,8 @@ function loadHandIntoDraft(h) {
   draft = {
     id: h.id, ts: h.ts,
     villains: (h.villains || []).map((v) => ({ opponentId: v.opponentId, pos: v.pos,
-      cards: v.cards ? [...v.cards] : [null, null] })),
+      cards: v.cards ? [...v.cards] : [null, null],
+      squid: v.squid == null ? null : Number(v.squid) })),
     heroPos: h.heroPos || null,
     heroCards: h.heroCards ? [...h.heroCards] : [null, null],
     heroIn: h.hero !== undefined ? h.hero : true,
@@ -3341,9 +3567,13 @@ function bindStatic() {
   };
   $("od-rangegrid").onclick = (e) => {
     const b = e.target.closest("[data-rgpos]");
-    if (!b) return;
-    rangeGridPos = b.dataset.rgpos;
-    if (curOppId) renderRangeGrid(curOppId);
+    if (b) {
+      rangeGridPos = b.dataset.rgpos;
+      if (curOppId) renderRangeGrid(curOppId);
+      return;
+    }
+    const cell = e.target.closest("[data-rgcell]");
+    if (cell && curOppId) openRangeCellSheet(curOppId, cell.dataset.rgcell);
   };
   $("od-hf-clear").onclick = () => { resetHandFilters(); if (curOppId) renderOppDetail(curOppId); };
   $("od-exploit-tmpl").onclick = openTemplateSheet;
@@ -3509,6 +3739,11 @@ function bindStatic() {
     renderOppDetail(curOppId);
   };
   $("od-notes").onclick = async (e) => {
+    if (e.target.closest("[data-toggle-convnotes]")) {
+      showConvertedNotes[curOppId] = !showConvertedNotes[curOppId];
+      renderOppDetail(curOppId);
+      return;
+    }
     const item = e.target.closest("[data-note]");
     if (!item) return;
     const id = item.dataset.note;
@@ -3526,6 +3761,11 @@ function bindStatic() {
     if (e.target.closest("[data-notegohand]")) {
       const n = (o.notes || []).find((x) => x.id === id);
       if (n?.handId) { location.hash = "#handview/" + n.handId; return; }
+    }
+    if (e.target.closest("[data-notereview]")) {
+      const n = (o.notes || []).find((x) => x.id === id);
+      if (n) openNoteReviewSheet(n, curOppId);
+      return;
     }
     if (e.target.closest("[data-notedel]")) {
       if (!confirm("Delete this note?")) return;
@@ -3723,6 +3963,7 @@ async function boot() {
   await requestDurableStorage();
   await refreshCache();
   await migrateLegacyReads();
+  await migrateNoteConvertedSquid();
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
