@@ -1422,6 +1422,12 @@ function fmtK(n) {
   if (n >= 10) return Math.round(n) + "K";
   return (Math.round(n * 10) / 10) + "K";
 }
+/* Sizing fallback that preserves % / x markers so a percent-pot size never
+   renders as a bare "50" (which reads as chip count). Only used when the
+   pot estimator can't resolve to a K amount. */
+const sizeLabelKeepMarker = (s) => !s ? "" :
+  /^\$\d/.test(s) ? s.slice(1) + "K" :
+  /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
 function handHistoryLineHTML(h) {
   const acts = h.actions || [];
   if (!acts.length) return "";
@@ -1430,7 +1436,7 @@ function handHistoryLineHTML(h) {
     if (a.act === "jam" || a.size === "Jam") return "jam";
     if (a.act === "fold")  return "fold";
     if (a.act === "check") return "check";
-    const amt = pe.perAct[i] ? fmtK(pe.perAct[i]) : (a.size ? sizeLabel(a.size).replace(/\s/g, "") : "");
+    const amt = pe.perAct[i] ? fmtK(pe.perAct[i]) : (a.size ? sizeLabelKeepMarker(a.size) : "");
     switch (a.act) {
       case "call":  return amt ? "call " + amt : "call";
       case "limp":  return "limp";
@@ -2079,6 +2085,28 @@ function parseNoteToDraft(text, opponentId) {
   }
   for (const step of chain) {
     d.actions.push({ street: "pre", actor: step.who, act: step.act, size: step.size || null });
+  }
+  // Postflop bets — shorthand:
+  //   B50  → 50% pot bet, stored as "50%"
+  //   B50k → 50K chip bet, stored as "50k"
+  // Attribute to v0; walk streets in board-fill order (flop → turn → river)
+  // so the first B after the board becomes flop, the second becomes turn, etc.
+  const streetOrder = ["flop", "turn", "river"];
+  let streetIdx = 0;
+  const boardHasFlop  = d.board.slice(0, 3).some(Boolean);
+  const boardHasTurn  = !!d.board[3];
+  const boardHasRiver = !!d.board[4];
+  if (boardHasFlop && !boardHasTurn) streetIdx = 0;
+  else if (boardHasTurn && !boardHasRiver) streetIdx = 0;
+  else if (boardHasRiver) streetIdx = 0;
+  const BET_RX = /\bB(\d{1,4})(k)?\b/g;
+  let bm;
+  while ((bm = BET_RX.exec(text)) !== null) {
+    const n = bm[1], kFlag = bm[2];
+    const size = kFlag ? n + "k" : n + "%";
+    const street = streetOrder[Math.min(streetIdx, streetOrder.length - 1)];
+    d.actions.push({ street, actor: "v0", act: "bet", size });
+    streetIdx++;
   }
   return d;
 }
