@@ -520,7 +520,16 @@ textarea.noteedit { margin-bottom: 0; }
   border-left: 4px solid var(--player-color);
   background: linear-gradient(180deg, color-mix(in srgb, var(--player-color) 10%, var(--panel)) 0%, #14171e 100%);
 }
-.ptypemini { margin-right: 6px; }
+.ptypemini {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px; margin-right: 8px;
+  border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
+  vertical-align: -6px;
+}
+.ptypemini.set { border-color: var(--player-color, var(--line)); background: color-mix(in srgb, var(--player-color, var(--panel2)) 20%, var(--panel2)); }
+.ptypemini.empty { color: var(--muted); font-size: 18px; opacity: .55; }
+.ptypemini:active { transform: scale(.94); }
 .notereview { display: flex; flex-direction: column; gap: 10px; }
 .notereview .nrsec { display: flex; gap: 10px; align-items: baseline; }
 .notereview .nrlbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; flex: none; width: 68px; }

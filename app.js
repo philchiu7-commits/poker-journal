@@ -831,7 +831,11 @@ function oppRowHTML(o, st) {
   const type = PLAYER_TYPE_BY_ID[o.type];
   const typeCls = type ? ` ptype-${type.id}` : "";
   const typeStyle = type ? ` style="--player-color:${type.color}"` : "";
-  const typePill = type ? `<span class="ptypemini" title="${esc(type.label)}">${type.icon}</span>` : "";
+  // Tap the badge — filled with the type icon when set, empty circle otherwise
+  // — to open a bottom-sheet picker without leaving the opponent list.
+  const typePill = type
+    ? `<button class="ptypemini set" data-ptype-open="${o.id}" title="${esc(type.label)} — tap to change">${type.icon}</button>`
+    : `<button class="ptypemini empty" data-ptype-open="${o.id}" title="Set player type">◦</button>`;
   return `<div class="lrow opprow${typeCls}${oppEditMode ? " editing" : ""}" data-opp="${o.id}"${typeStyle}>
     ${handle}
     <div class="opprow-body">
@@ -841,6 +845,22 @@ function oppRowHTML(o, st) {
     </div>
     ${move}${badge}
   </div>`;
+}
+
+/* Sheet: quick player-type picker from the opponents list row. */
+function openPlayerTypeSheet(oppId) {
+  const o = oppById(oppId); if (!o) return;
+  sheetGroup = "__ptype__";
+  const chips = PLAYER_TYPES.map((t) => {
+    const on = o.type === t.id;
+    return `<button class="ptypechip${on ? " on" : ""}" data-ptype-set="${t.id}" data-ptype-opp="${o.id}" style="${on ? `background:${t.color};border-color:${t.color};color:#0a0d12` : `border-color:${t.color};color:${t.color}`}">${t.icon} ${esc(t.label)}</button>`;
+  }).join("");
+  showSheet(
+    `<div class="sheethead"><span class="t">${esc(o.name)} · player type</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="chiprow tight">${chips}
+       ${o.type ? `<button class="chip mini" data-ptype-set="" data-ptype-opp="${o.id}">Clear</button>` : ""}
+     </div>`);
 }
 
 /* Search blob incl. pinyin so romanized typing matches Chinese names. */
@@ -3288,6 +3308,18 @@ function openGroupSheet(g, active) {
 }
 
 function sheetClick(e) {
+  if (sheetGroup === "__ptype__") {
+    const b = e.target.closest("[data-ptype-set]");
+    if (b) {
+      const o = oppById(b.dataset.ptypeOpp); if (!o) return;
+      const t = b.dataset.ptypeSet;
+      o.type = t || null;
+      if (!o.type) delete o.type;
+      o.updatedAt = Date.now();
+      dbPut("opponents", o).then(() => { hideSheet(); renderOpponents(); });
+      return;
+    }
+  }
   if (sheetGroup === "__rgcell__") {
     const r = e.target.closest("[data-hand]");
     if (r) { hideSheet(); location.hash = "#handview/" + r.dataset.hand; return; }
@@ -3561,6 +3593,8 @@ function bindStatic() {
   };
   $("opp-list").onclick = (e) => {
     if (e.target.closest(".draghandle")) return;                    // drag, not navigate
+    const ptype = e.target.closest("[data-ptype-open]");
+    if (ptype) { e.stopPropagation(); openPlayerTypeSheet(ptype.dataset.ptypeOpen); return; }
     const card = e.target.closest(".excard");
     if (card) { toast(card.getAttribute("title") || card.textContent); return; }   // full text, no nav
     const gc = e.target.closest("[data-groupcollapse]");
