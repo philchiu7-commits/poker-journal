@@ -516,10 +516,18 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 11px; font-weight: 700; color: #0a0d12; border: 1px solid transparent;
   vertical-align: middle;
 }
+/* Bright, obvious type tint: 6px stripe + saturated color-mix background that
+   holds its hue top-to-bottom instead of fading into the panel. */
 .opprow[style*="--player-color"] {
-  border-left: 4px solid var(--player-color);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--player-color) 10%, var(--panel)) 0%, #14171e 100%);
+  border-left: 6px solid var(--player-color);
+  border-color: color-mix(in srgb, var(--player-color) 55%, var(--line));
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--player-color) 35%, var(--panel)) 0%,
+      color-mix(in srgb, var(--player-color) 22%, #14171e) 100%);
 }
+.opprow[style*="--player-color"] .t { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.opprow[style*="--player-color"] .cardchips .chip { background: rgba(0,0,0,.28); border-color: rgba(255,255,255,.15); }
 .ptypemini {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 8px; margin-right: 8px;
