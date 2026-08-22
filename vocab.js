@@ -117,10 +117,10 @@ const TENDENCY_TAGS = [
    on the list plus a pill in the detail header. Colors chosen so the list
    reads at a glance: warm reds = biggest fish, blues = regs, gray = nits. */
 const PLAYER_TYPES = [
-  { id: "whale",      label: "Whale",      icon: "🐋", color: "#d64848" },
-  { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#e59a3a" },
+  { id: "whale",      label: "Whale",      icon: "🐋", color: "#3ec7c7" },
+  { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#4fbf5a" },
   { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
-  { id: "good-reg",   label: "Good reg",   icon: "⭐", color: "#5b9cff" },
+  { id: "good-reg",   label: "Good reg",   icon: "⭐", color: "#d64848" },
   { id: "tight-reg",  label: "Tight reg",  icon: "🔒", color: "#7a8496" },
 ];
 const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]));
