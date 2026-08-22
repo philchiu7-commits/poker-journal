@@ -828,10 +828,14 @@ function oppRowHTML(o, st) {
   const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
   const badge = st ? `<span class="handbadge">${st.count}</span>` : "";
   const physLine = !oppEditMode && !chips && o.physical ? `<div class="s">${esc(o.physical)}</div>` : "";
-  return `<div class="lrow opprow${oppEditMode ? " editing" : ""}" data-opp="${o.id}">
+  const type = PLAYER_TYPE_BY_ID[o.type];
+  const typeCls = type ? ` ptype-${type.id}` : "";
+  const typeStyle = type ? ` style="--player-color:${type.color}"` : "";
+  const typePill = type ? `<span class="ptypemini" title="${esc(type.label)}">${type.icon}</span>` : "";
+  return `<div class="lrow opprow${typeCls}${oppEditMode ? " editing" : ""}" data-opp="${o.id}"${typeStyle}>
     ${handle}
     <div class="opprow-body">
-      <div class="t">${esc(o.name)}</div>
+      <div class="t">${typePill}${esc(o.name)}</div>
       ${physLine}
       ${showChips ? `<div class="chiprow cardchips">${chips}</div>` : ""}
     </div>
@@ -1312,6 +1316,20 @@ function renderOppDetail(id) {
   curOppId = id;
   $("od-name").textContent = o.name;
   $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
+  // Player-type picker + pill: color-themes the opponent's list row and puts
+  // a matching pill next to their name in detail.
+  const type = PLAYER_TYPE_BY_ID[o.type];
+  const nameEl = $("od-name");
+  nameEl.style.setProperty("--player-color", type ? type.color : "");
+  nameEl.classList.toggle("has-player-type", !!type);
+  $("od-name").innerHTML = esc(o.name) +
+    (type ? ` <span class="ptypepill" style="background:${type.color};border-color:${type.color}">${type.icon} ${esc(type.label)}</span>` : "");
+  const ptypeHTML = PLAYER_TYPES.map((t) => {
+    const on = o.type === t.id;
+    return `<button class="ptypechip${on ? " on" : ""}" data-ptype="${t.id}" style="${on ? `background:${t.color};border-color:${t.color};color:#0a0d12` : `border-color:${t.color};color:${t.color}`}">${t.icon} ${esc(t.label)}</button>`;
+  }).join("");
+  $("od-ptype").innerHTML =
+    `<div class="chiprow tight">${ptypeHTML}${o.type ? `<button class="chip mini" data-ptype="">Clear</button>` : ""}</div>`;
   const feat = featuredItems(o);
   $("od-card-preview").innerHTML = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("")
     || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
@@ -3619,6 +3637,17 @@ function bindStatic() {
     location.hash = "#opp/" + intoId;
     renderOppDetail(intoId);
   });
+  $("od-ptype").onclick = async (e) => {
+    const b = e.target.closest("[data-ptype]");
+    if (!b) return;
+    const o = oppById(curOppId); if (!o) return;
+    const t = b.dataset.ptype;
+    o.type = t || null;
+    if (!o.type) delete o.type;
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(curOppId);
+  };
   $("od-tags").onclick = async (e) => {
     const clr = e.target.closest("[data-scaleclear]");
     if (clr) {

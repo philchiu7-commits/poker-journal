@@ -501,6 +501,26 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .vsquid.on { background: #2a2438; color: var(--text); border-color: #a566e0; }
 .rgcell-hands { max-height: 60vh; overflow-y: auto; }
+
+/* Player-type colour theme — picker chips, list-row stripe, header pill.
+   Row: 4px left stripe in --player-color plus a faint tint on the panel. */
+.ptypebar { margin: 4px 0 12px; }
+.ptypechip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.ptypechip.on { color: #0a0d12; }
+.ptypepill {
+  display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: #0a0d12; border: 1px solid transparent;
+  vertical-align: middle;
+}
+.opprow[style*="--player-color"] {
+  border-left: 4px solid var(--player-color);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--player-color) 10%, var(--panel)) 0%, #14171e 100%);
+}
+.ptypemini { margin-right: 6px; }
 .notereview { display: flex; flex-direction: column; gap: 10px; }
 .notereview .nrsec { display: flex; gap: 10px; align-items: baseline; }
 .notereview .nrlbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; flex: none; width: 68px; }

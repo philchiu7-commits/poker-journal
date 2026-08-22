@@ -113,6 +113,17 @@ const TENDENCY_TAGS = [
   { id: "bluffcatch-losing",    cat: "live",     label: "Bluffcatch more losing" },
   { id: "force-squid",          cat: "live",     label: "Force squid" },
 ];
+/* Player archetype — Phil sets it manually and it themes the opponent's row
+   on the list plus a pill in the detail header. Colors chosen so the list
+   reads at a glance: warm reds = biggest fish, blues = regs, gray = nits. */
+const PLAYER_TYPES = [
+  { id: "whale",      label: "Whale",      icon: "🐋", color: "#d64848" },
+  { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#e59a3a" },
+  { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
+  { id: "good-reg",   label: "Good reg",   icon: "⭐", color: "#5b9cff" },
+  { id: "tight-reg",  label: "Tight reg",  icon: "🔒", color: "#7a8496" },
+];
+const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]));
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
