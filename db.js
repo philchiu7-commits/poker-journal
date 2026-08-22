@@ -101,20 +101,43 @@ function scheduleAutoSnapshot() {
   clearTimeout(_snapPending);
   _snapPending = setTimeout(() => { _snapPending = null; autoSnapshot().catch(() => {}); }, 400);
 }
-/* Share/download an already-prepared export blob. Returns false on user cancel. */
+/* Share/download an already-prepared export blob. Returns false on user cancel.
+   Tries Web Share (iOS/Android native sheet) first, falls back to an <a download>
+   anchor click for any non-cancel error — some installed PWAs report canShare
+   as true but block the actual share call. Final fallback: open the JSON in a
+   new tab so the user can save it manually (works even when downloads are
+   blocked in the standalone PWA context). */
 async function shareBackupData(data) {
   const stamp = new Date().toISOString().slice(0, 10);
   const name = `poker-journal-${stamp}.json`;
-  const file = new File([JSON.stringify(data)], name, { type: "application/json" });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file] }); }
-    catch (e) { if (e.name === "AbortError") return false; throw e; }
-  } else {
+  const json = JSON.stringify(data);
+  const file = new File([json], name, { type: "application/json" });
+  const downloadAnchor = () => {
+    const url = URL.createObjectURL(file);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(file);
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    a.href = url; a.download = name; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+  let shared = false;
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); shared = true; }
+    catch (e) {
+      if (e && e.name === "AbortError") return false;
+      // Any other share failure (NotAllowed, permission, unsupported host):
+      // fall through to the classic download anchor.
+    }
+  }
+  if (!shared) {
+    try { downloadAnchor(); }
+    catch (e) {
+      // Last resort: open the JSON in a new tab as a blob URL so the user
+      // can manually save it with Cmd/Ctrl+S. Some standalone PWAs disable
+      // both the share sheet and blob-anchor downloads.
+      const url = URL.createObjectURL(file);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
   }
   await metaSet("lastExportAt", Date.now());
   return true;

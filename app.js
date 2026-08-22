@@ -3899,6 +3899,54 @@ function bindStatic() {
       renderData();
     } catch (e) { if (e?.name !== "AbortError") toast("Save failed: " + e.message); }
   };
+  $("data-copy").onclick = async () => {
+    try {
+      const json = JSON.stringify(await exportData());
+      await navigator.clipboard.writeText(json);
+      await metaSet("lastExportAt", Date.now());
+      toast(`Copied ${(json.length / 1024).toFixed(0)}KB to clipboard`);
+      renderData();
+    } catch (e) { toast("Copy failed: " + e.message); }
+  };
+  $("data-showjson").onclick = async () => {
+    try {
+      const json = JSON.stringify(await exportData(), null, 2);
+      sheetGroup = "__showjson__";
+      showSheet(
+        `<div class="sheethead"><span class="t">Backup JSON — ${(json.length / 1024).toFixed(0)}KB</span>
+           <button data-sheetclose>Close</button></div>
+         <div class="sheetnote">Long-press to select all, then copy. Or tap Select all + Copy.</div>
+         <div class="row"><button class="secondary" id="showjson-selectall">Select all</button>
+           <button class="secondary" id="showjson-copy">Copy</button></div>
+         <textarea id="showjson-text" rows="14" readonly style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:11px;">${esc(json)}</textarea>`);
+      const ta = document.getElementById("showjson-text");
+      document.getElementById("showjson-selectall").onclick = () => { ta.focus(); ta.select(); };
+      document.getElementById("showjson-copy").onclick = async () => {
+        try { await navigator.clipboard.writeText(json); toast("Copied"); }
+        catch { ta.focus(); ta.select(); document.execCommand("copy"); toast("Copied"); }
+      };
+    } catch (e) { toast("Show failed: " + e.message); }
+  };
+  $("data-paste-import").onclick = () => {
+    sheetGroup = "__pasteimport__";
+    showSheet(
+      `<div class="sheethead"><span class="t">Paste JSON to import</span>
+         <button data-sheetclose>Close</button></div>
+       <div class="sheetnote">Paste a full backup — id-based merge, newer wins.</div>
+       <textarea id="paste-json-text" rows="14" placeholder="Paste JSON here…" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:11px;"></textarea>
+       <div class="row"><button class="primary" id="paste-json-import">Import</button></div>`);
+    document.getElementById("paste-json-import").onclick = async () => {
+      const raw = document.getElementById("paste-json-text").value.trim();
+      if (!raw) { toast("Nothing to import"); return; }
+      try {
+        const counts = await importJSON(JSON.parse(raw));
+        await refreshCache();
+        hideSheet();
+        toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands`);
+        renderData();
+      } catch (err) { toast("Import failed: " + err.message); }
+    };
+  };
   $("data-import").onclick = () => $("data-importfile").click();
   $("data-importfile").onchange = async (e) => {
     const f = e.target.files[0];
