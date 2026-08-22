@@ -120,7 +120,7 @@ const PLAYER_TYPES = [
   { id: "whale",      label: "Whale",      icon: "🐋", color: "#3ec7c7" },
   { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#4fbf5a" },
   { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
-  { id: "good-reg",   label: "Good reg",   icon: "⭐", color: "#d64848" },
+  { id: "good-reg",   label: "Good reg",   icon: "🦈", color: "#d64848" },
   { id: "tight-reg",  label: "Tight reg",  icon: "🔒", color: "#7a8496" },
 ];
 const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]));
