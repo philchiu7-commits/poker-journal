@@ -439,7 +439,10 @@ const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", hands:
 
 function route() {
   const raw = (location.hash || "#opponents").slice(1);
-  const [view, arg] = raw.split("/");
+  // Only split on the FIRST slash — base64 import payloads can contain "/".
+  const si = raw.indexOf("/");
+  const view = si < 0 ? raw : raw.slice(0, si);
+  const arg = si < 0 ? undefined : raw.slice(si + 1);
   // #imp/<base64> — deep-link from the hnlbds hand-history bookmarklet.
   if (view === "imp" && arg) {
     location.hash = "#opponents";
