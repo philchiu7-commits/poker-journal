@@ -796,11 +796,15 @@ async function commitOneImport(rec, map) {
     });
     villainIds.push(oppId);
   }
-  // hnlbds labels every preflop raise "raise"; number the re-raises so they
-  // store (and read) as 3-bets / 4-bets like manually entered hands.
+  // hnlbds labels every preflop raise "raise" and every flat "call"; number
+  // the re-raises so they store (and read) as 3-bets / 4-bets like manually
+  // entered hands, and turn calls before any raise into limps — that's what
+  // separates a limp-reraise (Lrr) from a cold 3-bet in the range grid.
   let preRaises = 0;
   const actions = (rec.actions || []).map((a) => {
-    if (a.street !== "pre" || (a.act !== "raise" && a.act !== "jam")) return a;
+    if (a.street !== "pre") return a;
+    if (a.act === "call" && preRaises === 0) return { ...a, act: "limp" };
+    if (a.act !== "raise" && a.act !== "jam") return a;
     preRaises++;
     if (a.act === "jam" || preRaises === 1) return a;
     return { ...a, act: preRaises === 2 ? "3bet" : preRaises === 3 ? "4bet" : "5bet" };
