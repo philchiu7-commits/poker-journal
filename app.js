@@ -1869,13 +1869,17 @@ const sizeLabelKeepMarker = (s, raw = false) => !s ? "" :
     ? (/^\$?\d/.test(s) ? String(s).replace(/^\$/, "") : s)
     : /^\$\d/.test(s) ? s.slice(1) + "K" :
       /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
-function handHistoryLineHTML(h) {
+function handHistoryLineHTML(h, focusActor) {
   const acts = h.actions || [];
   if (!acts.length) return "";
   const raw = isRawSize(h);
   const pe = estimatePot(h, acts);
   const uniqActors = new Set(acts.map((a) => a.actor));
-  const multiway = uniqActors.size > 2;
+  // Focus mode (opponent-page rows): in a multiway hand show only that
+  // player's own actions. Heads-up hands keep the full dialogue — half the
+  // story would vanish otherwise.
+  const focus = focusActor && uniqActors.size > 2 ? focusActor : null;
+  const multiway = !focus && uniqActors.size > 2;
   const shortActor = (actor) => {
     if (actor === "hero") return "Hero";
     const i = Number(actor.slice(1));
@@ -1905,7 +1909,7 @@ function handHistoryLineHTML(h) {
   const streetPrefix = { pre: "Pre", flop: "Flop", turn: "Turn", river: "River" };
   const boardTiles = (cards) => cards.filter(Boolean).map((c) => tileHTML(c)).join("");
   const parts = [];
-  const idxAll = acts.map((_, i) => i);
+  const idxAll = acts.map((_, i) => i).filter((i) => !focus || acts[i].actor === focus);
   for (const st of STREETS) {
     const idxs = idxAll.filter((i) => acts[i].street === st);
     if (!idxs.length) continue;
@@ -1945,24 +1949,27 @@ function handRowHTML(h, oppId) {
   const res = heroResult(h);
   const dot = res ? `<span class="dot ${res}"></span>` : "";
   const squid = h.squid?.have != null ? `<span class="hr-squid">${h.squid.have}🦑</span>` : "";
-  const historyH = handHistoryLineHTML(h);
-  const sub = historyH ? `<div class="s hh-line">${historyH}</div>` : "";
+  const subFor = (html) => html ? `<div class="s hh-line">${html}</div>` : "";
   if (oppId) {
     const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (i >= 0) {
       const v = h.villains[i];
+      const win = h.hero === false ? handWinner(h) : null;
+      const won = win && win.winners.includes("v" + i)
+        ? `<span class="hh-won">won${win.how === "showdown" ? " @ showdown" : ""}</span>` : "";
       const bits = [
         v.pos ? `<span class="hv-pos">${esc(v.pos)}</span>` : "",
         v.cards && v.cards.some(Boolean) ? tilesHTML(v.cards) : "",
+        won,
       ].filter(Boolean).join("");
       return `<div class="lrow" data-hand="${h.id}">
-        <div class="t hr-t">${dot}${bits}${squid}</div>${sub}
+        <div class="t hr-t">${dot}${bits}${squid}</div>${subFor(handHistoryLineHTML(h, "v" + i))}
       </div>`;
     }
   }
   const names = (h.villains || []).map((v) => oppById(v.opponentId)?.name).filter(Boolean).join(", ");
   return `<div class="lrow" data-hand="${h.id}">
-    <div class="t">${dot}${esc(names || "Hand")}${squid}</div>${sub}
+    <div class="t">${dot}${esc(names || "Hand")}${squid}</div>${subFor(handHistoryLineHTML(h))}
   </div>`;
 }
 

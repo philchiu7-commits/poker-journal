@@ -634,6 +634,7 @@ textarea.noteedit { margin-bottom: 0; }
 .hh-who { color: var(--accent); font-weight: 700; font-size: 11px; }
 .hh-comma { color: rgba(255,255,255,.4); margin-left: -2px; }
 .hh-sep { color: rgba(255,255,255,.25); font-weight: 700; padding: 0 2px; }
+.hh-won { color: var(--good); font-size: 11px; font-weight: 700; }
 
 /* Hands-panel filter strip — 5 dimensions, chips carry live counts */
 .handfilters { margin-bottom: 8px; }
