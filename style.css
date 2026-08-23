@@ -140,6 +140,11 @@ button.danger {
   background: none; border: 1px dashed var(--line); color: var(--accent);
   border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
 }
+.grouppin {
+  background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; flex: none;
+}
+.grouppin.on { background: #33280a; color: #e0b23e; border-color: #e0b23e; }
 .groupsec { display: flex; flex-direction: column; gap: 8px; }
 .groupsec + .grouphead { margin-top: 6px; }
 .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 26px 10px; }
@@ -217,6 +222,8 @@ textarea.noteedit { margin-bottom: 0; }
 .noteitem.adj { border-color: #6b551f; }
 .adjbtn.on { background: #e0a63a; color: #0a0d12; border-color: #e0a63a; }
 .noteitem.pinned { border-color: var(--accent); }
+.noteitem.hiddenfront { opacity: .65; border-style: dashed; }
+.noteitem.hiddenfront .notetext { color: var(--muted); }
 .pinbtn.on { background: var(--accent); color: #0a0d12; border-color: var(--accent); }
 .confcycle { min-width: 28px; font-weight: 700; text-align: center; background: var(--accent); color: #0a0d12; border-color: var(--accent); }
 .confcycle.off { background: var(--panel2); color: var(--muted); border-color: var(--line); }
@@ -527,7 +534,33 @@ textarea.noteedit { margin-bottom: 0; }
       color-mix(in srgb, var(--player-color) 22%, #14171e) 100%);
 }
 .opprow[style*="--player-color"] .t { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
-.opprow[style*="--player-color"] .cardchips .chip { background: rgba(0,0,0,.28); border-color: rgba(255,255,255,.15); }
+.opprow[style*="--player-color"] .s { color: #e6e8ec; }
+/* Tinted rows bleed the player color into chip backgrounds; force high-contrast
+   text on all chip variants so nothing goes invisible on yellow/teal/green tints. */
+.opprow[style*="--player-color"] .cardchips .chip,
+.opprow[style*="--player-color"] .cardchips .chip.on,
+.opprow[style*="--player-color"] .cardchips .chip.on.sgreen,
+.opprow[style*="--player-color"] .cardchips .chip.on.sred,
+.opprow[style*="--player-color"] .cardchips .chip.on.syellow,
+.opprow[style*="--player-color"] .cardchips .chip.on.sscale {
+  background: rgba(0,0,0,.42);
+  border-color: rgba(255,255,255,.22);
+  color: #fff;
+  box-shadow: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
+.opprow[style*="--player-color"] .cardchips .chip.on.sstrong {
+  background: rgba(0,0,0,.55);
+  border-color: #fff;
+  color: #fff;
+  font-weight: 700;
+}
+.opprow[style*="--player-color"] .cardchips .excard {
+  background: rgba(0,0,0,.55);
+  border-color: rgba(255,255,255,.35);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
 .ptypemini {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 8px; margin-right: 8px;
@@ -589,6 +622,8 @@ textarea.noteedit { margin-bottom: 0; }
 .hh-line .ctile { transform: scale(.85); margin: 0 -1px; align-self: center; }
 .hh-colon { color: var(--muted); margin-right: 2px; }
 .hh-verb { color: var(--text); }
+.hh-act { display: inline-flex; align-items: baseline; gap: 4px; }
+.hh-who { color: var(--accent); font-weight: 700; font-size: 11px; }
 .hh-comma { color: rgba(255,255,255,.4); margin-left: -2px; }
 .hh-sep { color: rgba(255,255,255,.25); font-weight: 700; padding: 0 2px; }
 

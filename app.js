@@ -15,6 +15,7 @@ let showConvertedNotes = {};      // per-opponent toggle: show notes already con
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
+let pinnedGroup = null;           // opponents list: group name that always sorts first (null = auto by recency)
 let tableLineup = [];             // today's seat ring, ordered: ("hero" | oppId)[] — anchors positions
 let lineupSeats = 9;              // table size (6–9); picks which subset of the seat ring is in play
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
@@ -377,10 +378,15 @@ const tileHTML = (c, prev) => c
 const tilesHTML = (cs) => (cs || []).filter(Boolean).map((c) => tileHTML(c)).join("");
 
 /* ---------- action phrasing (hand-history style: "opens to 40K") ---------- */
-const sizeLabel = (s) => !s ? "" :
-  /^\$\d/.test(s) ? s.slice(1) + "K" :
-  /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() :
-  /^(\d+(?:\.\d+)?)(%)$/.test(s) ? s.replace(/%$/, "") : s;
+/* Hands imported from external replayers store raw chip counts (200 = 200 chips,
+   not 200K). Detect them so the display doesn't inflate blinds and bets 1000×. */
+const isRawSize = (h) => !!(h && h.imported && (h.imported.noK || h.imported.source === "hnlbds"));
+const sizeLabel = (s, raw = false) => !s ? "" :
+  raw
+    ? (/^\$?\d/.test(s) ? String(s).replace(/^\$/, "") : s)
+    : /^\$\d/.test(s) ? s.slice(1) + "K" :
+      /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() :
+      /^(\d+(?:\.\d+)?)(%)$/.test(s) ? s.replace(/%$/, "") : s;
 function actVerb(a) {
   switch (a.act) {
     case "fold":  return "folds";
@@ -399,13 +405,13 @@ function actVerb(a) {
 /* Verb + size split for rendering; "bet/raise sized Jam" reads as "jams".
    "to" only fits absolute sizes ("opens to 40K", "3-bets to 4x") — not
    pot-relative ones ("raises pot", "bets 50%"). */
-function actParts(a) {
-  let verb = actVerb(a), sz = a.size ? sizeLabel(a.size) : null;
+function actParts(a, raw = false) {
+  let verb = actVerb(a), sz = a.size ? sizeLabel(a.size, raw) : null;
   if (sz === "Jam") { verb = "jams"; sz = null; }
   return { verb, sz, to: !!sz && verb !== "bets" && !/%|pot|over/i.test(sz) };
 }
-function actPhrase(a) {
-  const { verb, sz, to } = actParts(a);
+function actPhrase(a, raw = false) {
+  const { verb, sz, to } = actParts(a, raw);
   return verb + (sz ? (to ? " to " : " ") + sz : "");
 }
 
@@ -747,6 +753,10 @@ function renderHandImportSheet() {
 async function commitHandImport() {
   const p = pendingImport; if (!p) return;
   const rec = p.rec;
+  if (rec.tableId && rec.roundId) {
+    const dup = HANDS.find((h) => h.imported && h.imported.tableId === rec.tableId && h.imported.roundId === rec.roundId);
+    if (dup) { pendingImport = null; hideSheet(); toast("Already imported this hand"); return; }
+  }
   const villains = [];
   const villainIds = [];
   for (const m of p.map) {
@@ -785,7 +795,7 @@ async function commitHandImport() {
     blinds: { sb: rec.blinds?.sb || null, bb: rec.blinds?.bb || null, std: rec.blinds?.std || null },
     effStack: null,
     note: rec.tableId ? `Imported · table ${rec.tableId}${rec.roundId ? ` #${rec.roundId}` : ""}` : "Imported",
-    imported: { source: rec.source || "external", tableId: rec.tableId, roundId: rec.roundId },
+    imported: { source: rec.source || "external", tableId: rec.tableId, roundId: rec.roundId, noK: (rec.source || "") === "hnlbds" },
   };
   const win = handWinner(hand); hand.showdown = !!win && win.how === "showdown";
   await dbPut("hands", hand);
@@ -949,24 +959,24 @@ function oppOrderCmp(stats) {
 }
 
 function oppRowHTML(o, st) {
-  // curated card first; otherwise show only STRONG reads (yes!/no!) so the
-  // card doesn't drown in every tag Phil ever set. Phil will curate per-opp
-  // later via the featured-card sheet.
-  const feat = featuredItems(o);
-  let chips = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("");
-  if (!chips) chips = Object.entries(oppReads(o))
-    .filter(([id, s]) => isStrongRead(s) && readIsShown(o, id))
-    .map(([id, s]) => readChip(id, s)).join("");
-  // Pinned exploits appear as chips on the list card. Phil picks which ones
-  // in the opponent detail (star toggle) so the front card stays focused on
-  // the reads that matter for this villain.
-  const featuredIds = new Set(feat.filter((it) => it.type === "exploit").map((it) => it.id));
-  const extra = (o.exploits || []).filter((e) => e.pinned && !featuredIds.has(e.id))
+  // Exploits lead the front card — that's what Phil wants to see across
+  // the room. All exploits are shown unless individually hidden via the
+  // 🚫 toggle in the opponent detail (opt-out, not opt-in).
+  const exploitChips = (o.exploits || [])
+    .filter((e) => !e.hideFront)
     .map((e) => {
       const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
       return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
     }).join("");
-  chips += extra;
+  // Then curated featured reads; otherwise fall back to strong reads (yes!/no!)
+  // so the card still has signal for opponents with no explicit curation.
+  const feat = featuredItems(o);
+  const featReadChips = feat.filter((it) => it.type === "read")
+    .map((it) => featuredChip(o, it)).filter(Boolean).join("");
+  const readChips = featReadChips || Object.entries(oppReads(o))
+    .filter(([id, s]) => isStrongRead(s) && readIsShown(o, id))
+    .map(([id, s]) => readChip(id, s)).join("");
+  const chips = exploitChips + readChips;
   const showChips = !oppEditMode && chips;
   const handle = oppEditMode ? `<span class="draghandle" data-drag="${o.id}">⠿</span>` : "";
   const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
@@ -1030,7 +1040,14 @@ function renderOpponents() {
     if (r > (groupRecency[g] || 0)) groupRecency[g] = r;
   }
   const groups = [...new Set(list.map((o) => o.group || ""))]
-    .sort((a, b) => (groupRecency[b] || 0) - (groupRecency[a] || 0));
+    .sort((a, b) => {
+      // Pinned group (via edit-mode ★) always wins; else most-recently-touched first.
+      if (pinnedGroup != null) {
+        if (a === pinnedGroup) return -1;
+        if (b === pinnedGroup) return 1;
+      }
+      return (groupRecency[b] || 0) - (groupRecency[a] || 0);
+    });
   $("opp-edit").classList.toggle("on", oppEditMode);
   $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
   $("opp-list").innerHTML = list.length ? groups.map((g) => {
@@ -1039,13 +1056,17 @@ function renderOpponents() {
     const rows = members.map((o) => oppRowHTML(o, stats[o.id])).join("");
     const showHead = groups.length > 1 || g || oppEditMode;
     const add = oppEditMode ? `<button class="groupadd" data-groupadd="${esc(g)}">＋ add</button>` : "";
+    const isPinned = pinnedGroup === g;
+    const pinBtn = oppEditMode
+      ? `<button class="grouppin${isPinned ? " on" : ""}" data-grouppin="${esc(g)}" title="Show this group first">${isPinned ? "★ First" : "☆ First"}</button>`
+      : "";
     const head = showHead
       ? `<div class="grouphead">
            <button class="groupcollapse" data-groupcollapse="${esc(g)}">
              <span class="chev">${collapsed ? "▸" : "▾"}</span>
              <span class="tagcat">${esc(g || "ungrouped")}</span>
              <span class="gcount">${members.length}</span>
-           </button>${add}
+           </button>${pinBtn}${add}
          </div>` : "";
     return `${head}<div class="groupsec${collapsed ? " hidden" : ""}" data-group="${esc(g)}">${rows}</div>`;
   }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
@@ -1619,7 +1640,7 @@ function renderOppDetail(id) {
   $("od-exploits").innerHTML = exps.map(({ e: n }) => {
     const topBadge = n.id === topId ? `<span class="topbadge">top</span>` : "";
     const adjBadge = n.adj ? `<span class="adjbadge" title="This player adjusts to this exploit">⚠︎ ADJ</span>` : "";
-    const pinned = !!n.pinned;
+    const hidden = !!n.hideFront;
     return n.id === editExploitId
       ? `<div class="noteitem" data-exp="${n.id}">
           <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
@@ -1627,11 +1648,11 @@ function renderOppDetail(id) {
             <button class="chip mini" data-expcancel>Cancel</button>
             <button class="chip mini on sgreen" data-expsave>Save</button>
           </div></div>`
-      : `<div class="noteitem${n.adj ? " adj" : ""}${pinned ? " pinned" : ""}" data-exp="${n.id}">
+      : `<div class="noteitem${n.adj ? " adj" : ""}${hidden ? " hiddenfront" : ""}" data-exp="${n.id}">
           <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}</div>
           <div class="noterowbtns">
             <button class="chip mini confcycle${(n.conf ?? 0) === 0 ? " off" : ""}" data-expconfcycle title="Confidence 0–5 · tap to cycle">${n.conf ?? 0}</button>
-            <button class="chip mini pinbtn${pinned ? " on" : ""}" data-exppin title="Show on the opponent list card">${pinned ? "★ Pinned" : "☆ Pin"}</button>
+            <button class="chip mini pinbtn${hidden ? "" : " on"}" data-exphide title="Show or hide this exploit on the opponent list card">${hidden ? "🚫 Hidden" : "👁 On front"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
@@ -1672,15 +1693,18 @@ function actorLabel(h, actor) {
   return oppById(h.villains?.[i]?.opponentId)?.name || `V${i + 1}`;
 }
 function actionStr(h, a) {
-  return `${actorLabel(h, a.actor)} ${a.act}${a.size ? " " + a.size : ""}`;
+  const raw = isRawSize(h);
+  const sz = a.size ? (raw ? String(a.size).replace(/^\$/, "") : a.size) : "";
+  return `${actorLabel(h, a.actor)} ${a.act}${sz ? " " + sz : ""}`;
 }
 function handSummary(h) {
   if (h.note) return h.note;
+  const raw = isRawSize(h);
   const bits = [];
   for (const st of STREETS) {
     const acts = (h.actions || []).filter((a) => a.street === st);
     if (!acts.length) continue;
-    const s = acts.map((a) => `${actorLabel(h, a.actor)} ${actPhrase(a)}`).join(", ");
+    const s = acts.map((a) => `${actorLabel(h, a.actor)} ${actPhrase(a, raw)}`).join(", ");
     bits.push(st === "pre" ? s : st.toUpperCase() + ": " + s);
   }
   return bits.join("  ·  ") || cardsStr(h.board) || "—";
@@ -1708,10 +1732,10 @@ function actionSeq(h, actor) {
 }
 /* Compact action code for list rows: "R40K", "3B4x", "B50%", "Jam (turn)". */
 const ACT_ABBR = { fold: "F", check: "X", call: "C", limp: "L", bet: "B", raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B", jam: "Jam" };
-function abbrevAct(a) {
+function abbrevAct(a, raw = false) {
   const street = a.street !== "pre" ? ` (${a.street})` : "";
   if (a.act === "jam" || a.size === "Jam") return "Jam" + street;
-  const sz = a.size ? sizeLabel(a.size) : "";
+  const sz = a.size ? sizeLabel(a.size, raw) : "";
   const code = ACT_ABBR[a.act] || a.act;
   return code + (sz ? (/^\d/.test(sz) ? "" : " ") + sz : "") + street;
 }
@@ -1720,26 +1744,41 @@ function abbrevAct(a) {
    fold". Multipliers ("3x") and pot-percent sizes ("50%") are resolved to
    chip amounts via estimatePot so every visible size is a K count. Actor
    labels are omitted — order alone reads clearly in a two-player context. */
-function fmtK(n) {
+function fmtK(n, raw = false) {
   if (!n) return "";
+  if (raw) return String(Math.round(n));
   if (n >= 10) return Math.round(n) + "K";
   return (Math.round(n * 10) / 10) + "K";
 }
 /* Sizing fallback that preserves % / x markers so a percent-pot size never
    renders as a bare "50" (which reads as chip count). Only used when the
    pot estimator can't resolve to a K amount. */
-const sizeLabelKeepMarker = (s) => !s ? "" :
-  /^\$\d/.test(s) ? s.slice(1) + "K" :
-  /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
+const sizeLabelKeepMarker = (s, raw = false) => !s ? "" :
+  raw
+    ? (/^\$?\d/.test(s) ? String(s).replace(/^\$/, "") : s)
+    : /^\$\d/.test(s) ? s.slice(1) + "K" :
+      /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
 function handHistoryLineHTML(h) {
   const acts = h.actions || [];
   if (!acts.length) return "";
+  const raw = isRawSize(h);
   const pe = estimatePot(h, acts);
+  const uniqActors = new Set(acts.map((a) => a.actor));
+  const multiway = uniqActors.size > 2;
+  const shortActor = (actor) => {
+    if (actor === "hero") return "Hero";
+    const i = Number(actor.slice(1));
+    const v = h.villains?.[i];
+    const nm = oppById(v?.opponentId)?.name;
+    const seat = v?.pos;
+    const stem = nm ? nm.split(/\s+/)[0] : `V${i + 1}`;
+    return seat ? `${seat} ${stem}` : stem;
+  };
   const verb = (a, i) => {
     if (a.act === "jam" || a.size === "Jam") return "jam";
     if (a.act === "fold")  return "fold";
     if (a.act === "check") return "check";
-    const amt = pe.perAct[i] ? fmtK(pe.perAct[i]) : (a.size ? sizeLabelKeepMarker(a.size) : "");
+    const amt = pe.perAct[i] ? fmtK(pe.perAct[i], raw) : (a.size ? sizeLabelKeepMarker(a.size, raw) : "");
     switch (a.act) {
       case "call":  return amt ? "call " + amt : "call";
       case "limp":  return "limp";
@@ -1763,7 +1802,14 @@ function handHistoryLineHTML(h) {
     if (st === "flop" && b.slice(0, 3).some(Boolean)) head += boardTiles(b.slice(0, 3));
     else if (st === "turn" && b[3]) head += boardTiles([b[3]]);
     else if (st === "river" && b[4]) head += boardTiles([b[4]]);
-    const chain = idxs.map((i) => `<span class="hh-verb">${esc(verb(acts[i], i))}</span>`).join(`<span class="hh-comma">,</span> `);
+    // Multi-way hands (imports especially) are unreadable as a bare verb chain;
+    // prefix each action with the actor so it's clear who's doing what.
+    const chain = idxs.map((i) => {
+      const v = esc(verb(acts[i], i));
+      if (!multiway) return `<span class="hh-verb">${v}</span>`;
+      const who = esc(shortActor(acts[i].actor));
+      return `<span class="hh-act"><span class="hh-who">${who}</span> <span class="hh-verb">${v}</span></span>`;
+    }).join(`<span class="hh-comma">,</span> `);
     parts.push(`<span class="hh-street">${head}<span class="hh-colon">:</span> ${chain}</span>`);
   }
   return parts.join(`<span class="hh-sep">·</span>`);
@@ -1805,8 +1851,9 @@ function boardFor(h, street) {
 }
 
 /* Plain-text hand render — also the future LLM serialization format. */
-const kAmt = (n) => n + "K";
+const kAmt = (n, raw = false) => raw ? String(n) : (n + "K");
 function handText(h) {
+  const raw = isRawSize(h);
   const L = [];
   const seat = (pos) => (pos ? ` (${pos})` : "");
   const players = [
@@ -1819,13 +1866,13 @@ function handText(h) {
   const ctx = [];
   if (h.blinds) {
     const b = [];
-    if (h.blinds.sb) b.push(kAmt(h.blinds.sb));
-    if (h.blinds.bb) b.push(kAmt(h.blinds.bb));
+    if (h.blinds.sb) b.push(kAmt(h.blinds.sb, raw));
+    if (h.blinds.bb) b.push(kAmt(h.blinds.bb, raw));
     let bl = b.join("/");
-    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std)} straddle)`;
+    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std, raw)} straddle)`;
     if (bl) ctx.push(bl);
   }
-  if (h.effStack) ctx.push(`${kAmt(h.effStack)} eff`);
+  if (h.effStack) ctx.push(`${kAmt(h.effStack, raw)} eff`);
   if (h.squid) {
     const s = [];
     if (h.squid.have != null) s.push(`${h.squid.have} have`);
@@ -1852,6 +1899,7 @@ function handText(h) {
    line per action: position · name · (hole cards on first preflop line)
    · "opens to 40K". */
 function handHTML(h) {
+  const raw = isRawSize(h);
   const posOf = (actor) => actor === "hero" ? h.heroPos : h.villains?.[Number(actor.slice(1))]?.pos;
   const cardsOf = (actor) => actor === "hero" ? h.heroCards : h.villains?.[Number(actor.slice(1))]?.cards;
   const posB = (actor) => posOf(actor) ? `<span class="hv-pos">${esc(posOf(actor))}</span>` : "";
@@ -1867,13 +1915,13 @@ function handHTML(h) {
   const ctx = [];
   if (h.blinds) {
     const b = [];
-    if (h.blinds.sb) b.push(kAmt(h.blinds.sb));
-    if (h.blinds.bb) b.push(kAmt(h.blinds.bb));
+    if (h.blinds.sb) b.push(kAmt(h.blinds.sb, raw));
+    if (h.blinds.bb) b.push(kAmt(h.blinds.bb, raw));
     let bl = b.join("/");
-    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std)} straddle)`;
+    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std, raw)} straddle)`;
     if (bl) ctx.push(bl);
   }
-  if (h.effStack) ctx.push(`${kAmt(h.effStack)} eff`);
+  if (h.effStack) ctx.push(`${kAmt(h.effStack, raw)} eff`);
   if (h.squid) {
     const s = [];
     if (h.squid.have != null) s.push(`${h.squid.have}🦑`);
@@ -1909,16 +1957,16 @@ function handHTML(h) {
     const lines = acts.map(({ a, i }) => {
       const cs = st === "pre" && !shownCards.has(a.actor) ? cardsOf(a.actor) : null;
       if (st === "pre") shownCards.add(a.actor);
-      const { verb, sz, to } = actParts(a);
+      const { verb, sz, to } = actParts(a, raw);
       // relative sizes (%, pot, x) also show the resolved chip amount
       const amt = sz && /%|pot|over|x$/i.test(a.size || "") && pe.perAct[i]
-        ? ` <span class="hv-amt">${potStr(pe.perAct[i])}</span>` : "";
+        ? ` <span class="hv-amt">${potStr(pe.perAct[i], raw)}</span>` : "";
       return `<div class="hv-line">${posB(a.actor)}<b>${esc(actorLabel(h, a.actor))}</b>${hole(cs)}` +
         `<span class="hv-verb">${esc(verb)}${to ? " to" : ""}</span>` +
         (sz ? `<b class="hv-size">${esc(sz)}</b>` : "") + amt + `</div>`;
     }).join("");
     const potH = st !== "pre" && pe.atStart[st] > 0
-      ? `<span class="hv-pot">${potStr(pe.atStart[st])}</span>` : "";
+      ? `<span class="hv-pot">${potStr(pe.atStart[st], raw)}</span>` : "";
     blocks.push(`<div class="hv-block">
       <div class="hv-sthead"><span class="hv-st">${st === "pre" ? "PREFLOP" : st.toUpperCase()}</span>` +
       (boardH ? `<span class="hv-board">${boardH}</span>` : "") + potH + `</div>${lines}</div>`);
@@ -2812,7 +2860,10 @@ function estimatePot(src, actions) {
   }
   return { atStart, now: potNow(), curBet, perAct };
 }
-const potStr = (n) => !n ? "" : "≈" + (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + "K";
+const potStr = (n, raw = false) => !n ? "" :
+  raw
+    ? "≈" + Math.round(n)
+    : "≈" + (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + "K";
 
 /* Size options depend on the action: open raise = chip amounts, 3bet+ = multipliers. */
 function sizesFor(a) {
@@ -3760,6 +3811,14 @@ function bindStatic() {
     if (card) { toast(card.getAttribute("title") || card.textContent); return; }   // full text, no nav
     const gc = e.target.closest("[data-groupcollapse]");
     if (gc) { toggleGroupCollapse(gc.dataset.groupcollapse); return; }
+    const gpin = e.target.closest("[data-grouppin]");
+    if (gpin) {
+      const g = gpin.dataset.grouppin;
+      pinnedGroup = pinnedGroup === g ? null : g;
+      metaSet("pinnedGroup", pinnedGroup);
+      renderOpponents();
+      return;
+    }
     const groupadd = e.target.closest("[data-groupadd]");
     if (groupadd) { openGroupAddSheet(groupadd.dataset.groupadd); return; }
     const mv = e.target.closest("[data-move]");
@@ -4027,9 +4086,9 @@ function bindStatic() {
       const n = (o.exploits || []).find((x) => x.id === id);   // villain adjusts to this exploit
       if (n) { n.adj = !n.adj; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
-    } else if (e.target.closest("[data-exppin]")) {
-      const n = (o.exploits || []).find((x) => x.id === id);   // show on the opponent list card
-      if (n) { n.pinned = !n.pinned; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+    } else if (e.target.closest("[data-exphide]")) {
+      const n = (o.exploits || []).find((x) => x.id === id);   // toggle: show/hide on opponent list card
+      if (n) { n.hideFront = !n.hideFront; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expconfcycle]")) {
       const n = (o.exploits || []).find((x) => x.id === id);   // cycle 0→1→2→3→4→5→0 confidence
@@ -4238,6 +4297,7 @@ async function boot() {
   await migrateNoteConvertedSquid();
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
+  pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
   tableLineup = (await metaGet("tableLineup")) || [];
   lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};
