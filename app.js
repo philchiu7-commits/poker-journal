@@ -432,7 +432,14 @@ const VIEWS = ["opponents", "opp", "hand", "hands", "handview", "data"];
 const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", hands: "hands", handview: "hands", data: "data" };
 
 function route() {
-  const [view, arg] = (location.hash || "#opponents").slice(1).split("/");
+  const raw = (location.hash || "#opponents").slice(1);
+  const [view, arg] = raw.split("/");
+  // #imp/<base64> — deep-link from the hnlbds hand-history bookmarklet.
+  if (view === "imp" && arg) {
+    location.hash = "#opponents";
+    setTimeout(() => openHandImportSheet(arg), 40);
+    return;
+  }
   const v = VIEWS.includes(view) ? view : "opponents";
   // Leaving a specific opponent, or navigating to a different one → drop filters.
   if (v !== "opp" || arg !== curOppId) resetHandFilters();
@@ -652,6 +659,105 @@ function gridCellsHTML(freq, actions) {
   return cells.join("");
 }
 let rangeGridPos = null;
+/* ---------- hand-import (from external replay via bookmarklet) ---------- */
+
+/* Decode base64url or base64 with UTF-8 payload. */
+function decodeImportPayload(b64) {
+  try {
+    const norm = b64.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(decodeURIComponent(escape(atob(norm))));
+  } catch (e) { return null; }
+}
+/* Pending import kept in memory so the sheet's "Save" can commit after
+   Phil optionally edits which villains map to which opponents. */
+let pendingImport = null;
+function openHandImportSheet(b64) {
+  const rec = decodeImportPayload(b64);
+  if (!rec || rec.kind !== "hand-import") { toast("Bad hand-import payload"); return; }
+  // Build initial name → existing-opponent match (exact name; fallback: null = create).
+  const byName = new Map(OPP.map((o) => [o.name.trim(), o]));
+  pendingImport = {
+    rec,
+    map: rec.villains.map((v) => {
+      const hit = byName.get((v.name || "").trim());
+      return { name: v.name, pos: v.pos, cards: v.cards, chips: v.chips, matchId: hit?.id || null, create: !hit };
+    }),
+  };
+  renderHandImportSheet();
+}
+function renderHandImportSheet() {
+  const p = pendingImport; if (!p) return;
+  const rec = p.rec;
+  sheetGroup = "__handimport__";
+  const rows = p.map.map((m, i) => {
+    const cards = (m.cards || []).filter(Boolean).join(" ") || "—";
+    const opt = OPP.map((o) => `<option value="${esc(o.id)}"${m.matchId === o.id ? " selected" : ""}>${esc(o.name)}</option>`).join("");
+    return `<div class="himrow" data-hi="${i}">
+      <div class="himmain">
+        <span class="himpos">${esc(m.pos || "?")}</span>
+        <span class="himnm">${esc(m.name)}</span>
+        <span class="himcards">${esc(cards)}</span>
+      </div>
+      <div class="himctrl">
+        <label class="himcreate"><input type="checkbox" data-hicreate ${m.create ? "checked" : ""}> new</label>
+        <select data-hisel ${m.create ? "disabled" : ""}>
+          <option value="">— pick opponent —</option>${opt}
+        </select>
+      </div>
+    </div>`;
+  }).join("");
+  const b = rec.blinds || {};
+  const meta = `SB ${b.sb || "?"} · BB ${b.bb || "?"}${b.std ? " · STD " + b.std : ""}${rec.ante ? " · ante " + rec.ante : ""}`;
+  const board = (rec.board || []).filter(Boolean).join(" ") || "—";
+  const actCount = (rec.actions || []).length;
+  showSheet(
+    `<div class="sheethead"><span class="t">Import hand · ${rec.villains.length} players</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="sheetnote">${esc(meta)} · board ${esc(board)} · ${actCount} actions${rec.tableId ? ` · table ${esc(rec.tableId)}` : ""}</div>
+     <div class="himlist">${rows}</div>
+     <div class="row"><button class="primary" data-hisave>Import hand</button></div>`);
+}
+async function commitHandImport() {
+  const p = pendingImport; if (!p) return;
+  const rec = p.rec;
+  const villains = [];
+  const villainIds = [];
+  for (const m of p.map) {
+    let oppId = m.matchId;
+    if (m.create || !oppId) {
+      const opp = { id: uid(), name: m.name.trim(), group: "", reads: {}, exploits: [], notes: [], updatedAt: Date.now() };
+      await dbPut("opponents", opp);
+      OPP.push(opp);
+      oppId = opp.id;
+    }
+    villains.push({
+      opponentId: oppId, pos: m.pos || null,
+      cards: (m.cards && m.cards.some(Boolean)) ? m.cards : null,
+    });
+    villainIds.push(oppId);
+  }
+  const hand = {
+    id: uid(),
+    ts: (rec.beginTime ? rec.beginTime * 1000 : Date.now()),
+    updatedAt: Date.now(),
+    hero: false, heroPos: null, heroCards: null,
+    villains, villainIds,
+    board: rec.board || [],
+    actions: rec.actions || [],
+    blinds: { sb: rec.blinds?.sb || null, bb: rec.blinds?.bb || null, std: rec.blinds?.std || null },
+    effStack: null,
+    note: rec.tableId ? `Imported · table ${rec.tableId}${rec.roundId ? ` #${rec.roundId}` : ""}` : "Imported",
+    imported: { source: rec.source || "external", tableId: rec.tableId, roundId: rec.roundId },
+  };
+  const win = handWinner(hand); hand.showdown = !!win && win.how === "showdown";
+  await dbPut("hands", hand);
+  HANDS.push(hand);
+  pendingImport = null;
+  hideSheet();
+  toast(`Imported hand · ${villains.length} villains`);
+  renderOpponents();
+}
+
 /* Sheet: side-by-side view of a note's raw text and the parsed draft it will
    become. Lets Phil verify shorthand → hand conversion before committing, and
    catch cases where the parser missed something. */
@@ -3225,6 +3331,20 @@ function bindHandEntry() {
         if (bothAllin(draft.actions)) { hideSheet(); toast("Both allin — add hole cards to complete the hand"); }
       }
     }
+    if (sheetGroup === "__handimport__" && pendingImport) {
+      const row = e.target.closest("[data-hi]");
+      if (row) {
+        const i = Number(row.dataset.hi);
+        if (e.target.dataset.hicreate !== undefined) {
+          pendingImport.map[i].create = e.target.checked;
+          if (e.target.checked) pendingImport.map[i].matchId = null;
+          renderHandImportSheet();
+        } else if (e.target.dataset.hisel !== undefined) {
+          pendingImport.map[i].matchId = e.target.value || null;
+          pendingImport.map[i].create = !e.target.value;
+        }
+      }
+    }
   });
   const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   $("he-vsearch").oninput = () => { vSearch = $("he-vsearch").value; renderHandEntry(); };
@@ -3308,6 +3428,9 @@ function openGroupSheet(g, active) {
 }
 
 function sheetClick(e) {
+  if (sheetGroup === "__handimport__") {
+    if (e.target.closest("[data-hisave]")) { commitHandImport(); return; }
+  }
   if (sheetGroup === "__ptype__") {
     const b = e.target.closest("[data-ptype-set]");
     if (b) {
