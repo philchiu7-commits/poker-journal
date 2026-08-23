@@ -671,15 +671,42 @@ function decodeImportPayload(b64) {
 /* Pending import kept in memory so the sheet's "Save" can commit after
    Phil optionally edits which villains map to which opponents. */
 let pendingImport = null;
+/* Match an imported villain name against OPP: exact → saved alias → case-insensitive →
+   prefix similarity. Returns the opponent record or null. Prefix rule: shared prefix
+   ≥3 chars AND ≥60% of the shorter name — good for CJK handles like 阿九AA / 阿九AA88. */
+function matchImportName(rawName) {
+  const n = (rawName || "").trim();
+  if (!n) return null;
+  const nl = n.toLowerCase();
+  for (const o of OPP) if (o.name && o.name.trim() === n) return o;
+  for (const o of OPP) if ((o.aliases || []).some((a) => (a || "").trim() === n)) return o;
+  for (const o of OPP) {
+    if (o.name && o.name.trim().toLowerCase() === nl) return o;
+    if ((o.aliases || []).some((a) => (a || "").trim().toLowerCase() === nl)) return o;
+  }
+  let best = null, bestScore = 0;
+  for (const o of OPP) {
+    const cands = [o.name, ...(o.aliases || [])].filter(Boolean).map((s) => s.trim()).filter(Boolean);
+    for (const c of cands) {
+      const cl = c.toLowerCase();
+      let pref = 0;
+      while (pref < cl.length && pref < nl.length && cl[pref] === nl[pref]) pref++;
+      if (pref < 3) continue;
+      const shorter = Math.min(cl.length, nl.length);
+      if (pref / shorter < 0.6) continue;
+      const score = pref * 100 + (100 - Math.abs(cl.length - nl.length));
+      if (score > bestScore) { bestScore = score; best = o; }
+    }
+  }
+  return best;
+}
 function openHandImportSheet(b64) {
   const rec = decodeImportPayload(b64);
   if (!rec || rec.kind !== "hand-import") { toast("Bad hand-import payload"); return; }
-  // Build initial name → existing-opponent match (exact name; fallback: null = create).
-  const byName = new Map(OPP.map((o) => [o.name.trim(), o]));
   pendingImport = {
     rec,
     map: rec.villains.map((v) => {
-      const hit = byName.get((v.name || "").trim());
+      const hit = matchImportName(v.name);
       return { name: v.name, pos: v.pos, cards: v.cards, chips: v.chips, matchId: hit?.id || null, create: !hit };
     }),
   };
@@ -724,11 +751,22 @@ async function commitHandImport() {
   const villainIds = [];
   for (const m of p.map) {
     let oppId = m.matchId;
+    const rawName = (m.name || "").trim();
     if (m.create || !oppId) {
-      const opp = { id: uid(), name: m.name.trim(), group: "", reads: {}, exploits: [], notes: [], updatedAt: Date.now() };
+      const opp = { id: uid(), name: rawName, group: "", reads: {}, exploits: [], notes: [], aliases: [], updatedAt: Date.now() };
       await dbPut("opponents", opp);
       OPP.push(opp);
       oppId = opp.id;
+    } else {
+      const opp = OPP.find((o) => o.id === oppId);
+      if (opp && rawName && rawName !== (opp.name || "").trim()) {
+        opp.aliases = opp.aliases || [];
+        if (!opp.aliases.some((a) => (a || "").trim() === rawName)) {
+          opp.aliases.push(rawName);
+          opp.updatedAt = Date.now();
+          await dbPut("opponents", opp);
+        }
+      }
     }
     villains.push({
       opponentId: oppId, pos: m.pos || null,
