@@ -709,6 +709,7 @@ textarea.noteedit { margin-bottom: 0; }
   padding: 3px 7px; flex: none;
 }
 .hv-hole, .hv-board { display: inline-flex; align-items: center; }
+.hv-stack { color: var(--muted); font-size: 12px; font-weight: 600; }
 .hv-ctx { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .hv-streets { margin-top: 6px; }
 .hv-block { border-top: 1px solid var(--line); padding: 10px 0 6px; }

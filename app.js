@@ -792,6 +792,7 @@ async function commitOneImport(rec, map) {
     villains.push({
       opponentId: oppId, pos: m.pos || null,
       cards: (m.cards && m.cards.some(Boolean)) ? m.cards : null,
+      chips: m.chips || null,
     });
     villainIds.push(oppId);
   }
@@ -812,7 +813,7 @@ async function commitOneImport(rec, map) {
     villains, villainIds,
     board: rec.board || [],
     actions,
-    blinds: { sb: rec.blinds?.sb || null, bb: rec.blinds?.bb || null, std: rec.blinds?.std || null },
+    blinds: { sb: rec.blinds?.sb || null, bb: rec.blinds?.bb || null, std: rec.blinds?.std || null, ante: rec.ante || null },
     effStack: null,
     note: rec.tableId ? `Imported · table ${rec.tableId}${rec.roundId ? ` #${rec.roundId}` : ""}` : "Imported",
     imported: { source: rec.source || "external", tableId: rec.tableId, roundId: rec.roundId, noK: (rec.source || "") === "hnlbds" },
@@ -1914,12 +1915,25 @@ function handHistoryLineHTML(h) {
     else if (st === "river" && b[4]) head += boardTiles([b[4]]);
     // Multi-way hands (imports especially) are unreadable as a bare verb chain;
     // prefix each action with the actor so it's clear who's doing what.
-    const chain = idxs.map((i) => {
+    // Runs of ≥2 consecutive folds compress to "N folds" — the names add nothing.
+    const pieces = [];
+    for (let k = 0; k < idxs.length; k++) {
+      const i = idxs[k];
+      if (multiway && acts[i].act === "fold") {
+        let run = 1;
+        while (k + run < idxs.length && acts[idxs[k + run]].act === "fold") run++;
+        if (run >= 2) {
+          pieces.push(`<span class="hh-act"><span class="hh-verb">${run} folds</span></span>`);
+          k += run - 1;
+          continue;
+        }
+      }
       const v = esc(verb(acts[i], i));
-      if (!multiway) return `<span class="hh-verb">${v}</span>`;
+      if (!multiway) { pieces.push(`<span class="hh-verb">${v}</span>`); continue; }
       const who = esc(shortActor(acts[i].actor));
-      return `<span class="hh-act"><span class="hh-who">${who}</span> <span class="hh-verb">${v}</span></span>`;
-    }).join(`<span class="hh-comma">,</span> `);
+      pieces.push(`<span class="hh-act"><span class="hh-who">${who}</span> <span class="hh-verb">${v}</span></span>`);
+    }
+    const chain = pieces.join(`<span class="hh-comma">,</span> `);
     parts.push(`<span class="hh-street">${head}<span class="hh-colon">:</span> ${chain}</span>`);
   }
   return parts.join(`<span class="hh-sep">·</span>`);
@@ -1962,6 +1976,21 @@ function boardFor(h, street) {
 
 /* Plain-text hand render — also the future LLM serialization format. */
 const kAmt = (n, raw = false) => raw ? String(n) : (n + "K");
+/* Blinds line: "50/100/200(200)" — straddle joins the blinds, bracket = ante. */
+function blindsStr(h, raw) {
+  if (!h.blinds) return "";
+  const b = [];
+  if (h.blinds.sb) b.push(kAmt(h.blinds.sb, raw));
+  if (h.blinds.bb) b.push(kAmt(h.blinds.bb, raw));
+  if (h.blinds.std) b.push(kAmt(h.blinds.std, raw));
+  let bl = b.join("/");
+  if (h.blinds.ante) bl += `(${kAmt(h.blinds.ante, raw)})`;
+  return bl;
+}
+/* Compact chip-stack label for raw imported counts: 424224 → "424K". */
+const stackStr = (n) =>
+  n >= 1e6 ? (Math.round(n / 1e5) / 10) + "M" :
+  n >= 1000 ? Math.round(n / 1000) + "K" : String(n);
 function handText(h) {
   const raw = isRawSize(h);
   const L = [];
@@ -1969,19 +1998,13 @@ function handText(h) {
   const players = [
     ...(h.hero === false ? [] : [`Hero${seat(h.heroPos)}${h.heroCards ? " " + cardsStr(h.heroCards) : ""}`]),
     ...(h.villains || []).map((v, i) =>
-      `${actorLabel(h, "v" + i)}${seat(v.pos)}${v.cards ? " " + cardsStr(v.cards) : ""}`),
+      `${actorLabel(h, "v" + i)}${seat(v.pos)}${v.chips ? " " + stackStr(v.chips) : ""}${v.cards ? " " + cardsStr(v.cards) : ""}`),
   ];
   L.push(players.join("  vs  "));
 
   const ctx = [];
-  if (h.blinds) {
-    const b = [];
-    if (h.blinds.sb) b.push(kAmt(h.blinds.sb, raw));
-    if (h.blinds.bb) b.push(kAmt(h.blinds.bb, raw));
-    let bl = b.join("/");
-    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std, raw)} straddle)`;
-    if (bl) ctx.push(bl);
-  }
+  const bl = blindsStr(h, raw);
+  if (bl) ctx.push(bl);
   if (h.effStack) ctx.push(`${kAmt(h.effStack, raw)} eff`);
   if (h.squid) {
     const s = [];
@@ -2015,22 +2038,19 @@ function handHTML(h) {
   const posB = (actor) => posOf(actor) ? `<span class="hv-pos">${esc(posOf(actor))}</span>` : "";
   const hole = (cs) => cs && cs.some(Boolean) ? `<span class="hv-hole">${tilesHTML(cs)}</span>` : "";
 
-  const seatH = (actor) =>
-    `<div class="hv-seat">${posB(actor)}<b>${esc(actorLabel(h, actor))}</b>${hole(cardsOf(actor))}</div>`;
+  const seatH = (actor) => {
+    const v = actor === "hero" ? null : h.villains?.[Number(actor.slice(1))];
+    const stk = v?.chips ? `<span class="hv-stack">${stackStr(v.chips)}</span>` : "";
+    return `<div class="hv-seat">${posB(actor)}<b>${esc(actorLabel(h, actor))}</b>${hole(cardsOf(actor))}${stk}</div>`;
+  };
   const seats = [];
   if (h.hero !== false) seats.push(seatH("hero"));
   (h.villains || []).forEach((_, i) => seats.push(seatH("v" + i)));
   let html = `<div class="hv-seats">${seats.join("")}</div>`;
 
   const ctx = [];
-  if (h.blinds) {
-    const b = [];
-    if (h.blinds.sb) b.push(kAmt(h.blinds.sb, raw));
-    if (h.blinds.bb) b.push(kAmt(h.blinds.bb, raw));
-    let bl = b.join("/");
-    if (h.blinds.std) bl += ` (${kAmt(h.blinds.std, raw)} straddle)`;
-    if (bl) ctx.push(bl);
-  }
+  const bl = blindsStr(h, raw);
+  if (bl) ctx.push(bl);
   if (h.effStack) ctx.push(`${kAmt(h.effStack, raw)} eff`);
   if (h.squid) {
     const s = [];
