@@ -446,6 +446,12 @@ function route() {
     setTimeout(() => openHandImportSheet(arg), 40);
     return;
   }
+  // #bulk/<base64> — deep-link from the convert.html collector page.
+  if (view === "bulk" && arg) {
+    location.hash = "#opponents";
+    setTimeout(() => openBulkImportSheet(arg), 40);
+    return;
+  }
   const v = VIEWS.includes(view) ? view : "opponents";
   // Leaving a specific opponent, or navigating to a different one → drop filters.
   if (v !== "opp" || arg !== curOppId) resetHandFilters();
@@ -750,16 +756,18 @@ function renderHandImportSheet() {
      <div class="himlist">${rows}</div>
      <div class="row"><button class="primary" data-hisave>Import hand</button></div>`);
 }
-async function commitHandImport() {
-  const p = pendingImport; if (!p) return;
-  const rec = p.rec;
+/* Persist one decoded hand-import record + villain mapping. Shared by the
+   single-hand sheet and the bulk-import sheet. Returns:
+     {ok:true, hand} on success
+     {skipped:true, reason:"dup"} if the (tableId,roundId) is already logged */
+async function commitOneImport(rec, map) {
   if (rec.tableId && rec.roundId) {
     const dup = HANDS.find((h) => h.imported && h.imported.tableId === rec.tableId && h.imported.roundId === rec.roundId);
-    if (dup) { pendingImport = null; hideSheet(); toast("Already imported this hand"); return; }
+    if (dup) return { skipped: true, reason: "dup" };
   }
   const villains = [];
   const villainIds = [];
-  for (const m of p.map) {
+  for (const m of map) {
     let oppId = m.matchId;
     const rawName = (m.name || "").trim();
     if (m.create || !oppId) {
@@ -800,9 +808,99 @@ async function commitHandImport() {
   const win = handWinner(hand); hand.showdown = !!win && win.how === "showdown";
   await dbPut("hands", hand);
   HANDS.push(hand);
+  return { ok: true, hand };
+}
+
+async function commitHandImport() {
+  const p = pendingImport; if (!p) return;
+  const res = await commitOneImport(p.rec, p.map);
   pendingImport = null;
   hideSheet();
-  toast(`Imported hand · ${villains.length} villains`);
+  if (res.skipped) toast("Already imported this hand");
+  else toast(`Imported hand · ${p.map.length} villains`);
+  renderOpponents();
+}
+
+/* ---------- Bulk import (from convert.html collector) ---------- */
+let pendingBulkImport = null;
+function openBulkImportSheet(b64) {
+  let arr;
+  try {
+    const json = decodeURIComponent(escape(atob(b64)));
+    arr = JSON.parse(json);
+  } catch (e) { toast("Bad bulk-import payload"); return; }
+  if (!Array.isArray(arr) || !arr.length) { toast("Empty bulk payload"); return; }
+  pendingBulkImport = {
+    recs: arr,
+    items: arr.map((rec) => ({
+      rec,
+      map: (rec.villains || []).map((v) => {
+        const hit = matchImportName(v.name);
+        return { name: v.name, pos: v.pos, cards: v.cards, chips: v.chips, matchId: hit?.id || null, create: !hit };
+      }),
+      alreadyLogged: !!(rec.tableId && rec.roundId &&
+        HANDS.find((h) => h.imported && h.imported.tableId === rec.tableId && h.imported.roundId === rec.roundId)),
+    })),
+  };
+  renderBulkImportSheet();
+}
+function renderBulkImportSheet() {
+  const p = pendingBulkImport; if (!p) return;
+  sheetGroup = "__bulkimport__";
+  const dupCount = p.items.filter((it) => it.alreadyLogged).length;
+  const newCount = p.items.length - dupCount;
+  const newOpps = new Set();
+  const matchOpps = new Set();
+  for (const it of p.items) {
+    for (const m of it.map) {
+      if (m.matchId) matchOpps.add(m.matchId);
+      else if (m.create && m.name) newOpps.add(m.name.toLowerCase().trim());
+    }
+  }
+  const rows = p.items.map((it, i) => {
+    const b = it.rec.blinds || {};
+    const meta = `SB ${b.sb || "?"}/BB ${b.bb || "?"}${b.std ? "/STD " + b.std : ""}`;
+    const names = (it.rec.villains || []).map((v) => v.name).join(", ");
+    const board = (it.rec.board || []).filter(Boolean).join(" ") || "—";
+    const badge = it.alreadyLogged ? `<span class="himdup">dup</span>` : "";
+    return `<div class="himbulkrow ${it.alreadyLogged ? "dup" : ""}">
+      <div class="himbulktop">
+        <span class="himbulkidx">#${i + 1}</span>
+        <span class="himbulkmeta">${esc(meta)} · ${(it.rec.actions || []).length} actions · board ${esc(board)}</span>
+        ${badge}
+      </div>
+      <div class="himbulknames">${esc(names)}</div>
+    </div>`;
+  }).join("");
+  showSheet(
+    `<div class="sheethead"><span class="t">Bulk import · ${p.items.length} hands</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="sheetnote">
+       ${newCount} new · ${dupCount} already logged<br>
+       ${matchOpps.size} matched villains · ${newOpps.size} new villains will be created
+     </div>
+     <div class="himbulklist">${rows}</div>
+     <div class="row">
+       <button class="primary" data-bulksave ${newCount ? "" : "disabled"}>${newCount ? `Import ${newCount} hand${newCount === 1 ? "" : "s"}` : "Nothing to import"}</button>
+     </div>`);
+}
+async function commitBulkImport() {
+  const p = pendingBulkImport; if (!p) return;
+  let ok = 0, dup = 0, fail = 0;
+  for (const it of p.items) {
+    try {
+      const r = await commitOneImport(it.rec, it.map);
+      if (r.ok) ok++;
+      else if (r.skipped) dup++;
+    } catch (e) { fail++; }
+  }
+  pendingBulkImport = null;
+  hideSheet();
+  const parts = [];
+  if (ok) parts.push(`${ok} imported`);
+  if (dup) parts.push(`${dup} dup`);
+  if (fail) parts.push(`${fail} failed`);
+  toast(parts.join(" · ") || "Nothing to import");
   renderOpponents();
 }
 
@@ -3519,6 +3617,9 @@ function openGroupSheet(g, active) {
 function sheetClick(e) {
   if (sheetGroup === "__handimport__") {
     if (e.target.closest("[data-hisave]")) { commitHandImport(); return; }
+  }
+  if (sheetGroup === "__bulkimport__") {
+    if (e.target.closest("[data-bulksave]")) { commitBulkImport(); return; }
   }
   if (sheetGroup === "__ptype__") {
     const b = e.target.closest("[data-ptype-set]");

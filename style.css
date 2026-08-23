@@ -586,6 +586,14 @@ textarea.noteedit { margin-bottom: 0; }
 .himctrl { display: flex; gap: 8px; align-items: center; }
 .himcreate { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); flex: none; }
 .himctrl select { margin: 0; padding: 6px 8px; font-size: 12px; flex: 1; }
+.himbulklist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; max-height: 55vh; overflow-y: auto; }
+.himbulkrow { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); font-size: 13px; }
+.himbulkrow.dup { opacity: .55; }
+.himbulktop { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.himbulkidx { font-weight: 700; color: var(--muted); font-size: 11px; min-width: 24px; }
+.himbulkmeta { flex: 1; color: var(--muted); font-size: 11px; }
+.himdup { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #4a3319; color: #e0a63a; font-weight: 700; text-transform: uppercase; }
+.himbulknames { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rgpicker .chip i {
   font-style: normal; margin-left: 4px; font-size: 10px; opacity: .7;
 }

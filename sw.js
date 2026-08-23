@@ -1,8 +1,8 @@
 /* Service worker: cache the app shell so it runs offline once installed. */
-const CACHE = "journal-v96";
+const CACHE = "journal-v97";
 const ASSETS = [
   ".", "index.html", "style.css", "app.js", "db.js", "vocab.js", "pinyin.js",
-  "import.html",
+  "import.html", "convert.html",
   "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];
 
