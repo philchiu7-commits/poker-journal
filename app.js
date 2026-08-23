@@ -795,6 +795,15 @@ async function commitOneImport(rec, map) {
     });
     villainIds.push(oppId);
   }
+  // hnlbds labels every preflop raise "raise"; number the re-raises so they
+  // store (and read) as 3-bets / 4-bets like manually entered hands.
+  let preRaises = 0;
+  const actions = (rec.actions || []).map((a) => {
+    if (a.street !== "pre" || (a.act !== "raise" && a.act !== "jam")) return a;
+    preRaises++;
+    if (a.act === "jam" || preRaises === 1) return a;
+    return { ...a, act: preRaises === 2 ? "3bet" : preRaises === 3 ? "4bet" : "5bet" };
+  });
   const hand = {
     id: uid(),
     ts: (rec.beginTime ? rec.beginTime * 1000 : Date.now()),
@@ -802,7 +811,7 @@ async function commitOneImport(rec, map) {
     hero: false, heroPos: null, heroCards: null,
     villains, villainIds,
     board: rec.board || [],
-    actions: rec.actions || [],
+    actions,
     blinds: { sb: rec.blinds?.sb || null, bb: rec.blinds?.bb || null, std: rec.blinds?.std || null },
     effStack: null,
     note: rec.tableId ? `Imported · table ${rec.tableId}${rec.roundId ? ` #${rec.roundId}` : ""}` : "Imported",

@@ -1,5 +1,5 @@
 /* Service worker: cache the app shell so it runs offline once installed. */
-const CACHE = "journal-v98";
+const CACHE = "journal-v99";
 const ASSETS = [
   ".", "index.html", "style.css", "app.js", "db.js", "vocab.js", "pinyin.js",
   "import.html", "convert.html",
