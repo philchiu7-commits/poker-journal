@@ -434,8 +434,8 @@ function hideSheet() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["opponents", "opp", "hand", "hands", "handview", "data"];
-const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", hands: "hands", handview: "hands", data: "data" };
+const VIEWS = ["opponents", "opp", "hand", "table", "handview", "data"];
+const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", data: "data" };
 
 function route() {
   const raw = (location.hash || "#opponents").slice(1);
@@ -463,7 +463,7 @@ function route() {
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
   hideSheet();
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
-     hands: renderHandsFeed, handview: () => renderHandView(arg), data: renderData })[v]();
+     table: renderTableTab, handview: () => renderHandView(arg), data: renderData })[v]();
   window.scrollTo(0, 0);
 }
 
@@ -1433,6 +1433,7 @@ function renderLineupSheet() {
     }
     renderLineupSheet();
     renderHandEntry();
+    renderTableTab();
   };
   sheet.querySelectorAll("[data-lsize]").forEach((b) =>
     b.onclick = async () => {
@@ -2137,22 +2138,32 @@ function handHTML(h) {
   return html;
 }
 
-/* ================= Hands feed + detail ================= */
+/* ================= Table (tonight's lineup) + hand detail ================= */
 
-function renderHandsFeed() {
-  const hands = [...HANDS].sort((a, b) => b.ts - a.ts);
-  // Wrap per-hand so a single bad record can't wipe the whole feed silently.
-  const rows = hands.map((h) => {
-    try { return handRowHTML(h); }
-    catch (e) { return `<div class="lrow" data-hand="${esc(h.id || "")}"><div class="t">⚠ ${esc(e.message || "render failed")}</div><div class="s">${esc(h.id || "no id")}</div></div>`; }
+/* One glance mid-session: the seat ring from the lineup sheet, each opponent
+   rendered with their front-page card chips. Same data as hand entry's Lineup.
+   (renderTable is taken — that's the hand-entry felt renderer.) */
+function renderTableTab() {
+  const stats = oppStats();
+  // Row cards always render in normal (non-edit) mode here.
+  const em = oppEditMode; oppEditMode = false;
+  const rows = tableLineup.map((id, i) => {
+    const seat = `<span class="seatno">${i + 1}</span>`;
+    if (id === "hero") return `<div class="tblrow tblhero">${seat}<div class="lrow"><div class="t">You (Hero)</div></div></div>`;
+    const o = oppById(id);
+    if (!o) return "";
+    return `<div class="tblrow">${seat}${oppRowHTML(o, stats[o.id])}</div>`;
   }).join("");
-  $("hands-list").innerHTML = rows ||
-    `<div class="empty">No hands yet — log one from the Hand tab. (${HANDS.length} in storage)</div>`;
+  oppEditMode = em;
+  $("tbl-sub").textContent = tableLineup.length
+    ? `${lineupSeats}-handed · ${tableLineup.length} seated, clockwise order` : "";
+  $("tbl-list").innerHTML = rows ||
+    `<div class="empty">No lineup yet — tap Edit to seat tonight's players.</div>`;
 }
 
 function renderHandView(id) {
   const h = HANDS.find((x) => x.id === id);
-  if (!h) { location.hash = "#hands"; return; }
+  if (!h) { location.hash = "#opponents"; return; }
   curHandId = id;
   $("hv-text").innerHTML = handHTML(h);
 }
@@ -3692,7 +3703,7 @@ function sheetClick(e) {
       o.type = t || null;
       if (!o.type) delete o.type;
       o.updatedAt = Date.now();
-      dbPut("opponents", o).then(() => { hideSheet(); renderOpponents(); });
+      dbPut("opponents", o).then(() => { hideSheet(); renderOpponents(); renderTableTab(); });
       return;
     }
   }
@@ -3989,6 +4000,17 @@ function bindStatic() {
     if (mv) { openMoveSheet(mv.dataset.move); return; }
     const r = e.target.closest("[data-opp]");
     if (r && !oppEditMode) location.hash = "#opp/" + r.dataset.opp;
+  };
+
+  // Table tab — same lineup as hand entry's Lineup sheet
+  $("tbl-edit").onclick = openLineupSheet;
+  $("tbl-list").onclick = (e) => {
+    const ptype = e.target.closest("[data-ptype-open]");
+    if (ptype) { e.stopPropagation(); openPlayerTypeSheet(ptype.dataset.ptypeOpen); return; }
+    const card = e.target.closest(".excard");
+    if (card) { toast(card.getAttribute("title") || card.textContent); return; }
+    const r = e.target.closest("[data-opp]");
+    if (r) location.hash = "#opp/" + r.dataset.opp;
   };
 
   // opponent detail
@@ -4317,7 +4339,6 @@ function bindStatic() {
     renderOppDetail(curOppId);
   };
   $("od-hands").onclick = handListClick;
-  $("hands-list").onclick = handListClick;
 
   // hand detail
   $("hv-edit").onclick = () => {

@@ -156,8 +156,13 @@ function mergeOppRecords(into, from) {
   into.notes = dedupeById([...(into.notes || []), ...(from.notes || [])]).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   into.exploits = dedupeById([...(into.exploits || []), ...(from.exploits || [])]).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   into.exploitDismissed = [...new Set([...(into.exploitDismissed || []), ...(from.exploitDismissed || [])])];
+  into.readDismissed = [...new Set([...(into.readDismissed || []), ...(from.readDismissed || [])])];
+  if (from.hiddenReads || into.hiddenReads)
+    into.hiddenReads = { ...(from.hiddenReads || {}), ...(into.hiddenReads || {}) };
+  if (!(into.featured || []).length && (from.featured || []).length) into.featured = from.featured;
   if (!into.group && from.group) into.group = from.group;
   if (!into.physical && from.physical) into.physical = from.physical;
+  if (!into.type && from.type) into.type = from.type;
   into.updatedAt = Date.now();
 }
 
@@ -180,9 +185,16 @@ async function importJSON(data) {
 
   for (const rec of data.opponents) {
     if (!rec.id) continue;
-    if (existingIds.has(rec.id)) {           // same id already present — plain newer-wins
+    if (existingIds.has(rec.id)) {
+      // Same profile edited on two devices: the newer record keeps identity
+      // fields (name, reads conflicts), but reads/exploits/notes union from
+      // both — an import must never drop the other device's additions.
       const cur = await dbGet("opponents", rec.id);
-      if (!cur || (rec.updatedAt || 0) > (cur.updatedAt || 0)) { await dbPut("opponents", rec); counts.opponents++; }
+      if (!cur) { await dbPut("opponents", rec); counts.opponents++; continue; }
+      const [into, from] = (rec.updatedAt || 0) > (cur.updatedAt || 0) ? [rec, cur] : [cur, rec];
+      mergeOppRecords(into, from);
+      await dbPut("opponents", into);
+      counts.merged++;
       continue;
     }
     const matchId = nameToId[normName(rec.name)];

@@ -152,10 +152,14 @@
   </div>
 </section>
 
-<!-- ===== Hands feed ===== -->
-<section id="view-hands" class="hidden">
-  <header class="vhead"><h1>Hands</h1></header>
-  <div id="hands-list" class="list"></div>
+<!-- ===== Table (tonight's lineup) ===== -->
+<section id="view-table" class="hidden">
+  <header class="vhead">
+    <h1>Table</h1>
+    <button id="tbl-edit" class="iconbtn textbtn" title="Edit lineup">Edit</button>
+  </header>
+  <div id="tbl-sub" class="muted sub2"></div>
+  <div id="tbl-list" class="list"></div>
 </section>
 
 <!-- ===== Hand detail ===== -->
@@ -209,7 +213,7 @@
 <nav id="tabbar">
   <button data-tab="opponents"><span class="ticon">☺</span>Opponents</button>
   <button data-tab="hand" class="bigtab"><span class="ticon">＋</span>Hand</button>
-  <button data-tab="hands"><span class="ticon">≡</span>Hands</button>
+  <button data-tab="table"><span class="ticon">◎</span>Table</button>
   <button data-tab="data"><span class="ticon">⇅</span>Data</button>
 </nav>
 
