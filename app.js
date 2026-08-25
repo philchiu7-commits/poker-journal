@@ -1089,7 +1089,7 @@ function oppRowHTML(o, st) {
   const featReadChips = feat.filter((it) => it.type === "read")
     .map((it) => featuredChip(o, it)).filter(Boolean).join("");
   const readChips = featReadChips || Object.entries(oppReads(o))
-    .filter(([id, s]) => isStrongRead(s) && readIsShown(o, id))
+    .filter(([id, s]) => isStrongRead(s) && readIsShown(o, id) && !(o.hiddenReads || {})[id])
     .map(([id, s]) => readChip(id, s)).join("");
   const chips = exploitChips + readChips;
   const showChips = !oppEditMode && chips;
@@ -1537,12 +1537,26 @@ function renderCardSheet() {
   const pool =
     setReads.map((id) => `<button class="chip" data-cadd="read:${esc(id)}">${esc(TAG_BY_ID[id].label)}</button>`).join("") +
     exps.map((e) => `<button class="chip" data-cadd="exploit:${esc(e.id)}">💡 ${esc(e.abbr?.trim() || autoShort(e.text))}</button>`).join("");
+  // Strong reads auto-show on the row while no reads are featured; give each
+  // one a per-opponent opt-out so a noisy read can be kept off the card.
+  const featHasReads = feat.some((it) => it.type === "read");
+  const strong = Object.entries(oppReads(o)).filter(([rid, s]) => isStrongRead(s) && readIsShown(o, rid));
+  const autoHTML = !featHasReads && strong.length
+    ? `<div class="glabel" style="margin-top:12px">Auto-shown strong reads</div>
+       <div class="sheetnote">These show on the row while no reads are featured — tap one to hide/show it.</div>
+       <div class="chiprow" id="card-auto">` +
+      strong.map(([rid, s]) => {
+        const hid = !!(o.hiddenReads || {})[rid];
+        return `<button class="chip mini${hid ? "" : " on " + (STATE_CLASS[s] || "")}" data-chide="${esc(rid)}">${hid ? "🚫 " : ""}${esc(TAG_BY_ID[rid]?.label || rid)}</button>`;
+      }).join("") + `</div>`
+    : "";
   showSheet(`<div class="sheethead"><span class="t">Front-page card</span>
       <button class="chip" data-sheetclose>Done</button></div>
     <div class="sheetnote">Pick which reads &amp; exploits show on this player's row, and drag the order. Exploit chips show your short tag (full text on hover).</div>
     <div class="linelist">${rows}</div>
     <div class="glabel" style="margin-top:12px">Add to card</div>
-    <div class="chiprow" id="card-pool">${pool || `<span class="chipnote">set some reads or add exploits first</span>`}</div>`);
+    <div class="chiprow" id="card-pool">${pool || `<span class="chipnote">set some reads or add exploits first</span>`}</div>
+    ${autoHTML}`);
   const sheet = $("sheet");
   const refresh = async () => {
     o.updatedAt = Date.now();
@@ -1567,6 +1581,12 @@ function renderCardSheet() {
   sheet.querySelectorAll("[data-abbr]").forEach((inp) => inp.onchange = async () => {
     const e = (o.exploits || []).find((x) => x.id === inp.dataset.abbr);
     if (e) { e.abbr = inp.value.trim(); o.updatedAt = Date.now(); await dbPut("opponents", o); renderCardSheet(); }
+  });
+  sheet.querySelectorAll("[data-chide]").forEach((b) => b.onclick = () => {
+    o.hiddenReads = o.hiddenReads || {};
+    const rid = b.dataset.chide;
+    if (o.hiddenReads[rid]) delete o.hiddenReads[rid]; else o.hiddenReads[rid] = true;
+    refresh();
   });
 }
 
