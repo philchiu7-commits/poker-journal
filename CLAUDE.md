@@ -34,15 +34,20 @@ server. To test a change against fresh assets in the preview:
 
 ## Code layout
 
-- `index.html` — one page, five `<section id="view-*">` blocks (opponents,
-  opp-detail, hand-entry, hands-feed, hand-detail, data). Hash-routing.
+- `index.html` — one page, six `<section id="view-*">` blocks (opponents,
+  opp-detail, hand-entry, table, hand-detail, data). Hash-routing. The Table
+  tab shows tonight's seat-ring lineup (same `tableLineup` meta as hand
+  entry's Lineup sheet) with each opponent's front-page card chips; its
+  renderer is `renderTableTab` (`renderTable` is the hand-entry felt).
 - `app.js` — all UI + business logic, ~2900 lines. Renderers are named
   `render*` and are cheap to re-run; state lives in module globals (`draft`,
   `sheetGroup`, etc.). Sheets are one shared `#sheet` element; dispatch by
   `sheetGroup` string (`"__act__"`, `"__seat__"`, …).
-- `db.js` — IndexedDB wrapper + JSON export/import. Import merges by id;
-  newer `updatedAt` wins. **v30+ also merges opponents by exact name match**
-  so bulk imports don't dupe existing profiles.
+- `db.js` — IndexedDB wrapper + JSON export/import. Same-id opponents
+  union-merge on import (reads/exploits/notes from both devices survive;
+  newer record wins conflicts) via `mergeOppRecords`. **v30+ also merges
+  opponents by exact name match** so bulk imports don't dupe existing
+  profiles. Hands/sessions stay plain newer-wins by id.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
   **Tag ids are stable — never rename.** Adding a tag = safe; renaming an id
   breaks every opponent's saved reads.
