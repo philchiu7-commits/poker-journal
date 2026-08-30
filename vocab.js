@@ -118,8 +118,10 @@ const TENDENCY_TAGS = [
    reads at a glance: warm reds = biggest fish, blues = regs, gray = nits. */
 const PLAYER_TYPES = [
   { id: "whale",      label: "Whale",      icon: "🐋", color: "#3ec7c7" },
+  { id: "fish",       label: "Fish",       icon: "🐠", color: "#e08a3c" },
   { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#4fbf5a" },
   { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
+  { id: "reg",        label: "Reg",        icon: "🃏", color: "#4f7fdf" },
   { id: "good-reg",   label: "Good reg",   icon: "🦈", color: "#d64848" },
   { id: "tight-reg",  label: "Tight reg",  icon: "🔒", color: "#7a8496" },
 ];
