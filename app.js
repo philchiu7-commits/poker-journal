@@ -470,9 +470,9 @@ function route() {
 /* ================= Hands-panel filters (per opponent detail) =================
    Multi-select within a dimension (OR), AND across dimensions. Cleared on
    navigation away by resetHandFilters(). */
-let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false };
-const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false }; };
-const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd;
+let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, hideFold: false };
+const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, hideFold: false }; };
+const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd || handFilters.hideFold;
 /* Villain seat → coarse bucket for filtering (BTN/CO/HJ/EP/Blinds/Straddle). */
 function posBucket(pos) {
   if (!pos) return null;
@@ -502,6 +502,12 @@ function squidBucket(h) {
   if (n === 1) return "w1S";
   return "w2S+";
 }
+/* Did this opponent fold preflop (never voluntarily played the pot)? */
+function foldedPre(h, oppId) {
+  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  if (idx < 0) return false;
+  return (h.actions || []).some((a) => a.actor === "v" + idx && a.street === "pre" && a.act === "fold");
+}
 /* This villain's preflop role. Priority: jam > raise > call > limp > check/fold → null. */
 function villainRole(h, oppId) {
   const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
@@ -516,6 +522,7 @@ function villainRole(h, oppId) {
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
   if (f.sd && !h.showdown) return false;
+  if (f.hideFold && foldedPre(h, oppId)) return false;
   if (f.pot.size && !f.pot.has(potBucket(h))) return false;
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
@@ -542,6 +549,7 @@ function renderHandFilters(oppId, allHands) {
   const countIf = (dim, val) => {
     const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role) };
     if (dim === "sd") trial.sd = val;
+    else if (dim === "hideFold") trial.hideFold = val;
     else { const s = new Set(trial[dim]); s.add(val); trial[dim] = s; }
     const save = handFilters; handFilters = trial;
     const n = allHands.filter((h) => handMatchesFilters(h, oppId)).length;
@@ -562,6 +570,7 @@ function renderHandFilters(oppId, allHands) {
     row("Role", "role", ROLE_BUCKETS) +
     `<div class="hfrow"><span class="hflbl">Show</span><div class="chiprow tight">
       <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1">Showdown<i>${allHands.filter((h) => h.showdown).length}</i></button>
+      <button class="hfchip${f.hideFold ? " on" : ""}" data-hf="hideFold" data-hfv="1">Hide folds<i>${countIf("hideFold", true)}</i></button>
     </div></div>`;
   $("od-hf-clear").classList.toggle("hidden", !handFiltersActive());
 }
@@ -1973,12 +1982,15 @@ function handHistoryLineHTML(h, focusActor) {
 function handRowHTML(h, oppId) {
   const res = heroResult(h);
   const dot = res ? `<span class="dot ${res}"></span>` : "";
+  // Table-state squid count (how many are up) — used on the general feed.
   const squid = h.squid?.have != null ? `<span class="hr-squid">${h.squid.have}🦑</span>` : "";
   const subFor = (html) => html ? `<div class="s hh-line">${html}</div>` : "";
   if (oppId) {
     const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (i >= 0) {
       const v = h.villains[i];
+      // On a player's own rows show THAT player's squid count, not the table state.
+      const vsquid = v.squid != null ? `<span class="hr-squid">${v.squid}🦑</span>` : "";
       const win = h.hero === false ? handWinner(h) : null;
       const won = win && win.winners.includes("v" + i)
         ? `<span class="hh-won">won${win.how === "showdown" ? " @ showdown" : ""}</span>` : "";
@@ -1988,7 +2000,7 @@ function handRowHTML(h, oppId) {
         won,
       ].filter(Boolean).join("");
       return `<div class="lrow" data-hand="${h.id}">
-        <div class="t hr-t">${dot}${bits}${squid}</div>${subFor(handHistoryLineHTML(h, "v" + i))}
+        <div class="t hr-t">${dot}${bits}${vsquid}</div>${subFor(handHistoryLineHTML(h, "v" + i))}
       </div>`;
     }
   }
@@ -4020,6 +4032,7 @@ function bindStatic() {
     const c = e.target.closest("[data-hf]"); if (!c) return;
     const dim = c.dataset.hf, v = c.dataset.hfv;
     if (dim === "sd") handFilters.sd = !handFilters.sd;
+    else if (dim === "hideFold") handFilters.hideFold = !handFilters.hideFold;
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
   };
