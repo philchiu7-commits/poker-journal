@@ -470,9 +470,9 @@ function route() {
 /* ================= Hands-panel filters (per opponent detail) =================
    Multi-select within a dimension (OR), AND across dimensions. Cleared on
    navigation away by resetHandFilters(). */
-let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, hideFold: false };
-const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, hideFold: false }; };
-const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd || handFilters.hideFold;
+let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, knownOnly: false };
+const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, knownOnly: false }; };
+const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd || handFilters.knownOnly;
 /* Villain seat → coarse bucket for filtering (BTN/CO/HJ/EP/Blinds/Straddle). */
 function posBucket(pos) {
   if (!pos) return null;
@@ -502,12 +502,6 @@ function squidBucket(h) {
   if (n === 1) return "w1S";
   return "w2S+";
 }
-/* Did this opponent fold preflop (never voluntarily played the pot)? */
-function foldedPre(h, oppId) {
-  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
-  if (idx < 0) return false;
-  return (h.actions || []).some((a) => a.actor === "v" + idx && a.street === "pre" && a.act === "fold");
-}
 /* This villain's preflop role. Priority: jam > raise > call > limp > check/fold → null. */
 function villainRole(h, oppId) {
   const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
@@ -522,7 +516,10 @@ function villainRole(h, oppId) {
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
   if (f.sd && !h.showdown) return false;
-  if (f.hideFold && foldedPre(h, oppId)) return false;
+  if (f.knownOnly) {   // keep only hands where we actually saw this player's cards
+    const vi = (h.villains || []).find((x) => x.opponentId === oppId);
+    if (!vi || !(vi.cards || []).some(Boolean)) return false;
+  }
   if (f.pot.size && !f.pot.has(potBucket(h))) return false;
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
@@ -549,7 +546,7 @@ function renderHandFilters(oppId, allHands) {
   const countIf = (dim, val) => {
     const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role) };
     if (dim === "sd") trial.sd = val;
-    else if (dim === "hideFold") trial.hideFold = val;
+    else if (dim === "knownOnly") trial.knownOnly = val;
     else { const s = new Set(trial[dim]); s.add(val); trial[dim] = s; }
     const save = handFilters; handFilters = trial;
     const n = allHands.filter((h) => handMatchesFilters(h, oppId)).length;
@@ -570,7 +567,7 @@ function renderHandFilters(oppId, allHands) {
     row("Role", "role", ROLE_BUCKETS) +
     `<div class="hfrow"><span class="hflbl">Show</span><div class="chiprow tight">
       <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1">Showdown<i>${allHands.filter((h) => h.showdown).length}</i></button>
-      <button class="hfchip${f.hideFold ? " on" : ""}" data-hf="hideFold" data-hfv="1">Hide folds<i>${countIf("hideFold", true)}</i></button>
+      <button class="hfchip${f.knownOnly ? " on" : ""}" data-hf="knownOnly" data-hfv="1">Known cards<i>${countIf("knownOnly", true)}</i></button>
     </div></div>`;
   $("od-hf-clear").classList.toggle("hidden", !handFiltersActive());
 }
@@ -4032,7 +4029,7 @@ function bindStatic() {
     const c = e.target.closest("[data-hf]"); if (!c) return;
     const dim = c.dataset.hf, v = c.dataset.hfv;
     if (dim === "sd") handFilters.sd = !handFilters.sd;
-    else if (dim === "hideFold") handFilters.hideFold = !handFilters.hideFold;
+    else if (dim === "knownOnly") handFilters.knownOnly = !handFilters.knownOnly;
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
   };
