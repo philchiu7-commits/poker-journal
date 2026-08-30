@@ -155,6 +155,9 @@ button.danger {
 .grouppin.on { background: #33280a; color: #e0b23e; border-color: #e0b23e; }
 .groupsec { display: flex; flex-direction: column; gap: 8px; }
 .groupsec + .grouphead { margin-top: 6px; }
+/* No-cards hand group (opponent page): collapsed stats-only spots, set off from the seen hands. */
+.nocardshead { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.nocardssec { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 26px 10px; }
 
 /* ---- chips ---- */

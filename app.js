@@ -457,7 +457,7 @@ function route() {
   }
   const v = VIEWS.includes(view) ? view : "opponents";
   // Leaving a specific opponent, or navigating to a different one → drop filters.
-  if (v !== "opp" || arg !== curOppId) resetHandFilters();
+  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = false; }
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
@@ -470,9 +470,16 @@ function route() {
 /* ================= Hands-panel filters (per opponent detail) =================
    Multi-select within a dimension (OR), AND across dimensions. Cleared on
    navigation away by resetHandFilters(). */
-let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, knownOnly: false };
-const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false, knownOnly: false }; };
-const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd || handFilters.knownOnly;
+let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false };
+const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false }; };
+const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd;
+/* Hands where we never saw this player's cards sit in a collapsed group
+   (stats-only). One open/closed flag, reset when you switch opponents. */
+let noCardsOpen = false;
+const cardsSeen = (h, oppId) => {
+  const v = (h.villains || []).find((x) => x.opponentId === oppId);
+  return !!(v && (v.cards || []).some(Boolean));
+};
 /* Villain seat → coarse bucket for filtering (BTN/CO/HJ/EP/Blinds/Straddle). */
 function posBucket(pos) {
   if (!pos) return null;
@@ -516,10 +523,6 @@ function villainRole(h, oppId) {
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
   if (f.sd && !h.showdown) return false;
-  if (f.knownOnly) {   // keep only hands where we actually saw this player's cards
-    const vi = (h.villains || []).find((x) => x.opponentId === oppId);
-    if (!vi || !(vi.cards || []).some(Boolean)) return false;
-  }
   if (f.pot.size && !f.pot.has(potBucket(h))) return false;
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
@@ -546,7 +549,6 @@ function renderHandFilters(oppId, allHands) {
   const countIf = (dim, val) => {
     const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role) };
     if (dim === "sd") trial.sd = val;
-    else if (dim === "knownOnly") trial.knownOnly = val;
     else { const s = new Set(trial[dim]); s.add(val); trial[dim] = s; }
     const save = handFilters; handFilters = trial;
     const n = allHands.filter((h) => handMatchesFilters(h, oppId)).length;
@@ -567,7 +569,6 @@ function renderHandFilters(oppId, allHands) {
     row("Role", "role", ROLE_BUCKETS) +
     `<div class="hfrow"><span class="hflbl">Show</span><div class="chiprow tight">
       <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1">Showdown<i>${allHands.filter((h) => h.showdown).length}</i></button>
-      <button class="hfchip${f.knownOnly ? " on" : ""}" data-hf="knownOnly" data-hfv="1">Known cards<i>${countIf("knownOnly", true)}</i></button>
     </div></div>`;
   $("od-hf-clear").classList.toggle("hidden", !handFiltersActive());
 }
@@ -1821,7 +1822,22 @@ function renderOppDetail(id) {
   const allHands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
   renderHandFilters(id, allHands);
   const hands = handFiltersActive() ? allHands.filter((h) => handMatchesFilters(h, id)) : allHands;
-  $("od-hands").innerHTML = hands.map((h) => handRowHTML(h, id)).join("") ||
+  // Hands where we saw the cards lead; no-cards hands (stats-only) go in a
+  // collapsed group so they don't bury the reviewable spots.
+  const seen = hands.filter((h) => cardsSeen(h, id));
+  const noCards = hands.filter((h) => !cardsSeen(h, id));
+  const seenHTML = seen.map((h) => handRowHTML(h, id)).join("");
+  const noCardsHTML = noCards.length
+    ? `<div class="grouphead nocardshead">
+         <button class="groupcollapse" data-nocards>
+           <span class="chev">${noCardsOpen ? "▾" : "▸"}</span>
+           <span class="tagcat">No cards seen</span>
+           <span class="gcount">${noCards.length}</span>
+         </button>
+       </div>
+       <div class="nocardssec${noCardsOpen ? "" : " hidden"}">${noCards.map((h) => handRowHTML(h, id)).join("")}</div>`
+    : "";
+  $("od-hands").innerHTML = (seenHTML + noCardsHTML) ||
     (allHands.length ? `<div class="empty">No hands match these filters. ${allHands.length} total — try clearing.</div>` : `<div class="empty">No hands logged.</div>`);
 
   renderRangeGrid(id);
@@ -4029,7 +4045,6 @@ function bindStatic() {
     const c = e.target.closest("[data-hf]"); if (!c) return;
     const dim = c.dataset.hf, v = c.dataset.hfv;
     if (dim === "sd") handFilters.sd = !handFilters.sd;
-    else if (dim === "knownOnly") handFilters.knownOnly = !handFilters.knownOnly;
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
   };
@@ -4446,6 +4461,7 @@ function bindStatic() {
 }
 
 function handListClick(e) {
+  if (e.target.closest("[data-nocards]")) { noCardsOpen = !noCardsOpen; if (curOppId) renderOppDetail(curOppId); return; }
   const r = e.target.closest("[data-hand]");
   if (r) location.hash = "#handview/" + r.dataset.hand;
 }
