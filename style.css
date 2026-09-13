@@ -379,7 +379,7 @@ textarea.noteedit { margin-bottom: 0; }
 .tseat.hero .tpill { background: #1c2c47; border-color: var(--accent); }
 .tseat.empty .tpill { border-style: dashed; }
 .tseat.empty .tnm { color: var(--accent); }
-.tseat.focus .tpill { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,156,255,.4); }
+.tseat.focus .tpill { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(91,156,255,.4); }   /* also marks who is on to act while the action sheet is open */
 .tseat.btnpick .tpill { border-color: #ffb84a; box-shadow: 0 0 0 2px rgba(255,184,74,.35); }
 .tdealer {
   display: inline-flex; align-items: center; justify-content: center;

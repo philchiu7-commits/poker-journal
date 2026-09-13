@@ -2318,9 +2318,11 @@ function renderTable() {
 
   const btn = effectiveBtnPos();
   const stackStr = d.effStack ? "$" + kAmt(d.effStack) : "";
+  const up = sheetGroup === "__act__" ? currentActor() : null;   // seat that's on to act
+  const upPos = up ? draftActorPos(up) : null;
   felt += seatOrder().map(({ slot, pos }) => {
     const occ = seatOccupant(pos);
-    const focused = d.focusPos === pos;
+    const focused = d.focusPos === pos || pos === upPos;
     const dBadge = pos === btn ? `<span class="tdealer" title="Button">D</span>` : "";
     let inner, cls = "tseat";
     if (occ.type === "hero") {
@@ -2452,8 +2454,11 @@ function heroPresent(d) {
 function currentActor() {
   if (draft.mode === "table") {
     if (draft.focusPos) return actorForPos(draft.focusPos);
-    // No seat focused — fall through to position-based first-to-act so
-    // Add Action after positions are set attributes to the correct seat.
+    // No seat focused: whoever is next after the last action on this street,
+    // else first-to-act — consecutive taps walk the table instead of landing
+    // on the same seat every time.
+    const last = draft.actions[draft.actions.length - 1];
+    if (last && last.street === draft.street) return nextActorByPos(last.actor) || null;
     return firstToAct(draft.street) || null;
   }
   let a = draft.actor;
@@ -3279,13 +3284,12 @@ function renderActionPad() {
     `<button class="${d.street === s ? "on" : ""}" data-street="${s}">${s.toUpperCase()}</button>`).join("");
 
   const cur = currentActor();
-  $("he-actor").classList.toggle("hidden", table);
   const vBtns = d.villains.map((v, i) => {
     const nm = v.opponentId ? (oppById(v.opponentId)?.name || "?").slice(0, 9) : "V" + (i + 1);
     return `<button class="${cur === "v" + i ? "on" : ""}" data-actor="v${i}">${esc(nm)}</button>`;
   }).join("") || `<button class="${cur === "v0" ? "on" : ""}" data-actor="v0">VILLAIN</button>`;
   $("he-actor").innerHTML =
-    (d.heroIn ? `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` : "") + vBtns;
+    (heroPresent(d) ? `<button class="${cur === "hero" ? "on" : ""}" data-actor="hero">HERO</button>` : "") + vBtns;
 
   const pe = estimatePot(d, d.actions);
   const showPot = d.actions.length > 0 && pe.now > 0;
@@ -3384,6 +3388,7 @@ function handActionClick(b) {
     mutate(() => {
       draft.actor = b.dataset.actor;
       if (b.dataset.actor.startsWith("v")) draft.lastV = b.dataset.actor;
+      if (draft.mode === "table") draft.focusPos = draftActorPos(b.dataset.actor) || null;
     });
     return true;
   }
@@ -3395,6 +3400,7 @@ function handActionClick(b) {
       if (draft.mode !== "table" && actor.startsWith("v")) { ensureVillainSlot(); draft.lastV = actor; }
       draft.actions.push({ street: draft.street, actor, act: b.dataset.act, size: null });
       if (b.dataset.act === "limp") ensureStraddleInPot();
+      if (draft.mode === "table") draft.focusPos = null;   // next tap follows table order (currentActor)
       if (streetClosed(draft.street) && draft.street !== "river") {
         const next = STREETS[STREETS.indexOf(draft.street) + 1];
         draft.street = next;
