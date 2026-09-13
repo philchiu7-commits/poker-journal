@@ -566,6 +566,13 @@ textarea.noteedit { margin-bottom: 0; }
   color: #fff;
   font-weight: 700;
 }
+/* …but keep each read's polarity readable: yes = green ring, no = red, mid =
+   yellow; strong reads add an inner ring. */
+.opprow[style*="--player-color"] .cardchips .chip.on.sgreen { border-color: var(--good); }
+.opprow[style*="--player-color"] .cardchips .chip.on.sred { border-color: var(--bad); }
+.opprow[style*="--player-color"] .cardchips .chip.on.syellow { border-color: #e0b23e; }
+.opprow[style*="--player-color"] .cardchips .chip.on.sgreen.sstrong { box-shadow: 0 0 0 1px var(--good) inset; }
+.opprow[style*="--player-color"] .cardchips .chip.on.sred.sstrong { box-shadow: 0 0 0 1px var(--bad) inset; }
 .opprow[style*="--player-color"] .cardchips .excard {
   background: rgba(0,0,0,.55);
   border-color: rgba(255,255,255,.35);
