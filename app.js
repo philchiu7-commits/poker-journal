@@ -3140,16 +3140,23 @@ function openSizeWeights(bb) {
     w[p.size] = (w[p.size] || 0) + Math.pow(0.5, (now - (p.ts || now)) / OPEN_HALFLIFE_MS);
   return w;
 }
+/* Up to four {chips, n} open sizes at this blind level: chips is the rounded
+   stack (niceChips), n its real bb ratio — 8bb at 4K blinds rounds to 30K,
+   which is 7.5bb, and that's what the button says and what gets recorded. */
 function openSizeButtons(bb) {
   const w = openSizeWeights(bb);
   const cand = new Set(DEFAULT_OPEN_BB);
   for (const k of Object.keys(w)) cand.add(Number(k));
   const score = (n) => (w[n] || 0) + (DEFAULT_OPEN_BB.includes(n) ? OPEN_DEFAULT_BASE : 0);
+  const seen = new Set();
   return [...cand].filter((n) => n > 0)
     .sort((a, b) => score(b) - score(a)                  // most-used-recently first
       || Math.abs(a - 10) - Math.abs(b - 10) || a - b)   // then closest to 10bb
+    .map((n) => niceChips(n * bb))
+    .filter((chips) => !seen.has(chips) && seen.add(chips))   // 8bb and 7.5bb can round to the same stack
     .slice(0, 4)
-    .sort((a, b) => a - b);                              // ALWAYS smallest → biggest
+    .sort((a, b) => a - b)                               // ALWAYS smallest → biggest
+    .map((chips) => ({ chips, n: Math.round((chips / bb) * 2) / 2 }));
 }
 async function recordOpenSize(bb, bbSize) {
   if (!bb || !bbSize || bbSize <= 0) return;
@@ -3370,10 +3377,7 @@ function renderActionPad() {
     const bb = Number(d.bb) || 0;
     let btns;
     if (isOpenRaise(last) && bb > 0) {
-      const seen = new Set();
-      const uniq = openSizeButtons(bb).map((n) => ({ n, chips: niceChips(n * bb) }))
-        .filter((x) => !seen.has(x.chips) && seen.add(x.chips));
-      btns = uniq.map(({ n, chips }) =>
+      btns = openSizeButtons(bb).map(({ n, chips }) =>
         `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
         `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`).join("") +
       `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
