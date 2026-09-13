@@ -2734,7 +2734,7 @@ function lineText(d) {
 /* ---- turn order + street completion (positions drive who's next) ---- */
 /* Acting order: preflop = UTG→…→blinds→straddle (POSITIONS as listed);
    postflop = blinds first, button last. */
-const ORDER_POST = ["SB", "BB", "STD", "U8", "U7", "U6", "HJ", "CO", "BN"];
+const ORDER_POST = ["SB", "BB", "STD", "U9", "U8", "U7", "U6", "HJ", "CO", "BN"];
 const actOrderFor = (street) => street === "pre" ? POSITIONS : ORDER_POST;
 const AGG_ACTS = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
 
@@ -2776,39 +2776,24 @@ function firstToAct(street) {
    everyone else's follows by their offset along the ORDER_POST seat ring. */
 const lineupId = (actor) => actor === "hero" ? "hero" : draft.villains[Number(actor.slice(1))]?.opponentId;
 const lineupActive = () => tableLineup.length >= 2;
-/* Seat rings by table size: which positions are in play. STD (straddle) included
-   at 7+ handed to match how Phil's game runs. Clockwise from SB. */
-const SEAT_RINGS = {
-  4: ["SB", "BB", "CO", "BN"],
-  5: ["SB", "BB", "HJ", "CO", "BN"],
-  6: ["SB", "BB", "U6", "HJ", "CO", "BN"],
-  7: ["SB", "BB", "STD", "U7", "HJ", "CO", "BN"],
-  8: ["SB", "BB", "STD", "U8", "U7", "HJ", "CO", "BN"],
-  9: ["SB", "BB", "STD", "U9", "U8", "U7", "HJ", "CO", "BN"],
+/* Seat ring for n seats (4..9), clockwise from SB. Blinds (+ STD when the
+   straddle is on) at the head, HJ/CO/BN at the tail, and the seats between
+   filled with UTG labels numbered from the table size (U9, U8, …). Short
+   tables drop HJ, then CO, so 4-max is SB/BB/CO/BN. When the straddle is off
+   no STD seat is offered anywhere (Phil's global rule); the freed seat becomes
+   another UTG label so a 9-handed no-straddle ring still shows nine seats. */
+const ringFor = (n, stdOn) => {
+  const head = stdOn ? ["SB", "BB", "STD"] : ["SB", "BB"];
+  const tail = ["HJ", "CO", "BN"];
+  const k = n - head.length - tail.length;
+  const utg = k > 0 ? Array.from({ length: k }, (_, i) => "U" + (n - i)) : [];
+  return head.concat(utg, tail.slice(Math.max(0, -k)));
 };
 /* Seat count = lineup array length (clamped 4..9), falling back to lineupSeats
    or 9 when no lineup is set. Lineup is the source of truth for table size. */
 const effectiveSeats = () =>
   Math.max(4, Math.min(9, tableLineup.length || lineupSeats || 9));
-/* Base ring for the current table size + straddle. Straddle: at 4–6-max we
-   swap the leftmost UTG label for STD (7+ rings already include STD). When
-   straddle is off, STD is remapped to the deepest UTG label for that seat
-   count so no STD seat is offered anywhere in the UI (Phil's global rule). */
-const UTG_FOR_SEATS = { 7: "U7", 8: "U8", 9: "U9" };
-const baseSeatRing = () => {
-  const base = SEAT_RINGS[effectiveSeats()] || SEAT_RINGS[9];
-  const stdOn = Number(draft.std) > 0;
-  if (stdOn) {
-    if (base.includes("STD")) return base;
-    const r = base.slice();
-    r[2] = "STD";
-    return r;
-  }
-  if (!base.includes("STD")) return base;
-  const seats = effectiveSeats();
-  const utg = UTG_FOR_SEATS[seats] || "U6";
-  return base.map((p) => p === "STD" ? utg : p).filter((p, i, arr) => arr.indexOf(p) === i);
-};
+const baseSeatRing = () => ringFor(effectiveSeats(), Number(draft.std) > 0);
 /* Rotate a ring right by `rot` (each label shifts to the next slot CW).
    BTN rotation reassigns which position label sits at each physical slot
    without moving the players — see moveBtn(). */
