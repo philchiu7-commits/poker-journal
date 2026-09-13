@@ -2262,44 +2262,45 @@ function newDraft() {
     sb: blindsDefault.sb, bb: blindsDefault.bb, std: blindsDefault.std,
     squidHave: "", squidLeft: "",
     mode: "chips", focusPos: null,
-    btnPos: null, assignBtn: false, btnRot: 0,
+    assignBtn: false, btnRot: 0,
   };
 }
 // No user input yet — safe to reseed seats from a lineup change.
 const draftIsFresh = () =>
   !draft.actions.length && !draft.board.some(Boolean) && !draft.heroCards.some(Boolean);
 
-/* Effective BTN position: whoever currently sits at the "BN" (button) label.
-   Explicit btnPos wins (from the Assign flow). Rotations move players' pos
-   labels around them, so BN naturally points at whoever holds the button now. */
+/* Effective BTN position: whoever currently sits at the "BN" label. Rotations
+   move the position labels around the players, so BN always points at
+   whoever holds the button now. */
 function effectiveBtnPos() {
-  if (draft.btnPos) return draft.btnPos;
   const ring = seatRing();
   return ring.includes("BN") ? "BN" : ring[ring.length - 1];
 }
-/* Rotating BTN keeps every player in their physical slot: we shift the
-   position labels around them so a player who was at SB now has the button,
-   the old BB is now SB, and so on. Applied via draft.btnRot (seatRing reads
-   it) plus a remap of every player's stored pos so the felt still finds
-   them at their old slot under the new label. */
-function moveBtn(dir) {
+/* Rotate the labels to `newRot`, keeping every player in their physical slot:
+   the player who was SB now has the button, the old BB is now SB, and so on.
+   Every stored pos is remapped so the felt still finds each player at their
+   old slot under the new label. */
+function setBtnRot(newRot) {
   const base = baseSeatRing();
   if (!base.length) return;
-  const oldRot = draft.btnRot || 0;
-  const shift = dir === "cw" ? 1 : -1;
-  const newRot = (((oldRot + shift) % base.length) + base.length) % base.length;
-  const oldRing = rotateRing(base, oldRot);
+  const n = base.length;
+  newRot = ((newRot % n) + n) % n;
+  const oldRing = rotateRing(base, draft.btnRot || 0);
   const newRing = rotateRing(base, newRot);
-  const remap = (p) => {
-    const i = oldRing.indexOf(p);
-    return i < 0 ? p : newRing[i];
-  };
+  const remap = (p) => { const i = oldRing.indexOf(p); return i < 0 ? p : newRing[i]; };
   if (draft.heroPos) draft.heroPos = remap(draft.heroPos);
   for (const v of draft.villains) if (v.pos) v.pos = remap(v.pos);
-  // Don't touch draft.btnPos — the button is always the "BN" label, and the
-  // remap already moved that label onto whoever now holds the button.
   draft.btnRot = newRot;
   draft.assignBtn = false;
+}
+function moveBtn(dir) { setBtnRot((draft.btnRot || 0) + (dir === "cw" ? 1 : -1)); }
+/* Assign flow: put the button on the tapped seat by rotating the labels so
+   "BN" lands there and the blinds follow — a D badge on a seat still labelled
+   CO would leave the turn order (which reads labels) wrong. */
+function assignBtnTo(pos) {
+  const slot = seatRing().indexOf(pos);
+  if (slot < 0) return;
+  setBtnRot(slot - baseSeatRing().indexOf("BN"));   // rotateRing(base, rot)[slot] === "BN"
 }
 
 /* ---- seat model (table mode) — positions ARE the seats ---- */
@@ -3500,7 +3501,7 @@ function bindHandEntry() {
     } else if (b.dataset.seat) {                 // table: BTN assign or focus a seat
       const pos = b.dataset.seat;
       mutate(() => {
-        if (draft.assignBtn) { draft.btnPos = pos; draft.assignBtn = false; return; }
+        if (draft.assignBtn) { assignBtnTo(pos); return; }
         draft.focusPos = draft.focusPos === pos ? null : pos;
       });
     } else if (b.dataset.btnmove) {
