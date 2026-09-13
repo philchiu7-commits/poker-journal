@@ -339,6 +339,30 @@ async function migrateNoteConvertedSquid() {
   await metaSet("migrations.noteSquidV1", { ts: Date.now(), patched });
 }
 
+/* One-time repair: note-converted hands could carry a board card that was
+   already dealt (a hole card, or a paired board both defaulting to spades —
+   the old parser's collision guard never fired). Re-suit the duplicate board
+   card; hole cards are left alone. */
+async function migrateDupBoardCards() {
+  if (await metaGet("migrations.dupCardsV1")) return;
+  let patched = 0;
+  for (const h of HANDS) {
+    if (!h.srcNoteId || !Array.isArray(h.board)) continue;
+    const seen = new Set([...(h.heroCards || []), ...(h.villains || []).flatMap((v) => v.cards || [])].filter(Boolean));
+    let dirty = false;
+    h.board = h.board.map((c) => {
+      if (!c) return c;
+      if (!seen.has(c)) { seen.add(c); return c; }
+      const alt = ["s", "h", "d", "c"].map((x) => c[0] + x).find((x) => !seen.has(x));
+      if (!alt) return c;
+      seen.add(alt); dirty = true;
+      return alt;
+    });
+    if (dirty) { h.updatedAt = Date.now(); await dbPut("hands", h); patched++; }
+  }
+  await metaSet("migrations.dupCardsV1", { ts: Date.now(), patched });
+}
+
 async function migrateLegacyReads() {
   for (const o of OPP) {
     const r = oppReads(o);
@@ -2586,41 +2610,46 @@ function parseNoteToDraft(text, opponentId) {
   const boardTok = text.match(/\b([AKQJT2-9]{3,5})([smr]|ss|hh|dd|cc|ds|rr)?\b/);
   if (boardTok && boardTok[1].length >= 3) {
     const ranks = boardTok[1].split("");
-    const used = new Set();
-    for (const c of d.villains[0].cards || []) if (c) used.add(c[1]);
+    const SUITS4 = ["s", "h", "d", "c"];
+    const used = new Set((d.villains[0].cards || []).filter(Boolean));   // never re-deal a hole card
     const suitHint = boardTok[2];
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
     // Precompute per-index suit assignments for the random-suit hints.
     let suitPlan = null;
     if (suitHint === "m") {
-      const s = pick(["s","h","d","c"]);
-      suitPlan = ranks.map(() => s);
+      const ok = SUITS4.filter((x) => ranks.every((r) => !used.has(r + x)));   // a suit no hole card blocks
+      const x = pick(ok.length ? ok : SUITS4);
+      suitPlan = ranks.map(() => x);
     } else if (suitHint === "r") {
       // Rainbow: three distinct suits for the first three cards, then random for 4th/5th.
-      const shuffled = ["s","h","d","c"].sort(() => Math.random() - 0.5);
-      suitPlan = ranks.map((_, i) => i < 3 ? shuffled[i] : shuffled[Math.floor(Math.random() * 4)]);
+      const shuffled = SUITS4.slice().sort(() => Math.random() - 0.5);
+      suitPlan = ranks.map((_, i) => i < 3 ? shuffled[i] : pick(SUITS4));
     } else if (suitHint === "s") {
       // Two-of-three share a suit: pick which two indices, which shared suit,
       // and give the odd card a distinct suit.
-      const shared = pick(["s","h","d","c"]);
+      const shared = pick(SUITS4);
       const idxs = [0, 1, 2].sort(() => Math.random() - 0.5);
       const pair = [idxs[0], idxs[1]];
       const odd = idxs[2];
-      const others = ["s","h","d","c"].filter((x) => x !== shared);
+      const others = SUITS4.filter((x) => x !== shared);
       suitPlan = ranks.map((_, i) => {
         if (i === odd) return pick(others);
         if (pair.includes(i)) return shared;
-        return pick(["s","h","d","c"]);   // 4th/5th card: random
+        return pick(SUITS4);   // 4th/5th card: random
       });
     }
+    const boardSuits = new Set();
     for (let i = 0; i < ranks.length && i < 5; i++) {
+      const r = ranks[i];
       let suit;
       if (suitPlan) suit = suitPlan[i];
       else if (suitHint === "ss" || suitHint === "hh" || suitHint === "dd" || suitHint === "cc") suit = suitHint[0];
       else if (suitHint === "ds") suit = i < 2 ? "d" : "s";
-      else suit = ["s","h","d","c"].find((s) => !used.has(s + i));   // best-effort distinct suits
-      used.add(suit + i);
-      d.board[i] = ranks[i] + suit;
+      else suit = SUITS4.find((x) => !boardSuits.has(x) && !used.has(r + x));   // no hint: rainbow-ish
+      if (!suit || used.has(r + suit)) suit = SUITS4.find((x) => !used.has(r + x)) || suit;
+      boardSuits.add(suit);
+      used.add(r + suit);
+      d.board[i] = r + suit;
     }
   }
   // preflop action chain — walk the note in order, extract every recognized
@@ -4513,6 +4542,7 @@ async function boot() {
   await refreshCache();
   await migrateLegacyReads();
   await migrateNoteConvertedSquid();
+  await migrateDupBoardCards();
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
