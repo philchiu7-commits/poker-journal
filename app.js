@@ -3628,11 +3628,14 @@ function bindHandEntry() {
   $("he-effstack").oninput = () => {
     draft.effStack = $("he-effstack").value;
     persistDraft();
-    // Reclamp any sized bet that now exceeds the new stack to "Jam", and
-    // re-render the action sheet so Jam buttons / bb-size chips reflect
-    // the fresh effective stack immediately.
-    draft.actions.forEach((a) => { if (a.size) a.size = clampSizeToJam(a.size); });
-    if (sheetGroup === "__act__") renderActionPad();
+    if (sheetGroup === "__act__") renderActionPad();   // Jam / bb-size chips track the stack live
+  };
+  // Reclamp sized bets that exceed the stack to "Jam" only once typing is
+  // done: per keystroke, a half-typed "3" (of 300) turned every earlier bet
+  // into Jam for good, outside the undo stack.
+  $("he-effstack").onchange = () => {
+    if (!draft.actions.some((a) => a.size && clampSizeToJam(a.size) !== a.size)) return;
+    mutate(() => draft.actions.forEach((a) => { if (a.size) a.size = clampSizeToJam(a.size); }));
   };
   $("he-sb").oninput = () => setBlind("sb", $("he-sb").value);
   $("he-bb").oninput = () => setBlind("bb", $("he-bb").value);
