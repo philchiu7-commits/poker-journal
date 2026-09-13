@@ -267,14 +267,11 @@ async function mergeOpponents(fromId, intoId) {
     }
     if (touched) { h.updatedAt = Date.now(); await dbPut("hands", h); }
   }
-  const fr = oppReads(from), ir = oppReads(into);
-  for (const [k, st] of Object.entries(fr)) if (!ir[k]) ir[k] = st;   // keep survivor's state on conflict
-  into.notes = [...(into.notes || []), ...(from.notes || [])].sort((a, b) => b.ts - a.ts);
-  into.exploits = [...(into.exploits || []), ...(from.exploits || [])].sort((a, b) => b.ts - a.ts);
-  into.exploitDismissed = [...new Set([...(into.exploitDismissed || []), ...(from.exploitDismissed || [])])];
-  if (!into.group && from.group) into.group = from.group;
-  if (!into.physical && from.physical) into.physical = from.physical;
-  into.updatedAt = Date.now();
+  mergeOppRecords(into, from);                 // same union as import (db.js): reads, notes, exploits, dismissals, featured, aliases…
+  // The absorbed name becomes an alias so imports and search still find it.
+  const al = into.aliases || [];
+  if (from.name && normName(from.name) !== normName(into.name) && !al.some((a) => normName(a) === normName(from.name)))
+    into.aliases = [...al, from.name];
   await dbPut("opponents", into);
   await dbDel("opponents", fromId);
   await refreshCache();

@@ -163,6 +163,12 @@ function mergeOppRecords(into, from) {
   if (!into.group && from.group) into.group = from.group;
   if (!into.physical && from.physical) into.physical = from.physical;
   if (!into.type && from.type) into.type = from.type;
+  if (into.aliases || from.aliases) {
+    const seen = new Set([normName(into.name)]);
+    into.aliases = [...(into.aliases || []), ...(from.aliases || [])]
+      .filter((a) => a && !seen.has(normName(a)) && seen.add(normName(a)));
+  }
+  if (!into.createdAt && from.createdAt) into.createdAt = from.createdAt;
   into.updatedAt = Date.now();
 }
 
