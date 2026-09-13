@@ -298,8 +298,8 @@ const READ_LEGACY_MAP = {
   "draw-size":         { to: "size-up-draws", state: "yes" },      // renamed
   "bluff-raise-flop":  { to: "bluff-raise-f", state: "yes" },      // was single, now F of triad
   "bluff-xt":          { to: "bluff-xt-t",    state: "yes" },      // XT typically means check-flop bet turn
-  "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // migrate to WS scale (yes state, no number)
-  "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → NS scale
+  "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // scale target: yes → 90 (wide), no → 10
+  "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → NS scale, same 90/10
 };
 /* One-time backfill: re-parse notes that were already converted to hands and,
    when the new parser extracts a squid state the saved hand doesn't have,
@@ -369,8 +369,21 @@ async function migrateLegacyReads() {
     let dirty = false;
     for (const [oldId, { to, state }] of Object.entries(READ_LEGACY_MAP)) {
       if (r[oldId] == null) continue;
-      if (r[to] == null) r[to] = r[oldId] === "yes" ? state : (r[oldId] === "no" ? (state === "yes" ? "no" : "yes") : r[oldId]);
+      const old = r[oldId], base = readBase(old);
+      let next = base === "yes" ? state : base === "no" ? (state === "yes" ? "no" : "yes") : old;
+      if (isScaleRead(to)) next = next === "yes" ? 90 : next === "no" ? 10 : null;   // scales hold 0–100, not yes/no
+      else if (isStrongRead(old)) next += "!";                                       // keep the ! strength
+      if (r[to] == null && next != null) r[to] = next;
       delete r[oldId];
+      dirty = true;
+    }
+    // Scale reads hold numbers; a yes/no left there (early imports) shows as
+    // "off" on the card but "on" in the detail — normalise it.
+    for (const id of Object.keys(r)) {
+      if (!isScaleRead(id) || typeof r[id] === "number") continue;
+      const b = readBase(r[id]);
+      const n = b === "yes" ? 90 : b === "no" ? 10 : (r[id] == null || r[id] === "" ? NaN : Number(r[id]));
+      if (Number.isFinite(n)) r[id] = n; else delete r[id];
       dirty = true;
     }
     if (dirty) { o.updatedAt = Date.now(); await dbPut("opponents", o); }
@@ -1694,7 +1707,7 @@ function renderOppDetail(id) {
   const readBtn = (id, lbl, bubble) => {
     const st = reads[id];
     if (isPositionRead(id)) {
-      const active = st != null && st !== "";
+      const active = readIsActive(id, st);
       const opts = ['<option value="">–</option>']
         .concat(POSITIONS.map((p) => `<option value="${p}"${st === p ? " selected" : ""}>${p}</option>`))
         .join("");
@@ -1705,7 +1718,7 @@ function renderOppDetail(id) {
     }
     if (isScaleRead(id)) {
       const v = Math.max(0, Math.min(100, Number(st) || 0));
-      const active = st != null && st !== "";
+      const active = readIsActive(id, st);
       return `<div class="scaleread${active ? " on" : ""}" data-scaleid="${id}">
         <div class="scaletop">
           <span class="scalelbl">${esc(lbl)}</span>
