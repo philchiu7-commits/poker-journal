@@ -3062,11 +3062,21 @@ function estimatePot(src, actions) {
   const sb = num(src.sb ?? src.blinds?.sb), bb = num(src.bb ?? src.blinds?.bb), std = num(src.std ?? src.blinds?.std);
   const eff = num(src.effStack);
   const unit = std || bb;                        // price of entry preflop
-  let pot = sb + bb + std;
-  const atStart = { pre: pot };                  // pot as each street begins
-  const perAct = [];                             // resolved "to" amount per action
   let street = "pre", contrib = {}, curBet = unit;
+  // Blinds posted by players in the hand are their preflop contribution (so
+  // SB completing or BB calling isn't counted twice); the rest is dead money.
+  const posOf = (p) => p === "hero" ? (src.hero === false ? null : src.heroPos) : src.villains?.[Number(p.slice(1))]?.pos;
+  const blindOf = { SB: sb, BB: bb, STD: std }, claimed = new Set();
+  let dead = sb + bb + std;
+  for (const p of ["hero", ...(src.villains || []).map((_, i) => "v" + i)]) {
+    const pos = posOf(p);
+    if (!blindOf[pos] || claimed.has(pos)) continue;
+    claimed.add(pos); contrib[p] = blindOf[pos]; dead -= blindOf[pos];
+  }
+  let pot = Math.max(0, dead);
   const potNow = () => pot + Object.values(contrib).reduce((a, x) => a + x, 0);
+  const atStart = { pre: potNow() };             // pot as each street begins
+  const perAct = [];                             // resolved "to" amount per action
   for (const a of actions || []) {
     if (a.street !== street) { pot = potNow(); contrib = {}; street = a.street; curBet = 0; atStart[street] = pot; }
     if (a.act === "fold" || a.act === "check") { perAct.push(0); continue; }
