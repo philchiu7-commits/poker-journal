@@ -52,7 +52,7 @@ const TENDENCY_TAGS = [
   { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS",   kind: "scale" },
   { id: "limp-wide-multiplier", cat: "preflop",  label: "Goes for multipliers" },
   { id: "wide-cc",              cat: "preflop",  label: "Wide CC" },
-  // preflop — 3bet / 4bet (3bet Linear/Polar is a grouped bubble row)
+  // preflop — 3bet / 4bet (linear/polar/bluff are retired — see RETIRED_TAG_IDS)
   { id: "3bet-linear",          cat: "preflop",  label: "3bet linear" },
   { id: "3bet-polar",           cat: "preflop",  label: "3bet polar" },
   { id: "3bet-bluff",           cat: "preflop",  label: "3bet bluff" },
@@ -127,6 +127,9 @@ const PLAYER_TYPES = [
 ];
 const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]));
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
+/* Retired reads: no longer offered, but an opponent who still holds one sees
+   it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
+const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
 /* Sub-cluster single-read chips within each category so related reads live

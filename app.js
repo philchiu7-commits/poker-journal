@@ -1737,7 +1737,6 @@ function renderOppDetail(id) {
     const subgroups = READ_SUBCATS[cat] || [];
     const usedIds = new Set(subgroups.flatMap((s) => s.ids));
     // Retired reads — data preserved on old opponents, but no longer offered as a toggle.
-    const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff"]);
     const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id) && !RETIRED_TAG_IDS.has(t.id);
     const chipFor = (id) => { const t = TAG_BY_ID[id]; return t && isSingle(t) ? readBtn(t.id, t.label, false) : ""; };
     const subHTML = subgroups.map((sg) => {
@@ -1748,7 +1747,9 @@ function renderOppDetail(id) {
       return `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="chiprow readwrap">${chips}</div></div>`;
     }).join("");
     const otherSingles = TENDENCY_TAGS.filter((t) => isSingle(t) && !usedIds.has(t.id))
-      .map((t) => readBtn(t.id, t.label, false)).join("");
+      .map((t) => readBtn(t.id, t.label, false)).join("") +
+      TENDENCY_TAGS.filter((t) => t.cat === cat && RETIRED_TAG_IDS.has(t.id) && readIsActive(t.id, reads[t.id]))
+        .map((t) => readBtn(t.id, t.label + " (retired)", false)).join("");
     const scales = TENDENCY_TAGS.filter((t) => t.cat === cat && isScaleRead(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
     return `<div class="tagcat">${cat}</div>${groups}${subHTML}` +
