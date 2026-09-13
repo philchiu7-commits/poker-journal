@@ -2472,6 +2472,19 @@ function currentActor() {
   }
   return a || (draft.villains.length ? "v0" : (draft.heroIn ? "hero" : null));
 }
+/* Drop villain i from the draft: its actions go too, and every later villain's
+   "vN" actor id shifts down so their actions stay attached to the right player. */
+function removeVillain(i) {
+  draft.villains.splice(i, 1);
+  const shift = (a) => {
+    if (!a || !a.startsWith("v")) return a;
+    const n = Number(a.slice(1));
+    return n === i ? null : n > i ? "v" + (n - 1) : a;
+  };
+  draft.actions = draft.actions.filter((a) => a.actor !== "v" + i).map((a) => ({ ...a, actor: shift(a.actor) }));
+  draft.actor = shift(draft.actor) ?? (draft.villains.length ? "v0" : (draft.heroIn ? "hero" : null));
+  draft.lastV = shift(draft.lastV) ?? "v0";
+}
 /* Chips-mode auto-alternate: hero↔villain, or cycle villains when hero is out. */
 function nextActorChips(actor) {
   if (draft.heroIn) return actor === "hero" ? draft.lastV : "hero";
@@ -3524,7 +3537,7 @@ function bindHandEntry() {
     } else if (b.dataset.vopp !== undefined) {   // toggle villain selection
       mutate(() => {
         const i = draft.villains.findIndex((v) => v.opponentId === b.dataset.vopp);
-        if (i >= 0) draft.villains.splice(i, 1);
+        if (i >= 0) removeVillain(i);
         else {
           draft.villains.push({ opponentId: b.dataset.vopp, pos: null, cards: [null, null] });
           autoDeriveLineup();   // if a seat is already anchored, fill this villain in
