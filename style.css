@@ -520,8 +520,9 @@ textarea.noteedit { margin-bottom: 0; }
 
 /* Player-type colour theme — picker chips, list-row stripe, header pill.
    Row: 4px left stripe in --player-color plus a faint tint on the panel. */
+.ptypebar { margin: 4px 0 12px; }
 .ptypechip {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
   padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
   background: transparent; font-size: 12px; font-weight: 600; cursor: pointer;
 }

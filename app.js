@@ -11,7 +11,7 @@ let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
-let showReadPicker = false;       // Reads panel: summary of what's set, or the full picker
+let showReadPicker = true;        // Reads panel: full picker by default; collapses to a summary. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
@@ -1853,7 +1853,7 @@ function renderOppReads(o) {
   $("od-readsum").classList.toggle("hidden", showReadPicker);
   $("od-tags").classList.toggle("hidden", !showReadPicker);
   const editBtn = $("od-reads-edit");
-  editBtn.textContent = showReadPicker ? "Done" : `Edit${setReads.length ? ` · ${setReads.length}` : ""}`;
+  editBtn.textContent = showReadPicker ? "Hide" : `Edit${setReads.length ? ` · ${setReads.length}` : ""}`;
   editBtn.classList.toggle("on", showReadPicker);
   // the picker is ~70 controls — only build it when it's actually on screen
   if (showReadPicker) $("od-tags").innerHTML = TAG_CATS.map((cat) => {
@@ -1935,6 +1935,12 @@ function renderOppDetail(id) {
   nameEl.innerHTML = esc(o.name) + (type
     ? ` <button class="ptypepill" data-ptype-open="${o.id}" style="background:${type.color};border-color:${type.color}">${type.icon} ${esc(type.label)}</button>`
     : ` <button class="ptypepill empty" data-ptype-open="${o.id}" title="Set player type">◦</button>`);
+  // Every type on the page, one tap to set — the pill in the sticky header is
+  // the at-a-glance copy, this row is the control.
+  $("od-ptype").innerHTML = `<div class="chiprow readwrap">` + PLAYER_TYPES.map((t) => {
+    const on = o.type === t.id;
+    return `<button class="ptypechip${on ? " on" : ""}" data-ptype="${t.id}" style="${on ? `background:${t.color};border-color:${t.color};color:#0a0d12` : `border-color:${t.color};color:${t.color}`}">${t.icon} ${esc(t.label)}</button>`;
+  }).join("") + (o.type ? ` <button class="chip mini" data-ptype="">Clear</button>` : "") + `</div>`;
   renderOppReads(o);
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
@@ -4282,6 +4288,19 @@ function bindStatic() {
     const cell = e.target.closest("[data-rgcell]");
     if (cell && curOppId) openRangeCellSheet(curOppId, cell.dataset.rgcell);
   };
+  $("od-ptype").onclick = async (e) => {
+    const b = e.target.closest("[data-ptype]");
+    if (!b) return;
+    const o = oppById(curOppId);
+    if (!o) return;
+    const t = b.dataset.ptype;
+    o.type = t || null;
+    if (!o.type) delete o.type;
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(o.id);
+    renderOpponents();
+  };
   $("od-hf-clear").onclick = () => { resetHandFilters(); if (curOppId) renderOppDetail(curOppId); };
   $("od-exploit-tmpl").onclick = openTemplateSheet;
   $("od-e-save").onclick = async () => {
@@ -4334,6 +4353,7 @@ function bindStatic() {
   };
   $("od-reads-edit").onclick = () => {
     showReadPicker = !showReadPicker;
+    metaSet("showReadPicker", showReadPicker);   // sticky across opponents and launches
     const o = oppById(curOppId);
     if (o) renderOppReads(o);
   };
@@ -4716,6 +4736,7 @@ async function boot() {
   tableLineup = (await metaGet("tableLineup")) || [];
   lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};
+  showReadPicker = (await metaGet("showReadPicker")) ?? true;
   // migrate old {bb:{size:count}} → recency picks {bb:[{size,ts}]}
   for (const bb of Object.keys(openSizeStats)) {
     const v = openSizeStats[bb];
