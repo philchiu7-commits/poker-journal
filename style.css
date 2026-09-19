@@ -645,6 +645,10 @@ textarea.noteedit { margin-bottom: 0; }
 .rgcell.rng.inr { background: var(--accent); color: #0a0d12; }
 .rgcell.rng.seen { box-shadow: 0 0 0 2px #e0b23e inset; color: #e0b23e; }
 .rgcell.rng.inr.seen { color: #0a0d12; }
+/* Shown layer: the hands they've actually turned up, stamped over the sketch.
+   A red ring means it landed outside the range you sketched. */
+.rgcell.rng.shw { background: #e0b23e; color: #1a1408; }
+.rgcell.rng.shw.out { box-shadow: 0 0 0 2px #f85149 inset; }
 .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .rfoot .spacer { flex: 1; }
 .rhint { margin-top: 6px; font-size: 12px; color: #e0b23e; }
@@ -878,3 +882,5 @@ textarea.noteedit { margin-bottom: 0; }
 .actlist { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.4; word-break: break-word; }
 .actionpad-sheet { padding-top: 4px; }
 .actionpad-sheet .actgrid { margin-bottom: 8px; }
+.rfoot .rgshown { color: #e0b23e; font-weight: 700; }
+.rfoot .rgout { color: #f85149; font-weight: 700; }

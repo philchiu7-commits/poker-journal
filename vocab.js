@@ -418,17 +418,23 @@ const HAND_CLASSES = (() => {                       // 169 classes in grid order
 const HAND_CLASS_ORDER = Object.fromEntries(HAND_CLASSES.map((c, i) => [c, i]));
 const _hx = (hi, los, suf) => los.split("").map((l) => hi + l + suf);
 const RANGE_CLASSES = [
-  { id: "sc",  label: "SC",       hands: ["54s", "65s", "76s", "87s", "98s", "T9s", "JTs"] },
-  { id: "s1g", label: "S1G",      hands: ["64s", "75s", "86s", "97s", "T8s", "J9s"] },
-  { id: "axs", label: "AXs",      hands: _hx("A", "23456789", "s") },
-  { id: "sbw", label: "SBW",      hands: ["AKs", "AQs", "AJs", "ATs", "KQs", "KJs", "KTs", "QJs", "QTs", "JTs"] },
-  { id: "obw", label: "OBW",      hands: ["AKo", "AQo", "AJo", "ATo", "KQo", "KJo", "KTo", "QJo", "QTo", "JTo"] },
-  { id: "spp", label: "Small PP", hands: ["22", "33", "44", "55", "66"] },
-  { id: "mpp", label: "Mid PP",   hands: ["77", "88", "99"] },
-  { id: "bpp", label: "Big PP",   hands: ["TT", "JJ", "QQ", "KK", "AA"] },
-  { id: "kxs", label: "KXs",      hands: _hx("K", "23456789", "s") },
-  { id: "qxs", label: "QXs",      hands: _hx("Q", "23456789", "s") },
-  { id: "axo", label: "AXo",      hands: _hx("A", "23456789", "o") },
+  { id: "sc",   label: "SC",       hands: ["54s", "65s", "76s", "87s", "98s", "T9s", "JTs"] },
+  { id: "s1g",  label: "S1G",      hands: ["64s", "75s", "86s", "97s", "T8s", "J9s"] },
+  { id: "axs",  label: "AXs",      hands: _hx("A", "23456789", "s") },
+  { id: "sbw",  label: "SBW",      hands: ["AKs", "AQs", "AJs", "ATs", "KQs", "KJs", "KTs", "QJs", "QTs", "JTs"] },
+  { id: "kxs",  label: "KXs",      hands: _hx("K", "23456789", "s") },
+  { id: "qxs",  label: "QXs",      hands: _hx("Q", "23456789", "s") },
+  { id: "jxs",  label: "JXs",      hands: _hx("J", "2345678", "s") },
+  { id: "spp",  label: "Small PP", hands: ["22", "33", "44", "55", "66"] },
+  { id: "mpp",  label: "Mid PP",   hands: ["77", "88", "99"] },
+  { id: "bpp",  label: "Big PP",   hands: ["TT", "JJ", "QQ", "KK", "AA"] },
+  { id: "obw",  label: "OBW",      hands: ["AKo", "AQo", "AJo", "ATo", "KQo", "KJo", "KTo", "QJo", "QTo", "JTo"] },
+  { id: "axo",  label: "AXo",      hands: _hx("A", "23456789", "o") },
+  { id: "kxo",  label: "KXo",      hands: _hx("K", "23456789", "o") },
+  { id: "qxo",  label: "QXo",      hands: _hx("Q", "23456789", "o") },
+  { id: "jxo",  label: "JXo",      hands: _hx("J", "2345678", "o") },
+  { id: "osc",  label: "OSC",      hands: ["54o", "65o", "76o", "87o", "98o", "T9o", "JTo"] },
+  { id: "os1g", label: "OS1G",     hands: ["64o", "75o", "86o", "97o", "T8o", "J9o"] },
 ];
 const RANGE_CLASS_BY_ID = Object.fromEntries(RANGE_CLASSES.map((c) => [c.id, c]));
 /* Spots: the overall range with / without squid, then the four first-raise /

@@ -1086,6 +1086,15 @@ function renderRangeGrid(oppId) {
 let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being sketched
 let rangeSitSel = RANGE_SITS[0].id;     // Seen mode only: which situation the marks belong to
 let showSeenHands = false;              // "Seen" toggle: record + show the hands you've watched them turn up
+let showShownLayer = false;             // "Shown" toggle: stamp the hands they've actually turned up over the sketch
+/* Every hand this opponent has shown, across all positions — the second layer
+   on the sketch grid. Hands the logged record proves, not ones you guessed. */
+function shownHandCounts(oppId) {
+  const byPos = villainRangeData(oppId), out = {};
+  for (const p of Object.keys(byPos))
+    for (const [hc, n] of Object.entries(byPos[p].freq)) out[hc] = (out[hc] || 0) + n;
+  return out;
+}
 /* Editing always writes the squid state's own range; Seen writes the situation. */
 const curRangeSpot = () => rangeSpotId(rangeSquid, showSeenHands ? rangeSitSel : "all");
 const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
@@ -1122,18 +1131,28 @@ function renderOppRanges(o) {
     return `<button class="chip mini${t.id === rangeSitSel ? " on" : ""}" data-rsit="${t.id}" title="${esc(t.title)}">${esc(t.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const inr = new Set(base.hands), seenSet = new Set(cur.seen);
+  // Two layers on one grid: the sketch underneath, what they showed stamped on top.
+  const shown = showShownLayer && !showSeenHands ? shownHandCounts(o.id) : {};
+  const shownKeys = Object.keys(shown), outside = shownKeys.filter((h) => !inr.has(h));
   // Class chip: lit when every hand of the class is in; dashed when only some are.
   const classes = showSeenHands ? "" : RANGE_CLASSES.map((c) => {
     const n = c.hands.filter((h) => inr.has(h)).length;
     const st = n === c.hands.length ? " on" : n ? " part" : "";
     return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
   }).join("");
-  const cells = HAND_CLASSES.map((c) =>
-    `<div class="rgcell rng${inr.has(c) ? " inr" : ""}${showSeenHands && seenSet.has(c) ? " seen" : ""}" data-rcell="${c}" role="button">${c}</div>`).join("");
+  const cells = HAND_CLASSES.map((c) => {
+    const st = (inr.has(c) ? " inr" : "") + (showSeenHands && seenSet.has(c) ? " seen" : "")
+      + (shown[c] ? " shw" + (inr.has(c) ? "" : " out") : "");
+    const t = shown[c] ? ` title="shown ${shown[c]}×"` : "";
+    return `<div class="rgcell rng${st}" data-rcell="${c}" role="button"${t}>${c}</div>`;
+  }).join("");
   const combos = base.hands.reduce((n, c) => n + handClassCombos(c), 0);
   const foot = showSeenHands
     ? `${esc(rangeSpotTitle(rangeSquid, rangeSitSel))} · ${cur.seen.length} hand${cur.seen.length === 1 ? "" : "s"} seen`
     : `${esc(rangeSpotTitle(rangeSquid, "all"))} · ${base.hands.length} hand${base.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}%`;
+  const shownFoot = shownKeys.length
+    ? ` · <b class="rgshown">${shownKeys.length} shown</b>${outside.length ? ` · <b class="rgout">${outside.length} outside</b>` : ""}`
+    : (showShownLayer && !showSeenHands ? " · no shown hands yet" : "");
   const clearable = showSeenHands ? cur.seen.length : base.hands.length;
   $("od-ranges").innerHTML = `
     <div class="rsquid">${squids}</div>
@@ -1141,12 +1160,14 @@ function renderOppRanges(o) {
     ${classes ? `<div class="rclasses chiprow readwrap">${classes}</div>` : ""}
     <div class="rggrid">${cells}</div>
     <div class="rfoot">
-      <span>${foot}</span>
+      <span>${foot}${shownFoot}</span>
       <span class="spacer"></span>
       ${clearable ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
     </div>
     ${showSeenHands ? `<div class="rhint">Seen mode — pick the situation, then tap the hands you've watched them turn up in it.</div>` : ""}`;
   $("od-range-seen").classList.toggle("on", showSeenHands);
+  $("od-range-shown").classList.toggle("on", showShownLayer);
+  $("od-range-shown").hidden = showSeenHands;
 }
 
 /* ================= Opponents list ================= */
@@ -4179,6 +4200,11 @@ function bindStatic() {
     if (dim === "sd") handFilters.sd = !handFilters.sd;
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
+  };
+  $("od-range-shown").onclick = () => {
+    showShownLayer = !showShownLayer;
+    const o = oppById(curOppId);
+    if (o) renderOppRanges(o);
   };
   $("od-range-seen").onclick = () => {
     showSeenHands = !showSeenHands;
