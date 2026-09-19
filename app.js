@@ -817,7 +817,7 @@ async function commitOneImport(rec, map) {
     let oppId = m.matchId;
     const rawName = (m.name || "").trim();
     if (m.create || !oppId) {
-      const opp = { id: uid(), name: rawName, group: "", reads: {}, exploits: [], notes: [], aliases: [], updatedAt: Date.now() };
+      const opp = newOppRecord(rawName, "");
       await dbPut("opponents", opp);
       OPP.push(opp);
       oppId = opp.id;
@@ -1705,9 +1705,11 @@ function openTemplateSheet() {
   });
 }
 
+/* One shape for every new profile — manual add and hand-import create alike. */
+const newOppRecord = (name, group) => ({ id: uid(), name, group: group || "", physical: "", reads: {}, exploits: [], notes: [], aliases: [],
+  createdAt: Date.now(), updatedAt: Date.now(), archived: false });
 async function createOpponent(name, group) {
-  const o = { id: uid(), name, group: group || "", tags: [], physical: "", notes: [],
-    createdAt: Date.now(), updatedAt: Date.now(), archived: false };
+  const o = newOppRecord(name, group);
   OPP.push(o);
   await dbPut("opponents", o);
   return o;
