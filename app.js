@@ -529,7 +529,9 @@ function route() {
   }
   const v = VIEWS.includes(view) ? view : "opponents";
   // Leaving a specific opponent, or navigating to a different one → drop filters.
-  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = false; }
+  // A [data-rjump] read deep-link re-enters the same opponent, so scope it to
+  // actually leaving them — otherwise the jump would reset what it just set.
+  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = false; rangeRecPos = null; }
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
@@ -668,92 +670,67 @@ function limpReraiseClass(preActs) {
   const hasReraise = preActs.some((a) => ["3bet", "4bet", "5bet", "jam"].includes(a));
   return hasLimp && hasReraise;
 }
-function villainRangeData(oppId) {
-  const byPos = {};
-  const rankAct = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+/* Rank the preflop actions so a cell showing several lines can name the
+   strongest one — escalation is what you read a range for. */
+const RANK_ACT = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+/* The single preflop action that characterises this villain's line in a hand. */
+function topPreGroup(h, idx) {
+  const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
+  if (!pre.length) return null;
+  if (limpReraiseClass(pre.map((a) => a.act))) return "Lrr";
+  let top = null;
+  for (const a of pre) {
+    const g = ACT_GROUP[a.act] || a.act;
+    const r = RANK_ACT[g] ?? 0;
+    if (!top || r > top.r) top = { g, r };
+  }
+  return top && top.g;
+}
+/* The record layer: every hand this villain has turned up, keyed by 13×13
+   class. Scoped to the squid state being sketched so "outside the range" is
+   an honest claim and not a squid-blind one; `pos` (null = all) narrows the
+   record only — never the sketch. */
+function rangeRecord(oppId, squidId, pos) {
+  const cells = {}, posCounts = {};
+  let total = 0;
   for (const h of HANDS) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (idx < 0) continue;
     const v = h.villains[idx];
     const hc = handClass(v.cards);
-    if (!hc) continue;
-    const pos = v.pos || "—";
-    const bucket = byPos[pos] = byPos[pos] || { freq: {}, actions: {}, total: 0 };
-    bucket.freq[hc] = (bucket.freq[hc] || 0) + 1;
-    bucket.total++;
-    const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
-    const preActs = pre.map((a) => a.act);
-    let top = null;
-    if (limpReraiseClass(preActs)) top = { g: "Lrr", r: rankAct.Lrr };
-    else {
-      for (const a of pre) {
-        const g = ACT_GROUP[a.act] || a.act;
-        const r = rankAct[g] || 0;
-        if (!top || r > top.r) top = { g, r };
-      }
-    }
-    if (top) {
-      bucket.actions[hc] = bucket.actions[hc] || {};
-      bucket.actions[hc][top.g] = (bucket.actions[hc][top.g] || 0) + 1;
-    }
+    if (!hc) continue;                                  // squid cards sit off the grid
+    if ((squidBucket(h) === "nS") !== (squidId === "ns")) continue;
+    const p = v.pos || "—";
+    posCounts[p] = (posCounts[p] || 0) + 1;
+    if (pos && p !== pos) continue;
+    const e = cells[hc] = cells[hc] || { n: 0, acts: {}, hands: [] };
+    e.n++; total++;
+    e.hands.push(h);
+    const g = topPreGroup(h, idx);
+    if (g) e.acts[g] = (e.acts[g] || 0) + 1;
   }
-  return byPos;
+  return { cells, posCounts, total };
 }
-/* GTO-Wizard-style palette: reds for aggression (open→3bet→4bet+ deepening),
-   bright green for call, yellow for limp (distinct from the green so wide
-   limpers stand apart from wide callers), light gray for fold. Lrr (limp-
-   reraise) gets a deep magenta so trap lines stand out from vanilla 3bets. */
-const ACT_COLORS = { Lrr: "#b048c0", raise: "#d64848", "3bet": "#a02828", "4bet+": "#5a1414",
-                     call: "#6bbf6b", limp: "#e5c04a", check: "#7a95b0", fold: "#7c8794" };
-function dominantAction(mix) {
-  if (!mix) return null;
-  let best = null, bestN = 0;
-  for (const [act, n] of Object.entries(mix)) if (n > bestN) { best = act; bestN = n; }
+/* One swatch per action HUE FAMILY. The three reds of the old palette were
+   separated only by lightness, which is unreadable at notch size — the exact
+   level (raise vs 3bet vs 4bet+) lives in the drill-down instead. An action
+   with no colour of its own gets neutral grey; never borrow another's. */
+const NOTCH_COLORS = {
+  raise: "#d64848", "3bet": "#d64848", "4bet+": "#d64848", Lrr: "#b048c0",
+  call: "#6bbf6b", limp: "#e5c04a", check: "#7a95b0", bet: "#e08a3c", fold: "#7c8794",
+};
+const NOTCH_UNKNOWN = "#9aa1ac";
+const strongestAct = (acts) => {
+  let best = null, bestR = -1;
+  for (const a of Object.keys(acts || {})) { const r = RANK_ACT[a] ?? 0; if (r > bestR) { bestR = r; best = a; } }
   return best;
-}
-/* Build a CSS background for a hand-class cell: solid when there's one action,
-   hard-stop horizontal stripes proportional to each action's count when the
-   same class was played multiple ways. */
-function actionMixBackground(mix) {
-  if (!mix) return null;
-  const rankAct = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
-  const entries = Object.entries(mix).sort((a, b) => (rankAct[b[0]] || 0) - (rankAct[a[0]] || 0));
-  const total = entries.reduce((s, [, n]) => s + n, 0);
-  if (!total) return null;
-  if (entries.length === 1) return ACT_COLORS[entries[0][0]] || "#4fa66a";
-  const stops = [];
-  let acc = 0;
-  for (const [act, n] of entries) {
-    const col = ACT_COLORS[act] || "#5a6068";
-    const start = (acc / total) * 100;
-    acc += n;
-    const end = (acc / total) * 100;
-    stops.push(`${col} ${start.toFixed(1)}% ${end.toFixed(1)}%`);
-  }
-  return `linear-gradient(90deg, ${stops.join(", ")})`;
-}
-/* One 13×13 grid per position the villain has been seen at, coloured by
-   dominant preflop action (split cells show mixed strategies). */
-function gridCellsHTML(freq, actions) {
-  const cells = [];
-  for (let i = 0; i < RANKS.length; i++) {
-    for (let j = 0; j < RANKS.length; j++) {
-      const hi = RANKS[i], lo = RANKS[j];
-      const cls = i === j ? hi + hi : (i < j ? hi + lo + "s" : lo + hi + "o");
-      const n = freq[cls] || 0;
-      let style = "background: #1a1d23; color: #4b5057;";
-      if (n > 0) {
-        const bg = actionMixBackground(actions[cls]) || "#5a6068";
-        style = `background: ${bg}; color: #fff;`;
-      }
-      const badge = n > 1 ? `<span class="rgn">${n}</span>` : "";
-      const attrs = n > 0 ? ` data-rgcell="${cls}" role="button"` : "";
-      cells.push(`<div class="rgcell${n > 0 ? " tappable" : ""}"${attrs} style="${style}" title="${cls}${n ? ` · ${n}×` : ""}">${cls}${badge}</div>`);
-    }
-  }
-  return cells.join("");
-}
-let rangeGridPos = null;
+};
+const notchColor = (act) => (act && NOTCH_COLORS[act]) || NOTCH_UNKNOWN;
+const POS_ORDER = (a, b) => {
+  const ia = POSITIONS.indexOf(a), ib = POSITIONS.indexOf(b);
+  if (ia < 0 && ib < 0) return a.localeCompare(b);
+  return ia < 0 ? 1 : ib < 0 ? -1 : ia - ib;
+};
 /* ---------- hand-import (from external replay via bookmarklet) ---------- */
 
 /* Decode base64url or base64 with UTF-8 payload. */
@@ -1036,69 +1013,43 @@ function openNoteReviewSheet(note, oppId) {
        </div>
      </div>`);
 }
-/* Sheet: tap a filled range-grid cell → list the villain's actual hands that
-   fall into that hand-class + current position filter. Each row navigates to
-   the hand detail on tap. */
-function openRangeCellSheet(oppId, hc) {
-  const hands = HANDS.filter((h) => {
-    const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
-    if (idx < 0) return false;
-    const v = h.villains[idx];
-    if (rangeGridPos && v.pos !== rangeGridPos) return false;
-    return handClass(v.cards) === hc;
-  }).sort((a, b) => b.ts - a.ts);
-  const rows = hands.map((h) => handRowHTML(h, oppId)).join("")
-    || `<div class="empty">No matching hands.</div>`;
-  sheetGroup = "__rgcell__";
-  showSheet(
-    `<div class="sheethead"><span class="t">${esc(hc)} · ${esc(rangeGridPos || "any")} · ${hands.length}</span>
-       <button data-sheetclose>Close</button></div>
-     <div class="list rgcell-hands">${rows}</div>`);
-}
-function renderRangeGrid(oppId) {
-  const byPos = villainRangeData(oppId);
-  const positions = Object.keys(byPos).sort((a, b) => {
-    const ia = POSITIONS.indexOf(a), ib = POSITIONS.indexOf(b);
-    if (ia < 0 && ib < 0) return a.localeCompare(b);
-    if (ia < 0) return 1;
-    if (ib < 0) return -1;
-    return ia - ib;
-  });
-  if (!positions.length) {
-    $("od-rangegrid").innerHTML = `<div class="empty">No shown hands yet.</div>`;
-    $("od-rangelegend").innerHTML = "";
-    return;
-  }
-  if (!positions.includes(rangeGridPos)) rangeGridPos = positions[0];
-  const picker = positions.map((p) => {
-    const on = p === rangeGridPos ? " on" : "";
-    return `<button class="chip mini${on}" data-rgpos="${esc(p)}">${esc(p)}<i>${byPos[p].total}</i></button>`;
+/* Sheet: the record drill-down. "Shown" lists every hand the villain has
+   turned up in the current squid + position scope; "Outside" narrows that to
+   the classes your sketch doesn't cover. Rows group by hand class with the
+   action mix as the heading, so one tap answers "what did they do with it?"
+   before you open the hand. */
+function openRangeDrill(o, which) {
+  const inr = new Set(rangeSpotData(o, rangeSpotId(rangeSquid, "all")).hands);
+  const { cells } = rangeRecord(o.id, rangeSquid, rangeRecPos);
+  const classes = Object.keys(cells)
+    .filter((c) => which === "shown" || !inr.has(c))
+    .sort(byGridOrder);
+  let nHands = 0;
+  const blocks = classes.map((c) => {
+    const e = cells[c];
+    nHands += e.n;
+    const mix = Object.entries(e.acts)
+      .sort((x, y) => (RANK_ACT[y[0]] ?? 0) - (RANK_ACT[x[0]] ?? 0))
+      .map(([a, n]) => `<span class="rdact"><i style="background:${notchColor(a)}"></i>${esc(a)}${n > 1 ? ` ×${n}` : ""}</span>`)
+      .join("");
+    return `<div class="rdhead"><b>${esc(c)}</b>${inr.has(c) ? "" : `<span class="rdout">outside</span>`}<span class="spacer"></span>${mix || `<span class="rdact muted">no preflop action logged</span>`}</div>`
+      + e.hands.slice().sort((a, b) => b.ts - a.ts).map((h) => handRowHTML(h, o.id)).join("");
   }).join("");
-  const { freq, actions, total } = byPos[rangeGridPos];
-  $("od-rangegrid").innerHTML = `
-    <div class="rgpicker chiprow tight">${picker}</div>
-    <div class="rgblock">
-      <div class="rggrid">${gridCellsHTML(freq, actions)}</div>
-    </div>`;
-  $("od-rangelegend").innerHTML =
-    `<span class="rglegnote">${rangeGridPos} · ${total} hand${total === 1 ? "" : "s"}</span>`
-    + Object.entries(ACT_COLORS).map(([a, c]) => `<span class="rglegitem"><span class="rgswatch" style="background:${c}"></span>${a}</span>`).join("")
-    + `<span class="rglegnote">split cell = mixed action</span>`;
+  const scope = `${esc(RANGE_SQUIDS.find((s) => s.id === rangeSquid)?.title || rangeSquid)}${rangeRecPos ? ` · ${esc(rangeRecPos)}` : ""}`;
+  sheetGroup = "__rdrill__";
+  showSheet(
+    `<div class="sheethead"><span class="t">${which === "outside" ? "Outside the range" : "Shown"} · ${scope}</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="rdsub">${classes.length} class${classes.length === 1 ? "" : "es"} · ${nHands} hand${nHands === 1 ? "" : "s"}</div>
+     <div class="list rgcell-hands">${blocks || `<div class="empty">Nothing here.</div>`}</div>`);
 }
 
 /* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
 let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being sketched
 let rangeSitSel = RANGE_SITS[0].id;     // Seen mode only: which situation the marks belong to
 let showSeenHands = false;              // "Seen" toggle: record + show the hands you've watched them turn up
-let showShownLayer = false;             // "Shown" toggle: stamp the hands they've actually turned up over the sketch
-/* Every hand this opponent has shown, across all positions — the second layer
-   on the sketch grid. Hands the logged record proves, not ones you guessed. */
-function shownHandCounts(oppId) {
-  const byPos = villainRangeData(oppId), out = {};
-  for (const p of Object.keys(byPos))
-    for (const [hc, n] of Object.entries(byPos[p].freq)) out[hc] = (out[hc] || 0) + n;
-  return out;
-}
+let showShownLayer = true;              // "Shown": the record stamped over the sketch — facts first
+let rangeRecPos = null;                 // record-layer position scope; null = every position
 /* Editing always writes the squid state's own range; Seen writes the situation. */
 const curRangeSpot = () => rangeSpotId(rangeSquid, showSeenHands ? rangeSitSel : "all");
 const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
@@ -1122,6 +1073,10 @@ function setRangeSpot(o, key, hands, seen) {
   if (hands.length || seen.length) r[key] = { hands, seen }; else delete r[key];
   o.updatedAt = Date.now();
 }
+/* One grid, two layers. The fill is always the thing your thumb edits — the
+   sketch normally, the Seen marks under Seen. The other layer rides along as a
+   fenced corner notch: the record's action hue over the sketch, or the sketch
+   over the Seen marks. A tap never locks; drill into the hands from the footer. */
 function renderOppRanges(o) {
   const baseKey = rangeSpotId(rangeSquid, "all"), key = curRangeSpot();
   const base = rangeSpotData(o, baseKey), cur = rangeSpotData(o, key);
@@ -1135,40 +1090,90 @@ function renderOppRanges(o) {
     return `<button class="chip mini${t.id === rangeSitSel ? " on" : ""}" data-rsit="${t.id}" title="${esc(t.title)}">${esc(t.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const inr = new Set(base.hands), seenSet = new Set(cur.seen);
-  // Two layers on one grid: the sketch underneath, what they showed stamped on top.
-  const shown = showShownLayer && !showSeenHands ? shownHandCounts(o.id) : {};
-  const shownKeys = Object.keys(shown), outside = shownKeys.filter((h) => !inr.has(h));
+
+  // Record layer: suppressed under Seen, where the grid belongs to the marks.
+  const live = showShownLayer && !showSeenHands;
+  const all = live ? rangeRecord(o.id, rangeSquid, null) : { cells: {}, posCounts: {}, total: 0 };
+  const posKeys = Object.keys(all.posCounts).sort(POS_ORDER);
+  if (rangeRecPos && !posKeys.includes(rangeRecPos)) rangeRecPos = null;   // stale pick → All, never a silent other position
+  const rec = !live ? all : rangeRecPos ? rangeRecord(o.id, rangeSquid, rangeRecPos) : all;
+  const recKeys = Object.keys(rec.cells);
+  const outKeys = recKeys.filter((c) => !inr.has(c));
+  const recHands = recKeys.reduce((n, c) => n + rec.cells[c].n, 0);
+  const outHands = outKeys.reduce((n, c) => n + rec.cells[c].n, 0);
+  const posPicker = live && posKeys.length > 1
+    ? `<div class="rgpicker chiprow readwrap">
+         <button class="chip mini${rangeRecPos ? "" : " on"}" data-rpos="">All<i>${all.total}</i></button>
+         ${posKeys.map((p) => `<button class="chip mini${p === rangeRecPos ? " on" : ""}" data-rpos="${esc(p)}">${esc(p)}<i>${all.posCounts[p]}</i></button>`).join("")}
+       </div>`
+    : "";
+
   // Class chip: lit when every hand of the class is in; dashed when only some are.
   const classes = showSeenHands ? "" : RANGE_CLASSES.map((c) => {
     const n = c.hands.filter((h) => inr.has(h)).length;
     const st = n === c.hands.length ? " on" : n ? " part" : "";
     return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
   }).join("");
+
   const cells = HAND_CLASSES.map((c) => {
-    const st = (inr.has(c) ? " inr" : "") + (showSeenHands && seenSet.has(c) ? " seen" : "")
-      + (shown[c] ? " shw" + (inr.has(c) ? "" : " out") : "");
-    const t = shown[c] ? ` title="shown ${shown[c]}×"` : "";
-    return `<div class="rgcell rng${st}" data-rcell="${c}" role="button"${t}>${c}</div>`;
+    const inSketch = inr.has(c);
+    let cls = "rgcell rng", notch = "", title = c;
+    if (showSeenHands) {
+      if (seenSet.has(c)) { cls += " smark"; title += " · seen"; }
+      if (inSketch) { notch = `<i class="rgnotch" style="--nc:var(--accent)"></i>`; title += " · in range"; }
+    } else {
+      if (inSketch) cls += " inr";
+      const e = rec.cells[c];
+      if (e) {
+        const act = strongestAct(e.acts);
+        notch = `<i class="rgnotch" style="--nc:${notchColor(act)}"></i>`;
+        if (!inSketch) cls += " out";
+        title += ` · shown ${e.n}×${act ? ` · ${act}` : ""}${inSketch ? "" : " · outside"}`;
+      }
+    }
+    return `<div class="${cls}" data-rcell="${c}" role="button" title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
+
+  const byHue = {};
+  for (const c of recKeys) {
+    const a = strongestAct(rec.cells[c].acts);
+    (byHue[notchColor(a)] = byHue[notchColor(a)] || new Set()).add(a);
+  }
+  const legend = live && recKeys.length
+    ? `<div class="rglegend">${Object.entries(byHue)
+         .map(([col, set]) => [col, [...set].sort((a, b) => (RANK_ACT[a] ?? -1) - (RANK_ACT[b] ?? -1))])
+         .sort((a, b) => (RANK_ACT[b[1].at(-1)] ?? -1) - (RANK_ACT[a[1].at(-1)] ?? -1))
+         .map(([col, acts]) => `<span class="rglegitem"><span class="rgswatch" style="background:${col}"></span>${esc(acts.map((a) => a || "no action").join(" / "))}</span>`).join("")}
+       <span class="rglegnote">corner = what they did with it</span></div>`
+    : "";
+
   const combos = base.hands.reduce((n, c) => n + handClassCombos(c), 0);
   const foot = showSeenHands
     ? `${esc(rangeSpotTitle(rangeSquid, rangeSitSel))} · ${cur.seen.length} hand${cur.seen.length === 1 ? "" : "s"} seen`
     : `${esc(rangeSpotTitle(rangeSquid, "all"))} · ${base.hands.length} hand${base.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}%`;
-  const shownFoot = shownKeys.length
-    ? ` · <b class="rgshown">${shownKeys.length} shown</b>${outside.length ? ` · <b class="rgout">${outside.length} outside</b>` : ""}`
-    : (showShownLayer && !showSeenHands ? " · no shown hands yet" : "");
+  // Tappable counts are the way into the hands — the cells themselves always paint.
+  const recFoot = !live ? ""
+    : recKeys.length
+      ? ` · <button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
+        + (outKeys.length ? ` · <button class="rdrill rgout" data-rdrill="outside">${outKeys.length} outside · ${outHands} hand${outHands === 1 ? "" : "s"}</button>` : "")
+        + (rangeRecPos ? ` <span class="rgscope">${esc(rangeRecPos)} only</span>` : "")
+      : " · no shown hands yet";
   const clearable = showSeenHands ? cur.seen.length : base.hands.length;
   $("od-ranges").innerHTML = `
     <div class="rsquid">${squids}</div>
     ${sits ? `<div class="rspots chiprow tight">${sits}</div>` : ""}
+    ${posPicker}
     ${classes ? `<div class="rclasses chiprow readwrap">${classes}</div>` : ""}
     <div class="rggrid">${cells}</div>
+    ${legend}
     <div class="rfoot">
-      <span>${foot}${shownFoot}</span>
+      <span>${foot}${recFoot}</span>
       <span class="spacer"></span>
       ${clearable ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
     </div>
-    ${showSeenHands ? `<div class="rhint">Seen mode — pick the situation, then tap the hands you've watched them turn up in it.</div>` : ""}`;
+    ${showSeenHands
+      ? `<div class="rhint">Seen mode — pick the situation, then tap the hands you've watched them turn up in it. The blue corner marks your sketched range.</div>`
+      : ""}`;
   $("od-range-seen").classList.toggle("on", showSeenHands);
   $("od-range-shown").classList.toggle("on", showShownLayer);
   $("od-range-shown").hidden = showSeenHands;
@@ -1812,7 +1817,7 @@ async function createOpponent(name, group) {
 /* The read-dependent quarter of the detail page: the front card, the read
    picker, and both suggestion lists (suggested exploits are derived from reads,
    so they must refresh together). Tapping a read re-runs only this — the notes,
-   exploits, hand list and both 13×13 grids don't depend on it. */
+   exploits, hand list and the range grid don't depend on it. */
 function renderOppReads(o) {
   $("od-card-preview").innerHTML = cardChipsHTML(o);
   const reads = oppReads(o);
@@ -2032,7 +2037,6 @@ function renderOppDetail(id) {
   $("od-hands").innerHTML = (seenHTML + noCardsHTML) ||
     (allHands.length ? `<div class="empty">No hands match these filters. ${allHands.length} total — try clearing.</div>` : `<div class="empty">No hands logged.</div>`);
 
-  renderRangeGrid(id);
   renderOppRanges(o);
 }
 
@@ -3950,7 +3954,7 @@ function sheetClick(e) {
       return;
     }
   }
-  if (sheetGroup === "__rgcell__") {
+  if (sheetGroup === "__rdrill__") {
     const r = e.target.closest("[data-hand]");
     if (r) { hideSheet(); location.hash = "#handview/" + r.dataset.hand; return; }
   }
@@ -4252,6 +4256,9 @@ function bindStatic() {
     const sq = e.target.closest("[data-rsquid]"), st = e.target.closest("[data-rsit]");
     if (sq) { rangeSquid = sq.dataset.rsquid; renderOppRanges(o); return; }
     if (st) { rangeSitSel = st.dataset.rsit; renderOppRanges(o); return; }
+    const rp = e.target.closest("[data-rpos]"), dr = e.target.closest("[data-rdrill]");
+    if (rp) { rangeRecPos = rp.dataset.rpos || null; renderOppRanges(o); return; }
+    if (dr) { openRangeDrill(o, dr.dataset.rdrill); return; }
     const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
     if (!cl && !cell && !clr) return;
     const key = curRangeSpot();
@@ -4274,19 +4281,9 @@ function bindStatic() {
       }
     }
     setRangeSpot(o, key, hands, seen);
-    await dbPut("opponents", o);
     renderOppRanges(o);
     syncSeenBadges(o);
-  };
-  $("od-rangegrid").onclick = (e) => {
-    const b = e.target.closest("[data-rgpos]");
-    if (b) {
-      rangeGridPos = b.dataset.rgpos;
-      if (curOppId) renderRangeGrid(curOppId);
-      return;
-    }
-    const cell = e.target.closest("[data-rgcell]");
-    if (cell && curOppId) openRangeCellSheet(curOppId, cell.dataset.rgcell);
+    await dbPut("opponents", o);
   };
   $("od-ptype").onclick = async (e) => {
     const b = e.target.closest("[data-ptype]");

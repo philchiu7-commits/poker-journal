@@ -506,10 +506,8 @@ textarea.noteedit { margin-bottom: 0; }
   border-radius: 8px; padding: 3px 6px; font-size: 13px; font-weight: 700;
 }
 
-/* Range grid — 13×13 preflop hand matrix, one position at a time */
+/* Range grid — 13×13 preflop hand matrix */
 .rgpicker { margin-bottom: 8px; }
-.rgcell.tappable { cursor: pointer; }
-.rgcell.tappable:active { transform: scale(.95); }
 .vsquid {
   margin-left: 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--panel2); color: var(--muted); font-size: 12px; cursor: pointer; align-self: center;
@@ -586,7 +584,6 @@ textarea.noteedit { margin-bottom: 0; }
 .rgpicker .chip i, .rspots .chip i, .rsquid .chip i {
   font-style: normal; margin-left: 4px; font-size: 10px; opacity: .9;
 }
-.rgblock { margin-top: 4px; }
 .rggrid {
   display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px;
   width: 100%; aspect-ratio: 1 / 1;
@@ -597,35 +594,56 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 9px; font-weight: 700; border-radius: 3px; min-width: 0;
   padding: 0; overflow: hidden;
 }
-.rgcell .rgn {
-  position: absolute; top: 1px; right: 2px; font-size: 8px; font-weight: 800;
-  background: rgba(0,0,0,.45); padding: 0 3px; border-radius: 4px; line-height: 1.3;
+/* Record notch: a corner triangle in the action's hue, with a 1px dark fence
+   along its inner edge. The fence separates the hue from the blue sketch fill
+   (6.2:1), from the red outside-ring (5.0:1), and vanishes into the empty
+   ground — one element doing all three jobs. */
+.rgnotch {
+  position: absolute; top: 0; right: 0; width: 11px; height: 11px; pointer-events: none;
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+  background: linear-gradient(225deg, var(--nc) 0 8px, #1a1d23 8px);
 }
 .rglegend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
 .rglegitem { display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize; }
 .rgswatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-.rglegnote { font-size: 12px; color: var(--muted); }
+.rglegnote { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 
 /* Approx-range editor: spot picker, class chips, tap grid, footer */
 .rsquid { display: inline-flex; gap: 4px; padding: 3px; margin-bottom: 8px; background: #14171c; border: 1px solid var(--line); border-radius: 999px; }
 .rsquid .chip { border-color: transparent; background: transparent; }
 .rsquid .chip.on { background: var(--accent); color: #0a0d12; border-color: var(--accent); box-shadow: none; }
 .rspots { margin-bottom: 8px; }
-.rspots .chip.seenon i { background: #e0b23e; color: #1a1408; }
 .rclasses { margin-bottom: 8px; }
 .chip.part { border-style: dashed; color: var(--text); }
-.rgcell.rng { background: #1a1d23; color: #7b828c; cursor: pointer; }
+.rgcell.rng { background: #1a1d23; color: #949ba6; cursor: pointer; }
 .rgcell.rng:active { transform: scale(.92); }
 .rgcell.rng.inr { background: var(--accent); color: #0a0d12; }
-.rgcell.rng.seen { box-shadow: 0 0 0 2px #e0b23e inset; color: #e0b23e; }
-.rgcell.rng.inr.seen { color: #0a0d12; }
-/* Shown layer: the hands they've actually turned up, stamped over the sketch.
-   A red ring means it landed outside the range you sketched. */
-.rgcell.rng.shw { background: #e0b23e; color: #1a1408; }
-.rgcell.rng.shw.out { box-shadow: 0 0 0 2px #f85149 inset; }
+/* Seen mode: the gold fill is the mark you're logging; the sketch rides along
+   as the blue notch. Gold on the empty ground is 8.5:1, ink on gold 9.8:1. */
+.rgcell.rng.smark { background: #e0b23e; color: #0a0d12; }
+/* Shown outside the sketch — only ever on an unpainted cell, where a 5:1 red
+   reads clean. (A red bright enough to sit on the blue fill doesn't exist.) */
+.rgcell.rng.out { box-shadow: 0 0 0 2px #f85149 inset; }
 .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .rfoot .spacer { flex: 1; }
 .rhint { margin-top: 6px; font-size: 12px; color: #e0b23e; }
+.rgscope { font-size: 11px; opacity: .8; }
+/* Footer counts are the drill-down — the cells themselves always paint. */
+.rdrill {
+  background: none; border: 0; padding: 0 1px; font: inherit; font-weight: 700;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+}
+.rdsub { font-size: 12px; color: var(--muted); margin: 2px 2px 8px; }
+.rdhead {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 1; margin-top: 10px; padding: 5px 4px;
+  background: var(--panel2); border-radius: 6px; font-size: 12px; color: var(--muted);
+}
+.rdhead b { color: var(--text); font-size: 13px; }
+.rdhead .spacer { flex: 1; }
+.rdout { color: #f85149; font-weight: 700; text-transform: uppercase; font-size: 10px; }
+.rdact { display: inline-flex; align-items: center; gap: 4px; }
+.rdact i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
 
 /* Hand-history line inside list rows — plain-English poker log */
 .hh-line {
@@ -856,5 +874,5 @@ textarea.noteedit { margin-bottom: 0; }
 .actlist { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.4; word-break: break-word; }
 .actionpad-sheet { padding-top: 4px; }
 .actionpad-sheet .actgrid { margin-bottom: 8px; }
-.rfoot .rgshown { color: #e0b23e; font-weight: 700; }
-.rfoot .rgout { color: #f85149; font-weight: 700; }
+.rfoot .rgshown { color: #e0b23e; }
+.rfoot .rgout { color: #f85149; }

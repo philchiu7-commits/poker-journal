@@ -461,6 +461,4 @@ const readRangeSpot = (id) => {
 };
 const rangeSpotTitle = (sq, sit) =>
   (RANGE_SITS.find((t) => t.id === sit)?.title || sit) + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
-const RANGE_SPOTS = RANGE_SQUIDS.flatMap((s) => RANGE_SITS.map((t) => (
-  { id: rangeSpotId(s.id, t.id), label: s.label + " " + t.label, title: rangeSpotTitle(s.id, t.id) })));
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326
