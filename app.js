@@ -11,6 +11,7 @@ let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
+let showReadPicker = false;       // Reads panel: summary of what's set, or the full picker
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
@@ -1242,30 +1243,38 @@ function oppOrderCmp(stats) {
   };
 }
 
-function oppRowHTML(o, st) {
-  // Exploits lead the front card — that's what Phil wants to see across
-  // the room. All exploits are shown unless individually hidden via the
-  // 🚫 toggle in the opponent detail (opt-out, not opt-in).
+/* The chips worth showing across the room, in one fixed order: exploits first
+   — what Phil does to him — then curated featured reads, falling back to the
+   strong (yes!/no!) reads so an uncurated opponent still carries signal.
+   Shared by the list row, the Table tab and the detail front-page card. */
+function frontChipsHTML(o) {
   const exploitChips = (o.exploits || [])
     .filter((e) => !e.hideFront)
     .map((e) => {
       const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
       return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
     }).join("");
-  // Then curated featured reads; otherwise fall back to strong reads (yes!/no!)
-  // so the card still has signal for opponents with no explicit curation.
-  const feat = featuredItems(o);
-  const featReadChips = feat.filter((it) => it.type === "read")
+  const featReadChips = featuredItems(o).filter((it) => it.type === "read")
     .map((it) => featuredChip(o, it)).filter(Boolean).join("");
   const readChips = featReadChips || Object.entries(oppReads(o))
-    .filter(([id, s]) => isStrongRead(s) && readIsShown(o, id) && !(o.hiddenReads || {})[id])
-    .map(([id, s]) => readChip(id, s)).join("");
-  const chips = exploitChips + readChips;
+    .filter(([id, st]) => isStrongRead(st) && readIsShown(o, id) && !(o.hiddenReads || {})[id])
+    .map(([id, st]) => readChip(id, st)).join("");
+  return exploitChips + readChips;
+}
+
+function cardChipsHTML(o) {
+  const curated = featuredItems(o).map((it) => featuredChip(o, it)).filter(Boolean).join("");
+  const chips = curated || frontChipsHTML(o);
+  return chips || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
+}
+
+function oppRowHTML(o, st) {
+  const chips = frontChipsHTML(o);
   const showChips = !oppEditMode && chips;
   const handle = oppEditMode ? `<span class="draghandle" data-drag="${o.id}">⠿</span>` : "";
   const move = oppEditMode ? `<button class="movebtn" data-move="${o.id}">Group ▾</button>` : "";
   const badge = st ? `<span class="handbadge">${st.count}</span>` : "";
-  const physLine = !oppEditMode && !chips && o.physical ? `<div class="s">${esc(o.physical)}</div>` : "";
+  const physLine = !oppEditMode && o.physical ? `<div class="s physline">${esc(o.physical)}</div>` : "";
   const type = PLAYER_TYPE_BY_ID[o.type];
   const typeCls = type ? ` ptype-${type.id}` : "";
   const typeStyle = type ? ` style="--player-color:${type.color}"` : "";
@@ -1731,8 +1740,7 @@ function renderCardSheet() {
   const refresh = async () => {
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
-    $("od-card-preview").innerHTML = featuredItems(o).map((it) => featuredChip(o, it)).filter(Boolean).join("")
-      || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
+    $("od-card-preview").innerHTML = cardChipsHTML(o);
     renderCardSheet();
   };
   const idxOf = (k) => feat.findIndex((it) => key(it) === k);
@@ -1801,35 +1809,12 @@ async function createOpponent(name, group) {
 
 /* ================= Opponent detail ================= */
 
-function renderOppDetail(id) {
-  const o = oppById(id);
-  if (!o) { location.hash = "#opponents"; return; }
-  if (curOppId !== id) { editNoteId = null; editExploitId = null; }
-  curOppId = id;
-  $("od-name").textContent = o.name;
-  $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
-  // Player-type picker + pill: color-themes the opponent's list row and puts
-  // a matching pill next to their name in detail.
-  const type = PLAYER_TYPE_BY_ID[o.type];
-  const nameEl = $("od-name");
-  nameEl.style.setProperty("--player-color", type ? type.color : "");
-  nameEl.classList.toggle("has-player-type", !!type);
-  $("od-name").innerHTML = esc(o.name) +
-    (type ? ` <span class="ptypepill" style="background:${type.color};border-color:${type.color}">${type.icon} ${esc(type.label)}</span>` : "");
-  const ptypeHTML = PLAYER_TYPES.map((t) => {
-    const on = o.type === t.id;
-    return `<button class="ptypechip${on ? " on" : ""}" data-ptype="${t.id}" style="${on ? `background:${t.color};border-color:${t.color};color:#0a0d12` : `border-color:${t.color};color:${t.color}`}">${t.icon} ${esc(t.label)}</button>`;
-  }).join("");
-  $("od-ptype").innerHTML =
-    `<div class="chiprow tight">${ptypeHTML}${o.type ? `<button class="chip mini" data-ptype="">Clear</button>` : ""}</div>`;
-  const feat = featuredItems(o);
-  $("od-card-preview").innerHTML = feat.map((it) => featuredChip(o, it)).filter(Boolean).join("")
-    || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
-  $("od-editform").classList.add("hidden");
-  $("od-e-name").value = o.name;
-  $("od-e-group").value = o.group || "";
-  $("od-e-physical").value = o.physical || "";
-
+/* The read-dependent quarter of the detail page: the front card, the read
+   picker, and both suggestion lists (suggested exploits are derived from reads,
+   so they must refresh together). Tapping a read re-runs only this — the notes,
+   exploits, hand list and both 13×13 grids don't depend on it. */
+function renderOppReads(o) {
+  $("od-card-preview").innerHTML = cardChipsHTML(o);
   const reads = oppReads(o);
   const readBtn = (id, lbl, bubble) => {
     const st = reads[id];
@@ -1859,7 +1844,19 @@ function renderOppDetail(id) {
     const base = bubble ? "bubble" : "chip mini";
     return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
   };
-  $("od-tags").innerHTML = TAG_CATS.map((cat) => {
+  const setReads = Object.entries(reads)
+    .filter(([id, st]) => readIsShown(o, id))
+    .sort((a, b) => (isStrongRead(b[1]) ? 1 : 0) - (isStrongRead(a[1]) ? 1 : 0));
+  $("od-readsum").innerHTML = setReads.length
+    ? setReads.map(([id, st]) => readChip(id, st)).join("")
+    : `<span class="chipnote">No reads yet — tap Edit to set some.</span>`;
+  $("od-readsum").classList.toggle("hidden", showReadPicker);
+  $("od-tags").classList.toggle("hidden", !showReadPicker);
+  const editBtn = $("od-reads-edit");
+  editBtn.textContent = showReadPicker ? "Done" : `Edit${setReads.length ? ` · ${setReads.length}` : ""}`;
+  editBtn.classList.toggle("on", showReadPicker);
+  // the picker is ~70 controls — only build it when it's actually on screen
+  if (showReadPicker) $("od-tags").innerHTML = TAG_CATS.map((cat) => {
     const groups = READ_GROUPS.filter((g) => g.cat === cat).map((g) =>
       `<div class="readgroup"><span class="rglabel">${esc(g.label)}</span><div class="bubbles">` +
       g.bubbles.map(([id, lbl]) => readBtn(id, lbl, true)).join("") + `</div></div>`).join("");
@@ -1888,7 +1885,7 @@ function renderOppDetail(id) {
 
   // FEATURE 1 — reads inferred from this opponent's logged hands
   const dReads = derivedReads(o);
-  const showD = showDerivedReads[id];
+  const showD = showDerivedReads[o.id];
   const dHTML = dReads.length
     ? `<div class="sugghead" data-toggle-dreads>
         <span>From logged hands · small sample</span>
@@ -1903,6 +1900,47 @@ function renderOppDetail(id) {
     : "";
 
   $("od-readsugg").innerHTML = dHTML;
+
+  const suggs = suggestedExploits(o);
+  const showSugg = showSuggestedExploits[o.id];
+  $("od-exsugg").innerHTML = suggs.length
+    ? `<div class="sugghead" data-toggle-sugg>
+        <span>Suggested from reads (${suggs.length})</span>
+        <span class="toggle-arrow">${showSugg ? "▼" : "▶"}</span>
+      </div>` + (showSugg ? suggs.map((s) => {
+        const icon = s.compound ? "🎯" : (s.strong ? "⭐" : "💡");
+        return `<div class="suggitem${s.compound ? " suggcompound" : ""}${s.strong ? " suggstrong" : ""}" data-key="${esc(s.key)}">
+           <div class="notetext">${icon} ${esc(s.text)}</div>
+           <div class="noterowbtns">
+             <button class="chip mini on sgreen" data-exacc>＋ Add</button>
+             <button class="chip mini" data-exdismiss>Dismiss</button>
+           </div></div>`;
+      }).join("") : "")
+    : "";
+}
+
+function renderOppDetail(id) {
+  const o = oppById(id);
+  if (!o) { location.hash = "#opponents"; return; }
+  if (curOppId !== id) { editNoteId = null; editExploitId = null; }
+  curOppId = id;
+  $("od-name").textContent = o.name;
+  $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
+  // Player type shows as one tappable pill beside the name; tapping it opens
+  // the same bottom sheet the list row uses.
+  const type = PLAYER_TYPE_BY_ID[o.type];
+  const nameEl = $("od-name");
+  nameEl.style.setProperty("--player-color", type ? type.color : "");
+  nameEl.classList.toggle("has-player-type", !!type);
+  nameEl.innerHTML = esc(o.name) + (type
+    ? ` <button class="ptypepill" data-ptype-open="${o.id}" style="background:${type.color};border-color:${type.color}">${type.icon} ${esc(type.label)}</button>`
+    : ` <button class="ptypepill empty" data-ptype-open="${o.id}" title="Set player type">◦</button>`);
+  renderOppReads(o);
+  $("od-editform").classList.add("hidden");
+  $("od-e-name").value = o.name;
+  $("od-e-group").value = o.group || "";
+  $("od-e-physical").value = o.physical || "";
+
 
   {
     const allNotes = o.notes || [];
@@ -1966,22 +2004,6 @@ function renderOppDetail(id) {
           </div></div>`;
   }).join("") || `<div class="empty">No exploits yet — how do you beat this player?</div>`;
 
-  const suggs = suggestedExploits(o);
-  const showSugg = showSuggestedExploits[id];
-  $("od-exsugg").innerHTML = suggs.length
-    ? `<div class="sugghead" data-toggle-sugg>
-        <span>Suggested from reads (${suggs.length})</span>
-        <span class="toggle-arrow">${showSugg ? "▼" : "▶"}</span>
-      </div>` + (showSugg ? suggs.map((s) => {
-        const icon = s.compound ? "🎯" : (s.strong ? "⭐" : "💡");
-        return `<div class="suggitem${s.compound ? " suggcompound" : ""}${s.strong ? " suggstrong" : ""}" data-key="${esc(s.key)}">
-           <div class="notetext">${icon} ${esc(s.text)}</div>
-           <div class="noterowbtns">
-             <button class="chip mini on sgreen" data-exacc>＋ Add</button>
-             <button class="chip mini" data-exdismiss>Dismiss</button>
-           </div></div>`;
-      }).join("") : "")
-    : "";
 
   const allHands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
   renderHandFilters(id, allHands);
@@ -3442,7 +3464,7 @@ function renderHandEntry() {
   // straddle toggle button — label reflects state, on = 2×BB
   const stdOn = Number(d.std) > 0;
   const stdBtn = $("he-std");
-  stdBtn.textContent = stdOn ? `STD ${d.std}` : "STD OFF";
+  stdBtn.innerHTML = `STD<i>${stdOn ? esc(String(d.std)) : "Off"}</i>`;
   stdBtn.classList.toggle("on", stdOn);
 }
 
@@ -3915,7 +3937,10 @@ function sheetClick(e) {
       o.type = t || null;
       if (!o.type) delete o.type;
       o.updatedAt = Date.now();
-      dbPut("opponents", o).then(() => { hideSheet(); renderOpponents(); renderTableTab(); });
+      dbPut("opponents", o).then(() => {
+        hideSheet(); renderOpponents(); renderTableTab();
+        if (curOppId === o.id) renderOppDetail(curOppId);   // the detail header shows the pill too
+      });
       return;
     }
   }
@@ -4303,16 +4328,14 @@ function bindStatic() {
     location.hash = "#opp/" + intoId;
     renderOppDetail(intoId);
   });
-  $("od-ptype").onclick = async (e) => {
-    const b = e.target.closest("[data-ptype]");
-    if (!b) return;
-    const o = oppById(curOppId); if (!o) return;
-    const t = b.dataset.ptype;
-    o.type = t || null;
-    if (!o.type) delete o.type;
-    o.updatedAt = Date.now();
-    await dbPut("opponents", o);
-    renderOppDetail(curOppId);
+  $("od-name").onclick = (e) => {
+    const b = e.target.closest("[data-ptype-open]");
+    if (b) openPlayerTypeSheet(b.dataset.ptypeOpen);
+  };
+  $("od-reads-edit").onclick = () => {
+    showReadPicker = !showReadPicker;
+    const o = oppById(curOppId);
+    if (o) renderOppReads(o);
   };
   $("od-tags").onclick = async (e) => {
     const ch = e.target.closest("[data-choice]");
@@ -4323,7 +4346,7 @@ function bindStatic() {
       if (reads[id] === val) delete reads[id]; else reads[id] = val;
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
-      renderOppDetail(curOppId);
+      renderOppReads(o);
       return;
     }
     const rj = e.target.closest("[data-rjump]");
@@ -4345,7 +4368,7 @@ function bindStatic() {
     else delete reads[id];
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
-    renderOppDetail(curOppId);
+    renderOppReads(o);
   };
   $("od-tags").addEventListener("change", async (e) => {
     const ps = e.target.closest("[data-posselect]");
@@ -4357,7 +4380,7 @@ function bindStatic() {
     else delete oppReads(o)[id];
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
-    renderOppDetail(curOppId);
+    renderOppReads(o);
   });
   $("od-note-add").onclick = async () => {
     const text = $("od-note").value.trim();

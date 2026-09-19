@@ -108,11 +108,12 @@ button.danger {
 .tblhero .lrow .t { color: var(--muted); font-weight: 600; }
 .lrow .s { color: var(--muted); font-size: 13px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.lrow .s.physline { -webkit-line-clamp: 1; margin-top: 1px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .dot.won { background: var(--good); } .dot.lost { background: var(--bad); } .dot.chop { background: var(--muted); }
 
 /* ---- opponent rows: hand-count badge, pinned exploit, edit/drag ---- */
-.opprow { position: relative; display: flex; align-items: center; gap: 10px; }
+.opprow { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
 .opprow-body { flex: 1; min-width: 0; }
 .opprow .handbadge {
   position: absolute; right: 10px; bottom: 8px; flex: none;
@@ -163,6 +164,7 @@ button.danger {
 .chiprow.scroll { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .chiprow.scroll::-webkit-scrollbar { display: none; }
 .chiprow.tight { gap: 5px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+#sheet .chiprow.tight { flex-wrap: wrap; overflow-x: visible; }   /* a picker should show every option, not scroll */
 .chiprow.readwrap { gap: 5px; }   /* wraps by default (inherits from .chiprow), tighter gap for dense read pickers */
 .chip {
   background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
@@ -246,7 +248,7 @@ textarea.noteedit { margin-bottom: 0; }
 .cardpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .cardpanel-head .ptitle { margin: 0; }
 .cardchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.opprow .cardchips { margin-top: 6px; }
+.opprow .cardchips { margin-top: 5px; gap: 5px; }
 .excard {
   display: inline-flex; align-items: center; max-width: 100%;
   background: #1c2c47; border: 1px solid #34517f; color: var(--accent);
@@ -283,7 +285,7 @@ textarea.noteedit { margin-bottom: 0; }
   background: var(--panel2); border: 1px solid var(--line); color: var(--accent);
   border-radius: 8px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
-.linkbtn.on { border-color: var(--accent); color: var(--accent); }
+.linkbtn.on { background: #1c2c47; border-color: var(--accent); color: var(--accent); }
 
 .sheetnote.warn { color: #e0a63a; background: #2b220a; border: 1px solid #6b551f; border-radius: 8px; padding: 8px 10px; }
 /* lineup sheet */
@@ -315,9 +317,11 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .hgroup { margin-bottom: 13px; }
 .glabel { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.posrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.posrow { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
 .poslabel { color: var(--muted); font-size: 11px; width: 80px; flex: none; text-transform: none;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 7px; }
+/* Every seat has to be tappable without panning — wrap instead of scrolling. */
+#he-heropos, #he-vposrows .chiprow.tight { flex-wrap: wrap; overflow-x: visible; row-gap: 5px; }
 
 .seg { display: flex; background: var(--panel2); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; margin-bottom: 8px; padding: 3px; gap: 3px; }
 .seg button {
@@ -460,13 +464,13 @@ textarea.noteedit { margin-bottom: 0; }
 
 /* ---- compact context bar (blinds · eff · squid) at top of Hand tab ---- */
 .ctxbar {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; margin-bottom: 10px;
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: stretch; margin-bottom: 10px;
 }
 .ctxfield {
-  display: flex; flex-direction: column; flex: 1 1 0; min-width: 52px;
+  display: flex; flex-direction: column; flex: 1 1 0; min-width: 52px; cursor: text;
   background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 3px 7px;
 }
-.ctxfield label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.ctxfield > span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
 .ctxfield input {
   width: 100%; min-width: 0; margin: 0; padding: 1px 0; border: 0; background: none;
   font-size: 15px; font-weight: 700; color: var(--text);
@@ -479,11 +483,8 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .ctxpick i { font-style: normal; font-size: 15px; color: var(--text); }
 .ctxpick.set { border-color: var(--accent); }
-.ctxstd {
-  flex: 1 1 0; min-width: 62px;
-  background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px;
-  color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; cursor: pointer;
-}
+/* Straddle rides on .ctxpick's stacked label-over-value box so all six
+   context cells share one rhythm — and "STD 200" can't clip a 12px pill. */
 .ctxstd.on { color: var(--text); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, var(--panel2)); }
 
 /* Position-kind read: label + native <select> dropdown */
@@ -510,7 +511,7 @@ textarea.noteedit { margin-bottom: 0; }
 .rgcell.tappable { cursor: pointer; }
 .rgcell.tappable:active { transform: scale(.95); }
 .vsquid {
-  margin-left: 6px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line);
+  margin-left: 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--panel2); color: var(--muted); font-size: 12px; cursor: pointer; align-self: center;
   line-height: 1;
 }
@@ -519,7 +520,6 @@ textarea.noteedit { margin-bottom: 0; }
 
 /* Player-type colour theme — picker chips, list-row stripe, header pill.
    Row: 4px left stripe in --player-color plus a faint tint on the panel. */
-.ptypebar { margin: 4px 0 12px; }
 .ptypechip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
@@ -527,55 +527,28 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .ptypechip.on { color: #0a0d12; }
 .ptypepill {
-  display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
-  font-size: 11px; font-weight: 700; color: #0a0d12; border: 1px solid transparent;
-  vertical-align: middle;
+  display: inline-block; margin-left: 8px; padding: 3px 10px; border-radius: 999px;
+  font-family: inherit; font-size: 11px; font-weight: 700; color: #0a0d12;
+  border: 1px solid transparent; vertical-align: middle; cursor: pointer;
+  transition: transform .04s ease;
 }
-/* Bright, obvious type tint: 6px stripe + saturated color-mix background that
-   holds its hue top-to-bottom instead of fading into the panel. */
+.ptypepill:active { transform: scale(.94); }
+.ptypepill.empty {
+  background: var(--panel2); border-color: var(--line); color: var(--muted);
+  font-size: 14px; line-height: 1; padding: 3px 9px;
+}
+/* Type tint: the 6px stripe and the badge carry the archetype; the wash is only
+   strong enough to cast the row, so reads and exploits keep their own colours. */
 .opprow[style*="--player-color"] {
   border-left: 6px solid var(--player-color);
-  border-color: color-mix(in srgb, var(--player-color) 55%, var(--line));
+  border-color: color-mix(in srgb, var(--player-color) 40%, var(--line));
   background:
     linear-gradient(180deg,
-      color-mix(in srgb, var(--player-color) 35%, var(--panel)) 0%,
-      color-mix(in srgb, var(--player-color) 22%, #14171e) 100%);
+      color-mix(in srgb, var(--player-color) 14%, var(--panel)) 0%,
+      color-mix(in srgb, var(--player-color) 8%, #14171e) 100%);
 }
 .opprow[style*="--player-color"] .t { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
 .opprow[style*="--player-color"] .s { color: #e6e8ec; }
-/* Tinted rows bleed the player color into chip backgrounds; force high-contrast
-   text on all chip variants so nothing goes invisible on yellow/teal/green tints. */
-.opprow[style*="--player-color"] .cardchips .chip,
-.opprow[style*="--player-color"] .cardchips .chip.on,
-.opprow[style*="--player-color"] .cardchips .chip.on.sgreen,
-.opprow[style*="--player-color"] .cardchips .chip.on.sred,
-.opprow[style*="--player-color"] .cardchips .chip.on.syellow,
-.opprow[style*="--player-color"] .cardchips .chip.on.schoice {
-  background: rgba(0,0,0,.42);
-  border-color: rgba(255,255,255,.22);
-  color: #fff;
-  box-shadow: none;
-  text-shadow: 0 1px 2px rgba(0,0,0,.45);
-}
-.opprow[style*="--player-color"] .cardchips .chip.on.sstrong {
-  background: rgba(0,0,0,.55);
-  border-color: #fff;
-  color: #fff;
-  font-weight: 700;
-}
-/* …but keep each read's polarity readable: yes = green ring, no = red, mid =
-   yellow; strong reads add an inner ring. */
-.opprow[style*="--player-color"] .cardchips .chip.on.sgreen { border-color: var(--good); }
-.opprow[style*="--player-color"] .cardchips .chip.on.sred { border-color: var(--bad); }
-.opprow[style*="--player-color"] .cardchips .chip.on.syellow { border-color: #e0b23e; }
-.opprow[style*="--player-color"] .cardchips .chip.on.sgreen.sstrong { box-shadow: 0 0 0 1px var(--good) inset; }
-.opprow[style*="--player-color"] .cardchips .chip.on.sred.sstrong { box-shadow: 0 0 0 1px var(--bad) inset; }
-.opprow[style*="--player-color"] .cardchips .excard {
-  background: rgba(0,0,0,.55);
-  border-color: rgba(255,255,255,.35);
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,.45);
-}
 .ptypemini {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 8px; margin-right: 8px;
@@ -610,7 +583,7 @@ textarea.noteedit { margin-bottom: 0; }
 .himdup { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #4a3319; color: #e0a63a; font-weight: 700; text-transform: uppercase; }
 .himbulknames { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rgpicker .chip i, .rspots .chip i, .rsquid .chip i {
-  font-style: normal; margin-left: 4px; font-size: 10px; opacity: .7;
+  font-style: normal; margin-left: 4px; font-size: 10px; opacity: .9;
 }
 .rgblock { margin-top: 4px; }
 .rggrid {
@@ -640,7 +613,7 @@ textarea.noteedit { margin-bottom: 0; }
 .rspots .chip.seenon i { background: #e0b23e; color: #1a1408; }
 .rclasses { margin-bottom: 8px; }
 .chip.part { border-style: dashed; color: var(--text); }
-.rgcell.rng { background: #1a1d23; color: #4b5057; cursor: pointer; }
+.rgcell.rng { background: #1a1d23; color: #7b828c; cursor: pointer; }
 .rgcell.rng:active { transform: scale(.92); }
 .rgcell.rng.inr { background: var(--accent); color: #0a0d12; }
 .rgcell.rng.seen { box-shadow: 0 0 0 2px #e0b23e inset; color: #e0b23e; }
