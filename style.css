@@ -553,7 +553,7 @@ textarea.noteedit { margin-bottom: 0; }
 .opprow[style*="--player-color"] .cardchips .chip.on.sgreen,
 .opprow[style*="--player-color"] .cardchips .chip.on.sred,
 .opprow[style*="--player-color"] .cardchips .chip.on.syellow,
-.opprow[style*="--player-color"] .cardchips .chip.on.sscale {
+.opprow[style*="--player-color"] .cardchips .chip.on.schoice {
   background: rgba(0,0,0,.42);
   border-color: rgba(255,255,255,.22);
   color: #fff;
@@ -768,7 +768,6 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 11px; font-weight: 700; cursor: pointer; line-height: 1;
 }
 .accbtn.off { opacity: .45; }
-.scaleread .accbtn { margin-left: 4px; }
 
 /* ---- lineup sheet drag reorder ---- */
 .lineitem .draghandle {
@@ -856,19 +855,8 @@ textarea.noteedit { margin-bottom: 0; }
   padding: 5px 14px; font-weight: 800; font-size: 13px; cursor: pointer;
 }
 
-/* Scale-type read: label + slider + numeric readout. Off = muted. */
-.scaleread {
-  margin: 8px 0; padding: 8px 10px; border: 1px solid var(--line);
-  border-radius: 10px; background: var(--panel);
-}
-.scaleread.on { border-color: #4a5878; background: #1c2333; }
-.scaletop { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.scalelbl { flex: 1; font-size: 13px; color: var(--text); }
-.scaleval { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.scaleread.on .scaleval { color: var(--accent); }
-.scaleread .scaleclr { padding: 2px 6px; font-size: 10px; }
-.scaleread input[type="range"] { width: 100%; accent-color: var(--accent); }
-.chip.on.sscale { background: #1a2b3d; color: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+/* Choice-type read (Tight/Normal/Wide, GTO/EXP): the picked option lights up accent. */
+.chip.on.schoice, .bubble.on.schoice { background: #1a2b3d; color: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; font-weight: 700; }
 
 @media (min-width: 460px) { .cardgrid button { font-size: 13px; } }
 

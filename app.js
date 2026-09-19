@@ -21,21 +21,23 @@ let lineupSeats = 9;              // table size (6–9); picks which subset of t
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
 const DEFAULT_OPEN_BB = [8, 10, 12, 15];   // standard live-open sizes, in big blinds
 let blindsDefault = { sb: "2", bb: "4", std: "" };   // 2/4 default; sticky once you change it
-let pendingReadWrite = null;      // scale-slider write waiting on the debounce timer
 
 const oppById = (id) => OPP.find((o) => o.id === id);
 
 /* ---------- reads: intensity-scaled tendency toggles ----------
-   Cycle: off → yes → yes! (strong) → no → no! (strong) → off. Draw-size and
-   limp-wide-scale keep the 3-colour scale. Legacy tags (over-folds-cbet →
-   over-cbet:no, gives-up-turn → barrels-off:no, etc.) migrate on boot. */
+   Cycle: off → yes → yes! (strong) → no → no! (strong) → off. Draw-size keeps
+   the 3-colour scale; choice reads (Tight/Normal/Wide, GTO/EXP) hold one option
+   id. Legacy tags (over-folds-cbet → over-cbet:no, gives-up-turn →
+   barrels-off:no, etc.) migrate on boot. */
 const READ_CYCLE = {
   "size-up-draws":   ["green", "yellow", "red"],
 };
 const readCycle = (id) => READ_CYCLE[id] || ["yes", "yes!", "no", "no!"];
-const SCALE_READS = new Set(
-  (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "scale").map((t) => t.id));
-const isScaleRead = (id) => SCALE_READS.has(id);
+const CHOICE_READS = new Set(
+  (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "choice").map((t) => t.id));
+const isChoiceRead = (id) => CHOICE_READS.has(id);
+const choiceOptions = (id) => TAG_BY_ID[id]?.options || [];                  // [[value, label], …]
+const choiceLabel = (id, v) => (choiceOptions(id).find((o) => o[0] === v) || [v, v])[1];
 const POSITION_READS = new Set(
   (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "position").map((t) => t.id));
 const isPositionRead = (id) => POSITION_READS.has(id);
@@ -57,21 +59,11 @@ function nextReadState(id, cur) {
   const i = cyc.indexOf(cur);
   return i < 0 || i === cyc.length - 1 ? null : cyc[i + 1];
 }
-/* Scale-read text label: number → tight/normal/wide bucket, for chip display. */
-function scaleBucket(n) {
-  const v = Number(n);
-  if (!isFinite(v)) return "";
-  if (v <= 20) return "tight";
-  if (v <= 40) return "tightish";
-  if (v <= 60) return "normal";
-  if (v <= 80) return "loose";
-  return "wide";
-}
 const readChip = (id, state) => {
   const lbl = TAG_BY_ID[id]?.label || id;
-  if (isScaleRead(id)) {
-    const v = Math.max(0, Math.min(100, Number(state) || 0));
-    return `<span class="chip mini on sscale" title="${esc(lbl)}: ${v}/100 (${scaleBucket(v)})">${esc(lbl)} · ${v}</span>`;
+  if (isChoiceRead(id)) {
+    const v = choiceLabel(id, state);
+    return `<span class="chip mini on schoice" title="${esc(lbl)}: ${esc(v)}">${esc(lbl)} · ${esc(v)}</span>`;
   }
   if (isPositionRead(id)) {
     return `<span class="chip mini on sgreen" title="${esc(lbl)}: ${esc(state)}">${esc(lbl)} · ${esc(state)}</span>`;
@@ -293,8 +285,8 @@ const READ_LEGACY_MAP = {
   "draw-size":         { to: "size-up-draws", state: "yes" },      // renamed
   "bluff-raise-flop":  { to: "bluff-raise-f", state: "yes" },      // was single, now F of triad
   "bluff-xt":          { to: "bluff-xt-t",    state: "yes" },      // XT typically means check-flop bet turn
-  "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // scale target: yes → 90 (wide), no → 10
-  "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → NS scale, same 90/10
+  "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // choice target: yes → wide, no → tight
+  "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → nS width, same wide/tight
 };
 /* One-time backfill: re-parse notes that were already converted to hands and,
    when the new parser extracts a squid state the saved hand doesn't have,
@@ -358,6 +350,17 @@ async function migrateDupBoardCards() {
   await metaSet("migrations.dupCardsV1", { ts: Date.now(), patched });
 }
 
+/* Old limp-width values → Tight/Normal/Wide: slider ≤40 tight, ≤60 normal,
+   else wide; yes = wide, no = tight. Other choice reads have no legacy form. */
+function legacyChoice(id, v) {
+  if (!id.startsWith("limp-scale-")) return null;
+  const b = readBase(v);
+  if (b === "yes") return "wide";
+  if (b === "no") return "tight";
+  const n = v === "" || v == null ? NaN : Number(v);
+  if (!Number.isFinite(n)) return null;
+  return n <= 40 ? "tight" : n <= 60 ? "normal" : "wide";
+}
 async function migrateLegacyReads() {
   for (const o of OPP) {
     const r = oppReads(o);
@@ -366,19 +369,18 @@ async function migrateLegacyReads() {
       if (r[oldId] == null) continue;
       const old = r[oldId], base = readBase(old);
       let next = base === "yes" ? state : base === "no" ? (state === "yes" ? "no" : "yes") : old;
-      if (isScaleRead(to)) next = next === "yes" ? 90 : next === "no" ? 10 : null;   // scales hold 0–100, not yes/no
+      if (isChoiceRead(to)) next = legacyChoice(to, next);                             // yes/no → option id
       else if (isStrongRead(old)) next += "!";                                       // keep the ! strength
       if (r[to] == null && next != null) r[to] = next;
       delete r[oldId];
       dirty = true;
     }
-    // Scale reads hold numbers; a yes/no left there (early imports) shows as
-    // "off" on the card but "on" in the detail — normalise it.
+    // Choice reads hold an option id; the old 0–100 slider numbers and any
+    // yes/no left by early imports map onto the nearest option (or clear).
     for (const id of Object.keys(r)) {
-      if (!isScaleRead(id) || typeof r[id] === "number") continue;
-      const b = readBase(r[id]);
-      const n = b === "yes" ? 90 : b === "no" ? 10 : (r[id] == null || r[id] === "" ? NaN : Number(r[id]));
-      if (Number.isFinite(n)) r[id] = n; else delete r[id];
+      if (!isChoiceRead(id) || choiceOptions(id).some((o) => o[0] === r[id])) continue;
+      const next = legacyChoice(id, r[id]);
+      if (next != null) r[id] = next; else delete r[id];
       dirty = true;
     }
     if (dirty) { o.updatedAt = Date.now(); await dbPut("opponents", o); }
@@ -1081,12 +1083,10 @@ function featuredItems(o) {
     o.featured = o.pinnedExploit ? [{ type: "exploit", id: o.pinnedExploit }] : [];
   return o.featured;
 }
-/* A read is "on" if it has a real state — for scale reads, a value > 0.
-   Reads at 0 are treated the same as unset (see #14). */
+/* A read is "on" if it has a real state (position/choice: a non-empty pick). */
 const readIsActive = (id, state) => {
   if (state == null || state === "") return false;
-  if (isScaleRead(id)) return Number(state) > 0;
-  if (isPositionRead(id)) return !!String(state).trim();
+  if (isPositionRead(id) || isChoiceRead(id)) return !!String(state).trim();
   return true;
 };
 const readIsShown = (o, id) => readIsActive(id, oppReads(o)[id]);
@@ -1711,17 +1711,10 @@ function renderOppDetail(id) {
         <select class="prselect" data-posselect="${id}">${opts}</select>
       </label>`;
     }
-    if (isScaleRead(id)) {
-      const v = Math.max(0, Math.min(100, Number(st) || 0));
-      const active = readIsActive(id, st);
-      return `<div class="scaleread${active ? " on" : ""}" data-scaleid="${id}">
-        <div class="scaletop">
-          <span class="scalelbl">${esc(lbl)}</span>
-          <span class="scaleval">${active ? v + " · " + scaleBucket(v) : "off"}</span>
-          ${active ? `<button class="chip mini scaleclr" data-scaleclear="${id}" title="Clear">✕</button>` : ""}
-        </div>
-        <input type="range" min="0" max="100" step="1" value="${v}" data-scaleinput="${id}">
-      </div>`;
+    if (isChoiceRead(id)) {
+      const opts = choiceOptions(id).map(([v, l]) =>
+        `<button class="bubble${st === v ? " on schoice" : ""}" data-choice="${id}" data-val="${v}">${esc(l)}</button>`).join("");
+      return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">${opts}</div></div>`;
     }
     const base = bubble ? "bubble" : "chip mini";
     return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
@@ -1735,7 +1728,7 @@ function renderOppDetail(id) {
     const subgroups = READ_SUBCATS[cat] || [];
     const usedIds = new Set(subgroups.flatMap((s) => s.ids));
     // Retired reads — data preserved on old opponents, but no longer offered as a toggle.
-    const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isScaleRead(t.id) && !RETIRED_TAG_IDS.has(t.id);
+    const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isChoiceRead(t.id) && !RETIRED_TAG_IDS.has(t.id);
     const chipFor = (id) => { const t = TAG_BY_ID[id]; return t && isSingle(t) ? readBtn(t.id, t.label, false) : ""; };
     const subHTML = subgroups.map((sg) => {
       const chips = sg.ids.map(chipFor).filter(Boolean).join("");
@@ -1748,11 +1741,11 @@ function renderOppDetail(id) {
       .map((t) => readBtn(t.id, t.label, false)).join("") +
       TENDENCY_TAGS.filter((t) => t.cat === cat && RETIRED_TAG_IDS.has(t.id) && readIsActive(t.id, reads[t.id]))
         .map((t) => readBtn(t.id, t.label + " (retired)", false)).join("");
-    const scales = TENDENCY_TAGS.filter((t) => t.cat === cat && isScaleRead(t.id))
+    const choices = TENDENCY_TAGS.filter((t) => t.cat === cat && isChoiceRead(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
     return `<div class="tagcat">${cat}</div>${groups}${subHTML}` +
       (otherSingles ? `<div class="readsub"><span class="rslabel">Other</span><div class="chiprow readwrap">${otherSingles}</div></div>` : "") +
-      scales;
+      choices;
   }).join("");
 
   // FEATURE 1 — reads inferred from this opponent's logged hands
@@ -4174,11 +4167,12 @@ function bindStatic() {
     renderOppDetail(curOppId);
   };
   $("od-tags").onclick = async (e) => {
-    const clr = e.target.closest("[data-scaleclear]");
-    if (clr) {
+    const ch = e.target.closest("[data-choice]");
+    if (ch) {                       // one-of-N read: tap picks, tapping the active option clears
       const o = oppById(curOppId);
-      const id = clr.dataset.scaleclear;
-      delete oppReads(o)[id];
+      const reads = oppReads(o);
+      const { choice: id, val } = ch.dataset;
+      if (reads[id] === val) delete reads[id]; else reads[id] = val;
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
@@ -4207,39 +4201,6 @@ function bindStatic() {
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
-  });
-  $("od-tags").addEventListener("input", async (e) => {
-    const s = e.target.closest("[data-scaleinput]");
-    if (!s) return;
-    const o = oppById(curOppId);
-    const id = s.dataset.scaleinput;
-    const v = Math.max(0, Math.min(100, Number(s.value) || 0));
-    oppReads(o)[id] = v;
-    o.updatedAt = Date.now();
-    // Cheap live update: just refresh the visible readout, don't full-rerender on every drag tick.
-    const row = s.closest(".scaleread");
-    if (row) {
-      row.classList.add("on");
-      const rd = row.querySelector(".scaleval");
-      if (rd) rd.textContent = v + " · " + scaleBucket(v);
-    }
-    // Short debounce + a "pending" reference so pagehide can flush before Safari suspends us.
-    clearTimeout($("od-tags")._scaleT);
-    pendingReadWrite = o;
-    $("od-tags")._scaleT = setTimeout(() => {
-      dbPut("opponents", o);
-      if (pendingReadWrite === o) pendingReadWrite = null;
-    }, 50);
-  });
-  // Also save on 'change' — fires when the drag ends, guarantees a write even if
-  // the debounce timer hasn't fired yet.
-  $("od-tags").addEventListener("change", (e) => {
-    const s = e.target.closest("[data-scaleinput]");
-    if (!s) return;
-    const o = oppById(curOppId);
-    clearTimeout($("od-tags")._scaleT);
-    dbPut("opponents", o);
-    if (pendingReadWrite === o) pendingReadWrite = null;
   });
   $("od-note-add").onclick = async () => {
     const text = $("od-note").value.trim();
@@ -4587,19 +4548,6 @@ async function boot() {
   draft = saved ? Object.assign(newDraft(), saved) : newDraft();
   bindStatic();
   window.addEventListener("hashchange", route);
-  // Flush any pending scale-read write before Safari suspends the tab so
-  // slider changes are never lost when the user backgrounds the app.
-  const flushPendingRead = () => {
-    if (!pendingReadWrite) return;
-    const o = pendingReadWrite;
-    pendingReadWrite = null;
-    clearTimeout($("od-tags")?._scaleT);
-    dbPut("opponents", o);
-  };
-  window.addEventListener("pagehide", flushPendingRead);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushPendingRead();
-  });
   route();
   // ensure an auto-backup exists on first boot (or if it's stale)
   const snap = await metaGet("autoSnapshot");

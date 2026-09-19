@@ -27,8 +27,9 @@ const SUITS = [
    (over-folds-cbet, fit-or-fold, gives-up-turn, never-bluffs, limps-monsters)
    auto-migrate onto these survivors in app.js. Limps monsters is now a grouped
    bubble row (wS / nS). */
-/* Reads with `kind: "scale"` are 0-100 sliders, not tri-state toggles.
-   They store a number in o.reads[id]; renderer draws a range input. */
+/* Reads with `kind: "choice"` are one-of-N buttons (e.g. Tight / Normal /
+   Wide), not yes/no cycles. They store the chosen option id in o.reads[id];
+   tapping the active option clears the read. */
 const TENDENCY_TAGS = [
   // preflop — opening
   { id: "open-too-wide",        cat: "preflop",  label: "Open too wide" },
@@ -48,8 +49,9 @@ const TENDENCY_TAGS = [
   // preflop — limping / squid (limp-caller + lp-limp-weak are retired — see RETIRED_TAG_IDS)
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
-  { id: "limp-scale-ws",        cat: "preflop",  label: "Limp with wS",   kind: "scale" },
-  { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS",   kind: "scale" },
+  { id: "preflop-style",        cat: "preflop",  label: "Preflop",        kind: "choice", options: [["gto", "GTO"], ["exp", "EXP"]] },
+  { id: "limp-scale-ws",        cat: "preflop",  label: "Limp with wS",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
+  { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
   { id: "limp-wide-multiplier", cat: "preflop",  label: "Goes for multipliers" },
   { id: "wide-cc",              cat: "preflop",  label: "Wide CC" },
   // preflop — 3bet / 4bet (linear/polar/bluff are retired — see RETIRED_TAG_IDS)
