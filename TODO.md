@@ -7,9 +7,9 @@ Live site auto-deploys from `main` to GitHub Pages.
 
 ## Open
 
-Nothing outstanding from the July 27 spec. Repo housekeeping only:
+Nothing outstanding from the July 27 spec.
 
-- [ ] Decide on `.claude/launch.json` — either `git add .claude/launch.json` (so anyone who clones gets the preview config) or add `.claude/` to `.gitignore`.
+- [x] `.claude/launch.json` is committed, so a fresh clone gets the preview config.
 
 ## Done in this session
 

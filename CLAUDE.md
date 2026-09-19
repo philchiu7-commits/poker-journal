@@ -39,7 +39,7 @@ server. To test a change against fresh assets in the preview:
   tab shows tonight's seat-ring lineup (same `tableLineup` meta as hand
   entry's Lineup sheet) with each opponent's front-page card chips; its
   renderer is `renderTableTab` (`renderTable` is the hand-entry felt).
-- `app.js` — all UI + business logic, ~2900 lines. Renderers are named
+- `app.js` — all UI + business logic, ~4600 lines. Renderers are named
   `render*` and are cheap to re-run; state lives in module globals (`draft`,
   `sheetGroup`, etc.). Sheets are one shared `#sheet` element; dispatch by
   `sheetGroup` string (`"__act__"`, `"__seat__"`, …).
@@ -57,15 +57,23 @@ server. To test a change against fresh assets in the preview:
 
 ## Data model
 
-- `opponents`: `{id, name, group?, physical?, reads: {tagId: "yes"|"no"|…},
-  exploits: [{id, ts, text, src?}], featured?: [{type,id}], notes: [...]}`.
-- `hands`: `{id, ts, opponentId?, villains: [{opponentId, seat, pos}], hero:
-  {seat, pos}, actions: [{street, actor, act, size?}], board: [...], holes:
-  {...}, bb, effstack, mode: "chips"|"table", ...}`.
-- The **structured `actions[]` token stream** is the format the v2 exploit
-  engine will consume (VPIP-ish, fold-to-cbet, 3bet freq per villain) and
-  what `handText()` serializes for LLM summaries. Don't collapse it into a
-  string.
+- `opponents`: `{id, name, group?, type?, physical?, aliases?: [name…],
+  reads: {tagId: "yes"|"no"|"yes!"|"no!"|position|choiceOptionId},
+  exploits: [{id, ts, text, src?}], exploitDismissed?: [key…],
+  featured?: [{type,id}], notes: [...], ranges?: {spotId: {hands: [class…],
+  seen: [class…]}}, order?, createdAt?, updatedAt, archived?}`. Reads: see
+  `TENDENCY_TAGS` (kinds: yes/no, `position`, `choice`); ranges: `RANGE_SPOTS`
+  / `RANGE_CLASSES` in `vocab.js`, hand classes are 13×13 grid labels (`AKs`).
+- `hands`: `{id, ts, updatedAt, villains: [{opponentId, pos, cards, chips?}],
+  villainIds, hero, heroPos, heroCards, actions: [{street, actor, act, size?}],
+  board: [5], blinds: {sb, bb, std, ante}, effStack, note, mode?, srcNoteId?,
+  imported?: {source, tableId, roundId, noK}, showdown}`. `normaliseHand`
+  (app.js) tidies tokens/cards on every boot without touching `updatedAt`.
+- The **structured `actions[]` token stream** feeds `handText()` (LLM
+  summaries), the shown-hands range grid and per-opponent *read suggestions*
+  (`READ_SIGNALS`; Phil accepts or dismisses each). It is deliberately **not**
+  aggregated into stats — no VPIP/PFR/3-bet %/fold-to-cbet, no HUD, no
+  sample-size gating. Don't collapse the stream into a string either.
 
 ## Hand entry — recent shape (v54)
 

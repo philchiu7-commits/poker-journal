@@ -56,6 +56,7 @@ python3 -m http.server 8002
 
 - Deploying an update: bump `CACHE` in `sw.js` (e.g. `journal-v2`) so installed
   phones pick up the new version on next launch.
-- Data model is structured (action tokens + tag ids), so a v2 exploit engine
-  can compute VPIP-ish stats / fold-to-cbet / 3bet frequency per opponent, and
-  the plain-text hand render (`handText`) is the intended LLM input format.
+- Data model is structured (action tokens + read ids) so `handText` can render
+  a plain-text hand history for LLM summaries and the app can *suggest* reads
+  from logged hands. By design there are no aggregate stats (no VPIP /
+  fold-to-cbet / 3-bet %, no HUD) — reads and exploits are set by hand.
