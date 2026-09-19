@@ -39,6 +39,7 @@ const TENDENCY_TAGS = [
   { id: "open-small-pp-ep",     cat: "preflop",  label: "Open smallPP EP" },
   { id: "limps-are-weak",       cat: "preflop",  label: "Limps are weak" },
   { id: "open-range-w1s",       cat: "preflop",  label: "Open range w1S" },
+  // first-raise-ns/ws and lrr-latest-ns/ws are retired — the V/B rows replaced them.
   { id: "first-raise-ns",       cat: "preflop",  label: "1st R — nS",     kind: "position" },
   { id: "first-raise-ws",       cat: "preflop",  label: "1st R — wS",     kind: "position" },
   { id: "first-raise-v-ns",     cat: "preflop",  label: "1st R V — nS",   kind: "position" },
@@ -137,7 +138,8 @@ const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]))
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
-const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak"]);
+const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak",
+  "first-raise-ns", "first-raise-ws", "lrr-latest-ns", "lrr-latest-ws"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
 /* Sub-cluster single-read chips within each category so related reads live
@@ -147,8 +149,8 @@ const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 const READ_SUBCATS = {
   preflop: [
     { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
-    { label: "First raise",   ids: ["first-raise-ns", "first-raise-ws", "first-raise-v-ns", "first-raise-v-ws", "first-raise-b-ns", "first-raise-b-ws"] },
-    { label: "LRR",           ids: ["lrr-latest-ns", "lrr-latest-ws", "lrr-v-ns", "lrr-v-ws", "lrr-b-ns", "lrr-b-ws"] },
+    { label: "First raise",   ids: ["first-raise-v-ns", "first-raise-v-ws", "first-raise-b-ns", "first-raise-b-ws"] },
+    { label: "LRR",           ids: ["lrr-v-ns", "lrr-v-ws", "lrr-b-ns", "lrr-b-ws"] },
     { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
   ],
