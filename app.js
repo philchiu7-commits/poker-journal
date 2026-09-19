@@ -78,6 +78,7 @@ const READ_GROUPS = [
   { cat: "postflop", label: "Raise nuts", bubbles: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
   { cat: "postflop", label: "Bluff till", bubbles: [["bluff-till-f", "F"], ["bluff-till-t", "T"], ["bluff-till-r", "R"]] },
   { cat: "postflop", label: "Bluff raise", bubbles: [["bluff-raise-f", "F"], ["bluff-raise-t", "T"], ["bluff-raise-r", "R"]] },
+  { cat: "postflop", label: "Have B3b F", bubbles: [["have-b3b-v-f", "V"], ["have-b3b-b-f", "B"]] },
   { cat: "postflop", label: "Bluff XT",   bubbles: [["bluff-xt-f", "F"], ["bluff-xt-t", "T"], ["bluff-xt-r", "R"]] },
   { cat: "postflop", label: "Range",      bubbles: [["merged", "Merged"], ["polar", "Polar"]] },
 ];

@@ -70,7 +70,7 @@ const TENDENCY_TAGS = [
   { id: "can-4bet-light",       cat: "preflop",  label: "Can 4bet light" },
   { id: "over-folds-3bet",      cat: "preflop",  label: "Over-folds to 3bet" },
   { id: "lrr-bluff",            cat: "preflop",  label: "Lrr bluff" },
-  // postflop — grouped bubbles (Station/Lead/Raise-nuts/Bluff-till/Range/Bluff-raise/Bluff-XT)
+  // postflop — grouped bubbles (Station/Lead/Raise-nuts/Bluff-till/Range/Bluff-raise/Have-B3b/Bluff-XT)
   { id: "station-f",            cat: "postflop", label: "Station F" },
   { id: "station-t",            cat: "postflop", label: "Station T" },
   { id: "station-r",            cat: "postflop", label: "Station R" },
@@ -86,6 +86,8 @@ const TENDENCY_TAGS = [
   { id: "bluff-raise-f",        cat: "postflop", label: "Bluff raise F" },
   { id: "bluff-raise-t",        cat: "postflop", label: "Bluff raise T" },
   { id: "bluff-raise-r",        cat: "postflop", label: "Bluff raise R" },
+  { id: "have-b3b-v-f",        cat: "postflop", label: "Have B3b V F" },
+  { id: "have-b3b-b-f",        cat: "postflop", label: "Have B3b B F" },
   { id: "bluff-xt-f",           cat: "postflop", label: "Bluff XT F" },
   { id: "bluff-xt-t",           cat: "postflop", label: "Bluff XT T" },
   { id: "bluff-xt-r",           cat: "postflop", label: "Bluff XT R" },
