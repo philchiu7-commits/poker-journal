@@ -352,6 +352,39 @@ async function migrateDupBoardCards() {
   await metaSet("migrations.dupCardsV1", { ts: Date.now(), patched });
 }
 
+/* Tidy one hand's tokens and card strings so every renderer reads it the same
+   way whatever produced it: hnlbds imports label the first postflop bet
+   "raise"; old note imports used "open" and a single "limp-raise" token; a few
+   records carry non-cards ("Sh", "None"). Idempotent, and it never bumps
+   updatedAt — a later correction file must still win on import. */
+const CARD_RX = /^[2-9TJQKA][shdc]$/;
+const AGGRESSIVE_ACTS = new Set(["bet", "raise", "jam", "3bet", "4bet", "5bet"]);
+function normaliseHand(h) {
+  let dirty = false;
+  const out = [], betSeen = {};
+  for (const a of Array.isArray(h.actions) ? h.actions : []) {
+    if (!a || typeof a !== "object") { dirty = true; continue; }
+    let act = a.act;
+    if (a.street === "pre") {
+      if (act === "open") act = "raise";
+      if (act === "limp-raise") { out.push({ ...a, act: "limp", size: null }); act = "3bet"; }
+    } else if (h.imported && act === "raise" && !betSeen[a.street]) act = "bet";
+    if (AGGRESSIVE_ACTS.has(act)) betSeen[a.street] = true;
+    if (act !== a.act) { dirty = true; out.push({ ...a, act }); } else out.push(a);
+  }
+  if (dirty || out.length !== (h.actions || []).length) { h.actions = out; dirty = true; }
+  const fixCards = (arr) => {
+    if (!Array.isArray(arr)) return;
+    for (let i = 0; i < arr.length; i++) if (arr[i] != null && !CARD_RX.test(arr[i])) { arr[i] = null; dirty = true; }
+  };
+  fixCards(h.board); fixCards(h.heroCards);
+  for (const v of h.villains || []) fixCards(v && v.cards);
+  return dirty;
+}
+async function normaliseHandTokens() {
+  for (const h of HANDS) if (normaliseHand(h)) await dbPut("hands", h);
+}
+
 /* Old limp-width values → Tight/Normal/Wide: slider ≤40 tight, ≤60 normal,
    else wide; yes = wide, no = tight. Other choice reads have no legacy form. */
 function legacyChoice(id, v) {
@@ -366,7 +399,8 @@ function legacyChoice(id, v) {
 async function migrateLegacyReads() {
   for (const o of OPP) {
     const r = oppReads(o);
-    let dirty = false;
+    let dirty = false, tidy = false;
+    if (Array.isArray(o.tags)) { delete o.tags; tidy = true; }   // legacy list already folded into reads above
     for (const [oldId, { to, state }] of Object.entries(READ_LEGACY_MAP)) {
       if (r[oldId] == null) continue;
       const old = r[oldId], base = readBase(old);
@@ -386,6 +420,7 @@ async function migrateLegacyReads() {
       dirty = true;
     }
     if (dirty) { o.updatedAt = Date.now(); await dbPut("opponents", o); }
+    else if (tidy) await dbPut("opponents", o);
   }
 }
 
@@ -866,6 +901,7 @@ async function commitOneImport(rec, map) {
     note: rec.tableId ? `Imported · table ${rec.tableId}${rec.roundId ? ` #${rec.roundId}` : ""}` : "Imported",
     imported: { source: rec.source || "external", tableId: rec.tableId, roundId: rec.roundId, noK: (rec.source || "") === "hnlbds" },
   };
+  normaliseHand(hand);
   const win = handWinner(hand); hand.showdown = !!win && win.how === "showdown";
   await dbPut("hands", hand);
   HANDS.push(hand);
@@ -4573,6 +4609,7 @@ async function boot() {
   await migrateLegacyReads();
   await migrateNoteConvertedSquid();
   await migrateDupBoardCards();
+  await normaliseHandTokens();
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
