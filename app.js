@@ -1085,8 +1085,11 @@ function renderRangeGrid(oppId) {
 }
 
 /* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
-let rangeSpotSel = RANGE_SPOTS[0].id;   // which spot the editor shows
-let showSeenHands = false;              // "Seen" toggle: show + mark observed hands instead of editing the range
+let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being sketched
+let rangeSitSel = RANGE_SITS[0].id;     // Seen mode only: which situation the marks belong to
+let showSeenHands = false;              // "Seen" toggle: record + show the hands you've watched them turn up
+/* Editing always writes the squid state's own range; Seen writes the situation. */
+const curRangeSpot = () => rangeSpotId(rangeSquid, showSeenHands ? rangeSitSel : "all");
 const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
 const rangeSpotData = (o, key) => { const s = oppRanges(o)[key] || {}; return { hands: s.hands || [], seen: s.seen || [] }; };
 const byGridOrder = (a, b) => (HAND_CLASS_ORDER[a] ?? 999) - (HAND_CLASS_ORDER[b] ?? 999);
@@ -1099,32 +1102,42 @@ function setRangeSpot(o, key, hands, seen) {
   o.updatedAt = Date.now();
 }
 function renderOppRanges(o) {
-  const spots = RANGE_SPOTS.map((sp) => {
-    const { hands } = rangeSpotData(o, sp.id);
-    return `<button class="chip mini${sp.id === rangeSpotSel ? " on" : ""}" data-rspot="${sp.id}" title="${esc(sp.title)}">${esc(sp.label)}${hands.length ? `<i>${hands.length}</i>` : ""}</button>`;
+  const baseKey = rangeSpotId(rangeSquid, "all"), key = curRangeSpot();
+  const base = rangeSpotData(o, baseKey), cur = rangeSpotData(o, key);
+  const squids = RANGE_SQUIDS.map((s) => {
+    const n = rangeSpotData(o, rangeSpotId(s.id, "all")).hands.length;
+    return `<button class="chip mini${s.id === rangeSquid ? " on" : ""}" data-rsquid="${s.id}" title="${esc(s.title)}">${esc(s.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
-  const spot = RANGE_SPOTS.find((x) => x.id === rangeSpotSel) || RANGE_SPOTS[0];
-  const { hands, seen } = rangeSpotData(o, spot.id);
-  const inr = new Set(hands), seenSet = new Set(seen);
+  // The situations only show under Seen — that's where you log what they actually turned up.
+  const sits = !showSeenHands ? "" : RANGE_SITS.map((t) => {
+    const n = rangeSpotData(o, rangeSpotId(rangeSquid, t.id)).seen.length;
+    return `<button class="chip mini${t.id === rangeSitSel ? " on" : ""}" data-rsit="${t.id}" title="${esc(t.title)}">${esc(t.label)}${n ? `<i>${n}</i>` : ""}</button>`;
+  }).join("");
+  const inr = new Set(base.hands), seenSet = new Set(cur.seen);
   // Class chip: lit when every hand of the class is in; dashed when only some are.
-  const classes = RANGE_CLASSES.map((c) => {
+  const classes = showSeenHands ? "" : RANGE_CLASSES.map((c) => {
     const n = c.hands.filter((h) => inr.has(h)).length;
     const st = n === c.hands.length ? " on" : n ? " part" : "";
     return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
   }).join("");
   const cells = HAND_CLASSES.map((c) =>
     `<div class="rgcell rng${inr.has(c) ? " inr" : ""}${showSeenHands && seenSet.has(c) ? " seen" : ""}" data-rcell="${c}" role="button">${c}</div>`).join("");
-  const combos = hands.reduce((n, c) => n + handClassCombos(c), 0);
+  const combos = base.hands.reduce((n, c) => n + handClassCombos(c), 0);
+  const foot = showSeenHands
+    ? `${esc(rangeSpotTitle(rangeSquid, rangeSitSel))} · ${cur.seen.length} hand${cur.seen.length === 1 ? "" : "s"} seen`
+    : `${esc(rangeSpotTitle(rangeSquid, "all"))} · ${base.hands.length} hand${base.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}%`;
+  const clearable = showSeenHands ? cur.seen.length : base.hands.length;
   $("od-ranges").innerHTML = `
-    <div class="rspots chiprow tight">${spots}</div>
-    <div class="rclasses chiprow readwrap">${classes}</div>
+    <div class="rsquid">${squids}</div>
+    ${sits ? `<div class="rspots chiprow tight">${sits}</div>` : ""}
+    ${classes ? `<div class="rclasses chiprow readwrap">${classes}</div>` : ""}
     <div class="rggrid">${cells}</div>
     <div class="rfoot">
-      <span>${esc(spot.title)} · ${hands.length} hand${hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}%${showSeenHands ? ` · ${seen.length} seen` : ""}</span>
+      <span>${foot}</span>
       <span class="spacer"></span>
-      ${hands.length ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
+      ${clearable ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
     </div>
-    ${showSeenHands ? `<div class="rhint">Seen mode — tap a hand to mark that you've watched them turn it up in this spot.</div>` : ""}`;
+    ${showSeenHands ? `<div class="rhint">Seen mode — pick the situation, then tap the hands you've watched them turn up in it.</div>` : ""}`;
   $("od-range-seen").classList.toggle("on", showSeenHands);
 }
 
@@ -4159,11 +4172,13 @@ function bindStatic() {
   $("od-ranges").onclick = async (e) => {
     const o = oppById(curOppId);
     if (!o) return;
-    const sp = e.target.closest("[data-rspot]");
-    if (sp) { rangeSpotSel = sp.dataset.rspot; renderOppRanges(o); return; }
+    const sq = e.target.closest("[data-rsquid]"), st = e.target.closest("[data-rsit]");
+    if (sq) { rangeSquid = sq.dataset.rsquid; renderOppRanges(o); return; }
+    if (st) { rangeSitSel = st.dataset.rsit; renderOppRanges(o); return; }
     const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
     if (!cl && !cell && !clr) return;
-    let { hands, seen } = rangeSpotData(o, rangeSpotSel);
+    const key = curRangeSpot();
+    let { hands, seen } = rangeSpotData(o, key);   // key is the squid range, or the situation under Seen
     if (cl) {                        // class chip: all in → remove all, else add all
       const ch = RANGE_CLASS_BY_ID[cl.dataset.rclass].hands;
       hands = ch.every((h) => hands.includes(h)) ? hands.filter((h) => !ch.includes(h)) : hands.concat(ch);
@@ -4172,11 +4187,16 @@ function bindStatic() {
       const tog = (arr) => arr.includes(c) ? arr.filter((h) => h !== c) : arr.concat(c);
       if (showSeenHands) seen = tog(seen); else hands = tog(hands);
     } else if (clr) {
-      const t = RANGE_SPOTS.find((x) => x.id === rangeSpotSel)?.title || "this";
-      if (!confirm(`Clear the ${t} range? Seen marks stay.`)) return;
-      hands = [];
+      const what = rangeSpotTitle(rangeSquid, showSeenHands ? rangeSitSel : "all");
+      if (showSeenHands) {
+        if (!confirm(`Clear the hands seen in ${what}?`)) return;
+        seen = [];
+      } else {
+        if (!confirm(`Clear the ${what}? Seen marks stay.`)) return;
+        hands = [];
+      }
     }
-    setRangeSpot(o, rangeSpotSel, hands, seen);
+    setRangeSpot(o, key, hands, seen);
     await dbPut("opponents", o);
     renderOppRanges(o);
   };

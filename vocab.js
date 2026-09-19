@@ -41,8 +41,16 @@ const TENDENCY_TAGS = [
   { id: "open-range-w1s",       cat: "preflop",  label: "Open range w1S" },
   { id: "first-raise-ns",       cat: "preflop",  label: "1st R — nS",     kind: "position" },
   { id: "first-raise-ws",       cat: "preflop",  label: "1st R — wS",     kind: "position" },
+  { id: "first-raise-v-ns",     cat: "preflop",  label: "1st R V — nS",   kind: "position" },
+  { id: "first-raise-v-ws",     cat: "preflop",  label: "1st R V — wS",   kind: "position" },
+  { id: "first-raise-b-ns",     cat: "preflop",  label: "1st R B — nS",   kind: "position" },
+  { id: "first-raise-b-ws",     cat: "preflop",  label: "1st R B — wS",   kind: "position" },
   { id: "lrr-latest-ns",        cat: "preflop",  label: "LRR — nS", kind: "position" },
   { id: "lrr-latest-ws",        cat: "preflop",  label: "LRR — wS", kind: "position" },
+  { id: "lrr-v-ns",             cat: "preflop",  label: "LRR V — nS",     kind: "position" },
+  { id: "lrr-v-ws",             cat: "preflop",  label: "LRR V — wS",     kind: "position" },
+  { id: "lrr-b-ns",             cat: "preflop",  label: "LRR B — nS",     kind: "position" },
+  { id: "lrr-b-ws",             cat: "preflop",  label: "LRR B — wS",     kind: "position" },
   // preflop — limping / squid (limp-caller + lp-limp-weak are retired — see RETIRED_TAG_IDS)
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
@@ -139,8 +147,8 @@ const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 const READ_SUBCATS = {
   preflop: [
     { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
-    { label: "First raise",   ids: ["first-raise-ns", "first-raise-ws"] },
-    { label: "LRR",           ids: ["lrr-latest-ns", "lrr-latest-ws"] },
+    { label: "First raise",   ids: ["first-raise-ns", "first-raise-ws", "first-raise-v-ns", "first-raise-v-ws", "first-raise-b-ns", "first-raise-b-ws"] },
+    { label: "LRR",           ids: ["lrr-latest-ns", "lrr-latest-ws", "lrr-v-ns", "lrr-v-ws", "lrr-b-ns", "lrr-b-ws"] },
     { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
   ],
@@ -421,12 +429,22 @@ const RANGE_CLASSES = [
 const RANGE_CLASS_BY_ID = Object.fromEntries(RANGE_CLASSES.map((c) => [c.id, c]));
 /* Spots: the overall range with / without squid, then the four first-raise /
    limp-reraise ranges split into value and bluff. */
-const RANGE_SPOTS = [
-  { id: "range-ns",      label: "nS",      title: "Range — no squid" },
-  { id: "range-ws",      label: "wS",      title: "Range — with squid" },
-  { id: "first-raise-v", label: "1st R V", title: "First raise — value" },
-  { id: "first-raise-b", label: "1st R B", title: "First raise — bluff" },
-  { id: "lrr-v",         label: "LRR V",   title: "Limp-reraise — value" },
-  { id: "lrr-b",         label: "LRR B",   title: "Limp-reraise — bluff" },
+/* Two sketched ranges, nS and wS. The situations only hold Seen marks — the
+   hands you've watched them show — and the positions live in the reads. */
+const RANGE_SQUIDS = [
+  { id: "ns", label: "nS", title: "no squid" },
+  { id: "ws", label: "wS", title: "with squid" },
 ];
+const RANGE_SITS = [
+  { id: "all",           label: "Range",   title: "overall range" },
+  { id: "first-raise-v", label: "1st R V", title: "first raise — value" },
+  { id: "first-raise-b", label: "1st R B", title: "first raise — bluff" },
+  { id: "lrr-v",         label: "LRR V",   title: "limp-reraise — value" },
+  { id: "lrr-b",         label: "LRR B",   title: "limp-reraise — bluff" },
+];
+const rangeSpotId = (sq, sit) => (sit === "all" ? "range-" + sq : sq + "-" + sit);
+const rangeSpotTitle = (sq, sit) =>
+  (RANGE_SITS.find((t) => t.id === sit)?.title || sit) + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
+const RANGE_SPOTS = RANGE_SQUIDS.flatMap((s) => RANGE_SITS.map((t) => (
+  { id: rangeSpotId(s.id, t.id), label: s.label + " " + t.label, title: rangeSpotTitle(s.id, t.id) })));
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326
