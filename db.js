@@ -79,10 +79,21 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID()
 
 /* ---------- export / import ---------- */
 
+/* Meta keys that belong in a backup. Deliberately a whitelist: autoSnapshot is
+   a full copy of everything else (it would square the file on every export) and
+   the live-game scratch — lineup, seats, draft hand — belongs to the phone in
+   front of you, not to the archive. */
+const EXPORT_META_KEYS = ["savedRanges"];
+
 async function exportData() {
   const [opponents, hands, sessions] = await Promise.all(
     ["opponents", "hands", "sessions"].map(dbAll));
-  return { app: "poker-journal", version: 1, exportedAt: Date.now(), opponents, hands, sessions };
+  const meta = {};
+  for (const k of EXPORT_META_KEYS) {
+    const v = await metaGet(k);
+    if (v != null) meta[k] = v;
+  }
+  return { app: "poker-journal", version: 1, exportedAt: Date.now(), opponents, hands, sessions, meta };
 }
 
 /* Silent auto-backup: after any mutation, stash a fresh full export snapshot
@@ -188,7 +199,7 @@ function mergeOppRecords(into, from) {
 async function importJSON(data) {
   if (!data || data.app !== "poker-journal" || !Array.isArray(data.opponents))
     throw new Error("Not a poker-journal export file");
-  const counts = { opponents: 0, merged: 0, hands: 0, sessions: 0 };
+  const counts = { opponents: 0, merged: 0, hands: 0, sessions: 0, ranges: 0 };
 
   const existing = await dbAll("opponents");
   const nameCount = {};
@@ -241,6 +252,18 @@ async function importJSON(data) {
     if (!rec.id) continue;
     const cur = await dbGet("sessions", rec.id);
     if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) { await dbPut("sessions", rec); counts.sessions++; }
+  }
+  // Saved ranges: union by id, newer wins. An import must never drop a range
+  // the other device added, same rule as reads and notes.
+  const inMeta = data.meta && typeof data.meta === "object" ? data.meta : null;
+  if (inMeta && Array.isArray(inMeta.savedRanges)) {
+    const byId = new Map(((await metaGet("savedRanges")) || []).map((r) => [r.id, r]));
+    for (const r of inMeta.savedRanges) {
+      if (!r || !r.id || !Array.isArray(r.hands)) continue;
+      const have = byId.get(r.id);
+      if (!have || (r.updatedAt || 0) > (have.updatedAt || 0)) { byId.set(r.id, r); counts.ranges++; }
+    }
+    if (counts.ranges) await metaSet("savedRanges", [...byId.values()]);
   }
   return counts;
 }

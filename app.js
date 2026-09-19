@@ -272,6 +272,7 @@ async function mergeOpponents(fromId, intoId) {
 
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
+  savedRanges = ((await metaGet("savedRanges")) || []).filter((r) => r && r.id && Array.isArray(r.hands));   // an import can add ranges too
 }
 
 /* Legacy read migration: fold removed tags onto their surviving axis-mate. */
@@ -506,8 +507,8 @@ function hideSheet() {
 }
 
 /* ---------- routing ---------- */
-const VIEWS = ["opponents", "opp", "hand", "table", "handview", "data"];
-const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", data: "data" };
+const VIEWS = ["opponents", "opp", "hand", "table", "handview", "ranges", "data"];
+const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", ranges: "ranges", data: "data" };
 
 function route() {
   const raw = (location.hash || "#opponents").slice(1);
@@ -537,7 +538,8 @@ function route() {
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
   hideSheet();
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
-     table: renderTableTab, handview: () => renderHandView(arg), data: renderData })[v]();
+     table: renderTableTab, handview: () => renderHandView(arg), ranges: renderRangeLib,
+     data: renderData })[v]();
   window.scrollTo(0, 0);
 }
 
@@ -1177,6 +1179,165 @@ function renderOppRanges(o) {
   $("od-range-seen").classList.toggle("on", showSeenHands);
   $("od-range-shown").classList.toggle("on", showShownLayer);
   $("od-range-shown").hidden = showSeenHands;
+}
+
+/* ================= Saved ranges (library tab) =================
+   A scratch 13×13 you paint freely, plus a library of named hand sets. The
+   library ships empty on purpose — every range in it is one you saved, so it
+   stays a record of how you actually read this game rather than someone's
+   chart. Both directions link to a player: pull a villain's sketch in to
+   start from, push the scratch back onto one once it fits. */
+let savedRanges = [];                          // [{id, name, hands, createdAt, updatedAt}]
+let scratch = { name: "", srcId: null, hands: [] };   // srcId = the library range it came from
+
+const rangePct = (hands) => {
+  const combos = hands.reduce((n, c) => n + handClassCombos(c), 0);
+  return { combos, pct: (combos / 13.26).toFixed(1) };
+};
+const rangeStatsText = (hands) => {
+  const { combos, pct } = rangePct(hands);
+  return `${hands.length} hand${hands.length === 1 ? "" : "s"} · ${combos} combos · ${pct}%`;
+};
+/* Class chip over any hand set: lit when the whole class is in, dashed when part. */
+const rangeClassChips = (set) => RANGE_CLASSES.map((c) => {
+  const n = c.hands.filter((h) => set.has(h)).length;
+  const st = n === c.hands.length ? " on" : n ? " part" : "";
+  return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
+}).join("");
+/* Toggle a whole class: all in → take them all out, otherwise put them all in. */
+const toggleClass = (hands, id) => {
+  const ch = RANGE_CLASS_BY_ID[id].hands;
+  return ch.every((h) => hands.includes(h)) ? hands.filter((h) => !ch.includes(h)) : hands.concat(ch);
+};
+const saveScratch = () => metaSet("rangeScratch", scratch);
+const saveLibrary = () => metaSet("savedRanges", savedRanges);
+/* Every sketch any player has, as pickable rows — the "load from" source. */
+function oppRangeRows() {
+  const rows = [];
+  for (const o of OPP) {
+    for (const s of RANGE_SQUIDS) {
+      const hands = rangeSpotData(o, rangeSpotId(s.id, "all")).hands;
+      if (hands.length) rows.push({ o, sq: s, hands });
+    }
+  }
+  return rows.sort((a, b) => a.o.name.localeCompare(b.o.name) || a.sq.id.localeCompare(b.sq.id));
+}
+
+function renderRangeLib() {
+  const set = new Set(scratch.hands);
+  const cells = HAND_CLASSES.map((c) =>
+    `<div class="rgcell rng${set.has(c) ? " inr" : ""}" data-rcell="${c}" role="button" title="${c}">${c}</div>`).join("");
+  $("rl-scratch").innerHTML = `
+    <div class="rclasses chiprow readwrap">${rangeClassChips(set)}</div>
+    <div class="rggrid">${cells}</div>
+    <div class="rfoot">
+      <span>${rangeStatsText(scratch.hands)}</span>
+      <span class="spacer"></span>
+      ${scratch.hands.length ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
+    </div>`;
+  // Don't fight the keyboard: only push the name in when it isn't being typed into.
+  if (document.activeElement !== $("rl-name")) $("rl-name").value = scratch.name;
+  $("rl-save").textContent = scratch.srcId && savedRanges.some((r) => r.id === scratch.srcId) ? "Update" : "Save";
+
+  const rows = savedRanges.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).map((r) => {
+    const { combos, pct } = rangePct(r.hands);
+    return `<div class="rlrow${r.id === scratch.srcId ? " on" : ""}">
+      <button class="rlopen" data-rlload="${r.id}">
+        <span class="rlnm">${esc(r.name)}</span>
+        <span class="rlsub">${r.hands.length} hands · ${combos} combos · ${pct}%</span>
+      </button>
+      <button class="rlmore" data-rlmenu="${r.id}" title="Rename, replace or delete">⋯</button>
+    </div>`;
+  }).join("");
+  $("rl-list").innerHTML = rows
+    || `<div class="empty">Nothing saved yet — paint the grid above, give it a name, then tap Save.</div>`;
+}
+
+/* Pull a player's sketch into the scratch grid. Never the other way by accident:
+   loading only ever overwrites the scratch, which is yours to scribble on. */
+function openRangeFromOpp() {
+  const rows = oppRangeRows();
+  sheetGroup = "__rlfrom__";
+  showSheet(
+    `<div class="sheethead"><span class="t">Load from player</span><button data-sheetclose>Close</button></div>
+     <div class="sheetnote">Copies their sketched range into the grid above. Their own sketch is untouched.</div>
+     <div class="mergelist">${rows.map((r, i) =>
+       `<button class="mergeitem" data-rlfrom="${i}">
+          <span class="mnm">${esc(r.o.name)}</span>
+          <span class="msub muted">${esc(r.sq.label)} · ${rangeStatsText(r.hands)}</span>
+        </button>`).join("") || `<div class="empty">No player has a sketched range yet.</div>`}</div>`);
+  $("sheet").dataset.rlrows = JSON.stringify(rows.map((r) => ({ id: r.o.id, sq: r.sq.id })));
+}
+
+/* Push the scratch onto a player's sketch. Destructive to that one spot, so the
+   row shows what's there now and the write asks first. Seen marks are separate
+   and survive. */
+function openRangeToOpp() {
+  if (!scratch.hands.length) { toast("Paint some hands first"); return; }
+  sheetGroup = "__rlto__";
+  const rows = [];
+  for (const o of OPP) for (const s of RANGE_SQUIDS) rows.push({ id: o.id, sq: s.id });
+  showSheet(
+    `<div class="sheethead"><span class="t">Save to player</span><button data-sheetclose>Close</button></div>
+     <div class="sheetnote">Replaces that player's sketched range with these ${scratch.hands.length} hands. Hands they've been seen with stay.</div>
+     <div class="mergelist">${rows.map((r, i) => {
+       const o = oppById(r.id), s = RANGE_SQUIDS.find((x) => x.id === r.sq);
+       const n = rangeSpotData(o, rangeSpotId(r.sq, "all")).hands.length;
+       return `<button class="mergeitem" data-rlto="${i}">
+          <span class="mnm">${esc(o.name)}</span>
+          <span class="msub muted">${esc(s.label)} · ${n ? `${n} hands now` : "empty"}</span>
+        </button>`;
+     }).join("") || `<div class="empty">No players yet.</div>`}</div>`);
+  $("sheet").dataset.rlrows = JSON.stringify(rows);
+}
+
+function openRangeMenu(id) {
+  const r = savedRanges.find((x) => x.id === id);
+  if (!r) return;
+  sheetGroup = "__rlmenu__";
+  showSheet(
+    `<div class="sheethead"><span class="t">${esc(r.name)}</span><button data-sheetclose>Close</button></div>
+     <div class="sheetnote">${rangeStatsText(r.hands)}</div>
+     <div class="mergelist">
+       <button class="mergeitem" data-rlact="load|${id}"><span class="mnm">Open in the grid</span></button>
+       <button class="mergeitem" data-rlact="rename|${id}"><span class="mnm">Rename…</span></button>
+       <button class="mergeitem" data-rlact="replace|${id}"><span class="mnm">Replace with the grid above</span><span class="msub muted">${rangeStatsText(scratch.hands)}</span></button>
+       <button class="mergeitem" data-rlact="dupe|${id}"><span class="mnm">Duplicate</span></button>
+       <button class="mergeitem danger" data-rlact="del|${id}"><span class="mnm">Delete</span></button>
+     </div>`);
+}
+
+async function rangeMenuAction(act, id) {
+  const i = savedRanges.findIndex((x) => x.id === id);
+  if (i < 0) return;
+  const r = savedRanges[i];
+  if (act === "load") {
+    scratch = { name: r.name, srcId: r.id, hands: [...r.hands] };
+    await saveScratch();
+  } else if (act === "rename") {
+    const nm = prompt("Name this range", r.name);
+    if (nm == null || !nm.trim()) return;
+    r.name = nm.trim(); r.updatedAt = Date.now();
+    if (scratch.srcId === id) { scratch.name = r.name; await saveScratch(); }
+    await saveLibrary();
+  } else if (act === "replace") {
+    if (!confirm(`Replace "${r.name}" with the ${scratch.hands.length} hands in the grid?`)) return;
+    r.hands = [...scratch.hands].sort(byGridOrder); r.updatedAt = Date.now();
+    scratch.srcId = id;
+    await saveLibrary(); await saveScratch();
+    toast("Replaced " + r.name);
+  } else if (act === "dupe") {
+    savedRanges.push({ id: uid(), name: r.name + " copy", hands: [...r.hands], createdAt: Date.now(), updatedAt: Date.now() });
+    await saveLibrary();
+  } else if (act === "del") {
+    if (!confirm(`Delete "${r.name}"? This can't be undone.`)) return;
+    savedRanges.splice(i, 1);
+    if (scratch.srcId === id) { scratch.srcId = null; await saveScratch(); }
+    await saveLibrary();
+    toast("Deleted " + r.name);
+  }
+  hideSheet();
+  renderRangeLib();
 }
 
 /* ================= Opponents list ================= */
@@ -3958,6 +4119,44 @@ function sheetClick(e) {
     const r = e.target.closest("[data-hand]");
     if (r) { hideSheet(); location.hash = "#handview/" + r.dataset.hand; return; }
   }
+  if (sheetGroup === "__rlmenu__") {
+    const b = e.target.closest("[data-rlact]");
+    if (b) { const [act, id] = b.dataset.rlact.split("|"); rangeMenuAction(act, id); return; }
+  }
+  if (sheetGroup === "__rlfrom__") {
+    const b = e.target.closest("[data-rlfrom]");
+    if (b) {
+      const row = JSON.parse($("sheet").dataset.rlrows || "[]")[+b.dataset.rlfrom];
+      const o = row && oppById(row.id);
+      if (!o) return;
+      const sq = RANGE_SQUIDS.find((x) => x.id === row.sq);
+      // A loaded copy is a new scratch, not a link back — editing it must never
+      // write through to the player you pulled it from.
+      scratch = { name: `${o.name} ${sq.label}`, srcId: null, hands: [...rangeSpotData(o, rangeSpotId(row.sq, "all")).hands] };
+      saveScratch();
+      hideSheet();
+      renderRangeLib();
+      toast("Loaded " + o.name);
+      return;
+    }
+  }
+  if (sheetGroup === "__rlto__") {
+    const b = e.target.closest("[data-rlto]");
+    if (b) {
+      const row = JSON.parse($("sheet").dataset.rlrows || "[]")[+b.dataset.rlto];
+      const o = row && oppById(row.id);
+      if (!o) return;
+      const sq = RANGE_SQUIDS.find((x) => x.id === row.sq), key = rangeSpotId(row.sq, "all");
+      const had = rangeSpotData(o, key);
+      if (had.hands.length && !confirm(`Replace ${o.name}'s ${sq.label} range (${had.hands.length} hands) with these ${scratch.hands.length}?`)) return;
+      setRangeSpot(o, key, [...scratch.hands], had.seen);
+      o.updatedAt = Date.now();
+      dbPut("opponents", o);
+      hideSheet();
+      toast(`Saved to ${o.name} · ${sq.label}`);
+      return;
+    }
+  }
   if (sheetGroup === "__notereview__") {
     const nb = e.target.closest("[data-nrconvert]");
     if (nb && curOppId) {
@@ -4284,6 +4483,58 @@ function bindStatic() {
     renderOppRanges(o);
     syncSeenBadges(o);
     await dbPut("opponents", o);
+  };
+  /* ---- saved-ranges tab ---- */
+  // Debounced: a metaSet per keystroke would hit IDB (and the localStorage
+  // mirror) on every letter of a range name.
+  let nameSaveT = null;
+  $("rl-name").oninput = () => {
+    scratch.name = $("rl-name").value;
+    clearTimeout(nameSaveT);
+    nameSaveT = setTimeout(saveScratch, 400);
+  };
+  $("rl-new").onclick = async () => {
+    if (scratch.hands.length && !confirm("Start a blank grid? Anything unsaved here is lost.")) return;
+    scratch = { name: "", srcId: null, hands: [] };
+    await saveScratch();
+    renderRangeLib();
+    $("rl-name").focus();
+  };
+  $("rl-save").onclick = async () => {
+    if (!scratch.hands.length) { toast("Paint some hands first"); return; }
+    const name = (scratch.name || "").trim() || "Untitled range";
+    const hands = [...scratch.hands].sort(byGridOrder);
+    const cur = savedRanges.find((r) => r.id === scratch.srcId);
+    if (cur) { cur.name = name; cur.hands = hands; cur.updatedAt = Date.now(); }
+    else {
+      const r = { id: uid(), name, hands, createdAt: Date.now(), updatedAt: Date.now() };
+      savedRanges.push(r);
+      scratch.srcId = r.id;
+    }
+    scratch.name = name;
+    await saveLibrary(); await saveScratch();
+    renderRangeLib();
+    toast((cur ? "Updated " : "Saved ") + name);
+  };
+  $("rl-from-opp").onclick = openRangeFromOpp;
+  $("rl-to-opp").onclick = openRangeToOpp;
+  $("rl-scratch").onclick = async (e) => {
+    const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
+    if (cl) scratch.hands = toggleClass(scratch.hands, cl.dataset.rclass);
+    else if (cell) {
+      const c = cell.dataset.rcell;
+      scratch.hands = scratch.hands.includes(c) ? scratch.hands.filter((h) => h !== c) : scratch.hands.concat(c);
+    } else if (clr) {
+      if (!confirm("Clear the grid?")) return;
+      scratch.hands = [];
+    } else return;
+    renderRangeLib();
+    await saveScratch();
+  };
+  $("rl-list").onclick = async (e) => {
+    const ld = e.target.closest("[data-rlload]"), mn = e.target.closest("[data-rlmenu]");
+    if (mn) { openRangeMenu(mn.dataset.rlmenu); return; }
+    if (ld) await rangeMenuAction("load", ld.dataset.rlload);
   };
   $("od-ptype").onclick = async (e) => {
     const b = e.target.closest("[data-ptype]");
@@ -4654,7 +4905,7 @@ function bindStatic() {
         const counts = await importJSON(JSON.parse(raw));
         await refreshCache();
         hideSheet();
-        toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands`);
+        toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
         renderData();
       } catch (err) { toast("Import failed: " + err.message); }
     };
@@ -4666,7 +4917,7 @@ function bindStatic() {
     try {
       const counts = await importJSON(JSON.parse(await f.text()));
       await refreshCache();
-      toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands`);
+      toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
       renderData();
     } catch (err) { toast("Import failed: " + err.message); }
     e.target.value = "";
@@ -4734,6 +4985,15 @@ async function boot() {
   lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};
   showReadPicker = (await metaGet("showReadPicker")) ?? true;
+  // Storage is the only writer, but a half-written or older-shape value must
+  // not take the whole tab down — drop what doesn't parse, keep the rest.
+  savedRanges = ((await metaGet("savedRanges")) || [])
+    .filter((r) => r && r.id && Array.isArray(r.hands))
+    .map((r) => ({ ...r, name: r.name || "Untitled range" }));
+  const sc = await metaGet("rangeScratch");
+  scratch = sc && Array.isArray(sc.hands)
+    ? { name: sc.name || "", srcId: sc.srcId || null, hands: sc.hands }
+    : { name: "", srcId: null, hands: [] };
   // migrate old {bb:{size:count}} → recency picks {bb:[{size,ts}]}
   for (const bb of Object.keys(openSizeStats)) {
     const v = openSizeStats[bb];

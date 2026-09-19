@@ -174,6 +174,27 @@
   <button id="hv-delete" class="danger">Delete hand</button>
 </section>
 
+<!-- ===== Saved ranges ===== -->
+<section id="view-ranges" class="hidden">
+  <header class="vhead">
+    <h1>Ranges</h1>
+    <button id="rl-new" class="iconbtn textbtn" title="Start a blank grid">New</button>
+    <button id="rl-save" class="iconbtn textbtn" title="Save this grid to the library">Save</button>
+  </header>
+  <div class="panel">
+    <input id="rl-name" placeholder="Untitled range" autocomplete="off">
+    <div id="rl-scratch"></div>
+    <div class="row">
+      <button id="rl-from-opp" class="secondary">From player</button>
+      <button id="rl-to-opp" class="secondary">To player</button>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="cardpanel-head"><span class="ptitle">Saved ranges</span></div>
+    <div id="rl-list" class="list"></div>
+  </div>
+</section>
+
 <!-- ===== Data / backup ===== -->
 <section id="view-data" class="hidden">
   <header class="vhead"><h1>Data</h1></header>
@@ -215,6 +236,7 @@
   <button data-tab="opponents"><span class="ticon">☺</span>Opponents</button>
   <button data-tab="hand" class="bigtab"><span class="ticon">＋</span>Hand</button>
   <button data-tab="table"><span class="ticon">◎</span>Table</button>
+  <button data-tab="ranges"><span class="ticon">▦</span>Ranges</button>
   <button data-tab="data"><span class="ticon">⇅</span>Data</button>
 </nav>
 
