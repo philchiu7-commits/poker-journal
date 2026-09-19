@@ -4191,7 +4191,9 @@ function bindStatic() {
   $("od-e-save").onclick = async () => {
     const o = oppById(curOppId);
     o.name = $("od-e-name").value.trim() || o.name;
-    o.group = $("od-e-group").value.trim();
+    const group = $("od-e-group").value.trim();
+    if (group !== (o.group || "")) o.order = undefined;   // fall to the end of the new group
+    o.group = group;
     o.physical = $("od-e-physical").value.trim();
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
