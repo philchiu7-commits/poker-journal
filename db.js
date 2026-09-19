@@ -143,7 +143,8 @@ async function shareBackupData(data) {
 async function exportJSON() { return shareBackupData(await exportData()); }
 
 const normName = (s) => (s || "").trim().toLowerCase();
-const dedupeById = (arr) => { const seen = new Set(); return arr.filter((x) => x && x.id && !seen.has(x.id) && seen.add(x.id)); };
+/* Stamp, never drop: an id-less note or exploit is still irreplaceable. */
+const dedupeById = (arr) => { const seen = new Set(); return arr.filter((x) => { if (!x) return false; if (!x.id) x.id = uid(); return !seen.has(x.id) && seen.add(x.id); }); };
 const recReads = (o) => o.reads && typeof o.reads === "object" ? o.reads
   : (Array.isArray(o.tags) ? Object.fromEntries(o.tags.map((id) => [id, "yes"])) : {});
 
@@ -174,7 +175,7 @@ function mergeOppRecords(into, from) {
       if (!v || typeof v !== "object") continue;
       const t = (r[k] = r[k] || { hands: [], seen: [] });
       if (!(t.hands || []).length && (v.hands || []).length) t.hands = [...v.hands];
-      if (!(t.seen || []).length && (v.seen || []).length) t.seen = [...v.seen];
+      t.seen = [...new Set([...(t.seen || []), ...(v.seen || [])])]; // factual — never lose one
     }
   }
   into.updatedAt = Date.now();

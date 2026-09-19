@@ -98,6 +98,7 @@ function pillTag(o) {
     if (hit) return { text: rule.pill, tone: rule.tone || "gray" };
   }
   for (const p of PILL_READS) {
+    if (RETIRED_TAG_IDS.has(p.id)) continue;
     const cur = reads[p.id];
     if (cur && readBase(cur) === p.state) return { text: p.pill, tone: p.tone || "gray" };
   }
@@ -353,9 +354,9 @@ async function migrateDupBoardCards() {
 /* Tidy one hand's tokens and card strings so every renderer reads it the same
    way whatever produced it: hnlbds imports label the first postflop bet
    "raise"; old note imports used "open" and a single "limp-raise" token; a few
-   records carry non-cards ("Sh", "None"). Idempotent, and it never bumps
+   carry the junk string "None" ("Sh" is real — the squid). Idempotent, and it never bumps
    updatedAt — a later correction file must still win on import. */
-const CARD_RX = /^[2-9TJQKA][shdc]$/;
+const CARD_RX = /^[2-9TJQKAS][shdc]$/;
 const AGGRESSIVE_ACTS = new Set(["bet", "raise", "jam", "3bet", "4bet", "5bet"]);
 function normaliseHand(h) {
   let dirty = false;
@@ -432,6 +433,7 @@ function fmtWhen(ts) {
 }
 function toast(msg, ms) {
   const t = $("toast");
+  t.onclick = null; t.style.cursor = "";   // drop any Undo handler showSaveToast left on the shared pill
   t.textContent = msg;
   t.classList.toggle("wide", msg.length > 24);        // wrap longer messages
   t.classList.remove("hidden");
@@ -647,8 +649,9 @@ function renderHandFilters(oppId, allHands) {
 function handClass(cards) {
   if (!cards || !cards[0] || !cards[1]) return null;
   const r1 = cards[0][0], r2 = cards[1][0], s1 = cards[0][1], s2 = cards[1][1];
-  if (r1 === r2) return r1 + r2;
   const i1 = RANKS.indexOf(r1), i2 = RANKS.indexOf(r2);
+  if (i1 < 0 || i2 < 0) return null; // squid: a real card, but off the 13×13 grid
+  if (r1 === r2) return r1 + r2;
   const hi = i1 < i2 ? r1 : r2, lo = i1 < i2 ? r2 : r1;
   return hi + lo + (s1 === s2 ? "s" : "o");
 }
@@ -2607,9 +2610,11 @@ function undo() {
   if (s) { draft = JSON.parse(s); draftChanged(); }
 }
 function draftChanged() {
-  metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
+  persistDraft();
   renderHandEntry();
 }
+/* Save the draft without re-rendering — for inputs being typed into. */
+function persistDraft() { metaSet("draftHand", JSON.parse(JSON.stringify(draft))); }
 /* Is Hero part of this hand? Table mode: only if seated. Chips mode: the "You" toggle. */
 function heroPresent(d) {
   return d.mode === "table" ? d.heroPos != null : d.heroIn;
@@ -3606,7 +3611,7 @@ function handActionClick(b) {
     }
     // Global end-hand rules: one live player remaining (everyone else folded),
     // or river checked/called through with betting closed.
-    if (liveActors().length < 2) {
+    if (draftParticipants().length >= 2 && liveActors().length < 2) {
       hideSheet();
       toast("Hand over — one player remaining");
       return true;
@@ -3812,7 +3817,6 @@ function bindHandEntry() {
       }
     }
   });
-  const persistDraft = () => metaSet("draftHand", JSON.parse(JSON.stringify(draft)));
   $("he-vsearch").oninput = () => { vSearch = $("he-vsearch").value; renderHandEntry(); };
   $("he-effstack").oninput = () => {
     draft.effStack = $("he-effstack").value;
@@ -4505,6 +4509,7 @@ function bindStatic() {
     }
     const item = e.target.closest("[data-key]");
     if (!item) return;
+    if (!e.target.closest("[data-exacc]") && !e.target.closest("[data-exdismiss]")) return;
     const key = item.dataset.key;
     const o = oppById(curOppId);
     const sugg = suggestedExploits(o).find((s) => s.key === key);
@@ -4530,9 +4535,9 @@ function bindStatic() {
     const dkey = item.dataset.dkey || tag;                   // per-direction dismiss key
     if (e.target.closest("[data-dacc]")) {
       oppReads(o)[tag] = state;                              // accept → set the read (yes or no)
-    } else {
+    } else if (e.target.closest("[data-ddismiss]")) {
       (o.readDismissed = o.readDismissed || []).push(dkey);  // dismiss → stop suggesting this direction
-    }
+    } else return;                                           // a tap on the text is not a dismissal
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
