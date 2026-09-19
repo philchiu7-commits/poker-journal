@@ -100,6 +100,8 @@ const TENDENCY_TAGS = [
   { id: "pfr-oop-cbet",         cat: "postflop", label: "PFR OOP cbet" },
   { id: "over-cbet",            cat: "postflop", label: "Over cbet" },
   { id: "floats-wide",          cat: "postflop", label: "Floats wide" },
+  { id: "cb-light-mwp",         cat: "postflop", label: "Cb Light MWP" },
+  { id: "pfc-b-light-mwp",      cat: "postflop", label: "PFC B Light MWP" },
   // postflop — barrel / lead / limped-pot behaviour
   { id: "barrels-off",          cat: "postflop", label: "Barrels relentlessly" }, // yes = barrels, no = gives up on turn
   { id: "lead-limped",          cat: "postflop", label: "Lead limped" },
@@ -159,7 +161,7 @@ const READ_SUBCATS = {
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
   ],
   postflop: [
-    { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off"] },
+    { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off", "cb-light-mwp", "pfc-b-light-mwp"] },
     { label: "Leads",         ids: ["lead-limped", "check-oop-limped"] },
     { label: "Range shape",   ids: ["sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers", "bad-polar"] },
   ],
