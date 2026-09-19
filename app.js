@@ -730,7 +730,8 @@ function decodeImportPayload(b64) {
 let pendingImport = null;
 /* Match an imported villain name against OPP: exact → saved alias → case-insensitive →
    prefix similarity. Returns the opponent record or null. Prefix rule: shared prefix
-   ≥3 chars AND ≥60% of the shorter name — good for CJK handles like 阿九AA / 阿九AA88. */
+   ≥3 chars (or the whole of a 2-char name) AND ≥60% of the shorter name — good for
+   CJK handles like 阿九 / 阿九AA / 阿九AA88. */
 function matchImportName(rawName) {
   const n = (rawName || "").trim();
   if (!n) return null;
@@ -748,8 +749,8 @@ function matchImportName(rawName) {
       const cl = c.toLowerCase();
       let pref = 0;
       while (pref < cl.length && pref < nl.length && cl[pref] === nl[pref]) pref++;
-      if (pref < 3) continue;
       const shorter = Math.min(cl.length, nl.length);
+      if (pref < 3 && !(pref >= 2 && pref === shorter)) continue;
       if (pref / shorter < 0.6) continue;
       const score = pref * 100 + (100 - Math.abs(cl.length - nl.length));
       if (score > bestScore) { bestScore = score; best = o; }
