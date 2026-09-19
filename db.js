@@ -47,8 +47,6 @@ const dbDel = async (store, id) => {
   if (AUTOSNAP_STORES.has(store)) scheduleAutoSnapshot();
   return r;
 };
-const dbByIndex = (store, index, value) =>
-  _tx(store, "readonly", (s) => s.index(index).getAll(value));
 
 /* Small-meta values (blinds default, lineup, seats, collapsed groups, last export)
    also mirror to localStorage as a survival copy — if iOS Safari nukes IDB,

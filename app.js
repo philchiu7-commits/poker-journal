@@ -115,6 +115,7 @@ const isStrongRead = (state) => state === "yes!" || state === "no!";
 function suggestedExploits(o) {
   const reads = oppReads(o);
   const dismissed = new Set(o.exploitDismissed || []);
+  const have = new Set((o.exploits || []).map((x) => (x.text || "").trim().toLowerCase()));
   const seen = new Set();
   const out = [];
   for (const rule of COMPOUND_EXPLOIT_RULES) {
@@ -2775,12 +2776,6 @@ function parseNoteToDraft(text, opponentId) {
   // so the first B after the board becomes flop, the second becomes turn, etc.
   const streetOrder = ["flop", "turn", "river"];
   let streetIdx = 0;
-  const boardHasFlop  = d.board.slice(0, 3).some(Boolean);
-  const boardHasTurn  = !!d.board[3];
-  const boardHasRiver = !!d.board[4];
-  if (boardHasFlop && !boardHasTurn) streetIdx = 0;
-  else if (boardHasTurn && !boardHasRiver) streetIdx = 0;
-  else if (boardHasRiver) streetIdx = 0;
   const BET_RX = /\bB(\d{1,4})(k)?\b/g;
   let bm;
   while ((bm = BET_RX.exec(text)) !== null) {
@@ -3998,36 +3993,6 @@ async function saveHand() {
   renderHandEntry();
 }
 
-/* Fire a one-tap backup prompt if the last export is >24h old. Only once per app
-   session per day so a rush of saves doesn't spam. */
-let _backupNaggedAt = 0;
-async function maybeNagBackup() {
-  const now = Date.now();
-  if (now - _backupNaggedAt < 3600e3) return;                 // hourly re-nag cap
-  const ts = await metaGet("lastExportAt");
-  if (ts && now - ts < 864e5) return;                         // backed up <24h ago
-  _backupNaggedAt = now;
-  const t = $("toast");
-  const msg = ts ? "Back up? Last file save >24h ago." : "Back up? No file save yet — data lives only on this phone.";
-  t.textContent = msg + " · tap";
-  t.classList.add("wide");
-  t.classList.remove("hidden");
-  t.style.cursor = "pointer";
-  clearTimeout(toast._t);
-  const clear = () => {
-    t.classList.add("hidden"); t.style.cursor = ""; t.onclick = null;
-    t.classList.remove("wide");
-  };
-  toast._t = setTimeout(clear, 6000);
-  t.onclick = async () => {
-    clear();
-    try {
-      const snap = await metaGet("autoSnapshot");
-      if (snap?.data ? await shareBackupData(snap.data) : await exportJSON())
-        toast("Backed up ✓");
-    } catch (e) { if (e?.name !== "AbortError") toast("Backup failed: " + e.message); }
-  };
-}
 /* One-tap undo after Save: within 12s of a save, tapping the toast restores
    the pre-save draft and deletes the just-saved hand. */
 let lastSaveUndo = null;

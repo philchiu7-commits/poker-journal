@@ -2,8 +2,6 @@
 
 const POSITIONS = ["U9", "U8", "U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
-const ACTS = ["fold", "check", "call", "bet", "raise", "3bet", "limp", "jam"];
-const ACTS_POST = ["fold", "check", "call", "bet", "raise"];
 const SIZED_ACTS = ["bet", "raise", "3bet", "4bet", "5bet"];
 const SIZES_OPEN = ["30k", "40k", "50k", "60k", "Jam"];   // open raise: chip amounts
 const SIZES_3BET = ["3x", "4x", "5x", "Jam"];              // 3bet: multipliers
@@ -19,10 +17,9 @@ const SUITS = [
 ];
 
 /* Curated tendency reads — three-state (Yes=green / No=red / off) toggles in
-   the opponent view; ids are stable, labels display-only. draw-size is a
-   special 3-colour read (green/yellow/red). Some postflop reads are shown as
-   grouped bubbles (Station/Lead/Raise nuts/Bluff till) — see READ_GROUPS in
-   app.js; their labels here are the full names used in row chips. */
+   the opponent view; ids are stable, labels display-only. Some postflop reads
+   are shown as grouped bubbles (Station/Lead/Raise nuts/Bluff till) — see
+   READ_GROUPS in app.js; their labels here are the full names used in row chips. */
 /* Yes/No axis pairs — one read holds both directions. Legacy separate tags
    (over-folds-cbet, fit-or-fold, gives-up-turn, never-bluffs, limps-monsters)
    auto-migrate onto these survivors in app.js. Limps monsters is now a grouped
@@ -117,7 +114,8 @@ const TENDENCY_TAGS = [
 ];
 /* Player archetype — Phil sets it manually and it themes the opponent's row
    on the list plus a pill in the detail header. Colors chosen so the list
-   reads at a glance: warm reds = biggest fish, blues = regs, gray = nits. */
+   reads at a glance: teal/orange/green/yellow = the fish family, blue = reg,
+   red = the good reg to stay away from, gray = tight/nit. */
 const PLAYER_TYPES = [
   { id: "whale",      label: "Whale",      icon: "🐋", color: "#3ec7c7" },
   { id: "fish",       label: "Fish",       icon: "🐠", color: "#e08a3c" },
@@ -164,7 +162,7 @@ const READ_SUBCATS = {
 /* Auto-suggested exploits: map a set read to a concrete counter-strategy line.
    Keyed by tag id → { yes, no }. "yes" (green) = tendency confirmed present;
    "no" (red) = confirmed absent (only where the absence is itself exploitable).
-   draw-size (3-colour) keys off "any" — any non-off state. Suggestions surface
+   Position/choice reads key off "any" — any set value. Suggestions surface
    in the opponent's Exploits panel; Phil accepts or dismisses each. */
 const EXPLOIT_RULES = {
   // preflop — opening / limping
