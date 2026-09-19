@@ -45,7 +45,7 @@ const TENDENCY_TAGS = [
   { id: "first-raise-ws",       cat: "preflop",  label: "1st R — wS",     kind: "position" },
   { id: "lrr-latest-ns",        cat: "preflop",  label: "LRR — nS", kind: "position" },
   { id: "lrr-latest-ws",        cat: "preflop",  label: "LRR — wS", kind: "position" },
-  // preflop — limping / squid
+  // preflop — limping / squid (limp-caller + lp-limp-weak are retired — see RETIRED_TAG_IDS)
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
   { id: "limp-scale-ws",        cat: "preflop",  label: "Limp with wS",   kind: "scale" },
@@ -129,7 +129,7 @@ const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]))
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
-const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff"]);
+const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
 /* Sub-cluster single-read chips within each category so related reads live
@@ -138,11 +138,10 @@ const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
    and scale reads render separately and are not covered here. */
 const READ_SUBCATS = {
   preflop: [
-    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s"] },
+    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
     { label: "First raise",   ids: ["first-raise-ns", "first-raise-ws"] },
     { label: "LRR",           ids: ["lrr-latest-ns", "lrr-latest-ws"] },
     { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
-    { label: "vs Limp",       ids: ["limp-caller", "lp-limp-weak", "wide-cc"] },
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
   ],
   postflop: [

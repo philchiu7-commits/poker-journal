@@ -189,7 +189,6 @@ function villainStreetActs(h, actor) {
    showdown hands — the sample is biased and small. Lower thresholds fire
    noise. See project_poker_journal_v2_engine_spec.md. */
 const READ_SIGNALS = [
-  { id: "limp-caller",      state: "yes", th: 5 },
   { id: "3bets-light",      state: "yes", th: 5 },
   { id: "barrels-off",      state: "no",  th: 5 },   // was: gives-up-turn
   { id: "barrels-off",      state: "yes", th: 5 },
@@ -209,7 +208,6 @@ function derivedReads(o) {
     if (idx < 0) continue;
     const s = villainStreetActs(h, "v" + idx);
     const raisedPre = s.pre.some((a) => ["raise", "3bet", "4bet", "5bet"].includes(a));
-    if (s.pre.includes("limp")) bump("limp-caller:yes");
     if (s.pre.includes("3bet")) bump("3bets-light:yes");
     if (s.flop.includes("bet") && (s.turn.includes("check") || s.turn.includes("fold"))) bump("barrels-off:no");
     if (aggr(s.flop) && aggr(s.turn) && aggr(s.river)) bump("barrels-off:yes");
