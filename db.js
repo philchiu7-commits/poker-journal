@@ -169,6 +169,16 @@ function mergeOppRecords(into, from) {
       .filter((a) => a && !seen.has(normName(a)) && seen.add(normName(a)));
   }
   if (!into.createdAt && from.createdAt) into.createdAt = from.createdAt;
+  // Approx ranges: per spot the survivor's sketch wins; spots it lacks come across.
+  if (from.ranges && typeof from.ranges === "object") {
+    const r = (into.ranges = into.ranges && typeof into.ranges === "object" ? into.ranges : {});
+    for (const [k, v] of Object.entries(from.ranges)) {
+      if (!v || typeof v !== "object") continue;
+      const t = (r[k] = r[k] || { hands: [], seen: [] });
+      if (!(t.hands || []).length && (v.hands || []).length) t.hands = [...v.hands];
+      if (!(t.seen || []).length && (v.seen || []).length) t.seen = [...v.seen];
+    }
+  }
   into.updatedAt = Date.now();
 }
 

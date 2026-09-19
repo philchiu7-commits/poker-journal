@@ -1045,6 +1045,50 @@ function renderRangeGrid(oppId) {
     + `<span class="rglegnote">split cell = mixed action</span>`;
 }
 
+/* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
+let rangeSpotSel = RANGE_SPOTS[0].id;   // which spot the editor shows
+let showSeenHands = false;              // "Seen" toggle: show + mark observed hands instead of editing the range
+const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
+const rangeSpotData = (o, key) => { const s = oppRanges(o)[key] || {}; return { hands: s.hands || [], seen: s.seen || [] }; };
+const byGridOrder = (a, b) => (HAND_CLASS_ORDER[a] ?? 999) - (HAND_CLASS_ORDER[b] ?? 999);
+/* Write a spot back; an empty spot is dropped so records stay clean. */
+function setRangeSpot(o, key, hands, seen) {
+  const r = (o.ranges = oppRanges(o));
+  hands = [...new Set(hands)].sort(byGridOrder);
+  seen = [...new Set(seen)].sort(byGridOrder);
+  if (hands.length || seen.length) r[key] = { hands, seen }; else delete r[key];
+  o.updatedAt = Date.now();
+}
+function renderOppRanges(o) {
+  const spots = RANGE_SPOTS.map((sp) => {
+    const { hands } = rangeSpotData(o, sp.id);
+    return `<button class="chip mini${sp.id === rangeSpotSel ? " on" : ""}" data-rspot="${sp.id}" title="${esc(sp.title)}">${esc(sp.label)}${hands.length ? `<i>${hands.length}</i>` : ""}</button>`;
+  }).join("");
+  const spot = RANGE_SPOTS.find((x) => x.id === rangeSpotSel) || RANGE_SPOTS[0];
+  const { hands, seen } = rangeSpotData(o, spot.id);
+  const inr = new Set(hands), seenSet = new Set(seen);
+  // Class chip: lit when every hand of the class is in; dashed when only some are.
+  const classes = RANGE_CLASSES.map((c) => {
+    const n = c.hands.filter((h) => inr.has(h)).length;
+    const st = n === c.hands.length ? " on" : n ? " part" : "";
+    return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
+  }).join("");
+  const cells = HAND_CLASSES.map((c) =>
+    `<div class="rgcell rng${inr.has(c) ? " inr" : ""}${showSeenHands && seenSet.has(c) ? " seen" : ""}" data-rcell="${c}" role="button">${c}</div>`).join("");
+  const combos = hands.reduce((n, c) => n + handClassCombos(c), 0);
+  $("od-ranges").innerHTML = `
+    <div class="rspots chiprow tight">${spots}</div>
+    <div class="rclasses chiprow readwrap">${classes}</div>
+    <div class="rggrid">${cells}</div>
+    <div class="rfoot">
+      <span>${esc(spot.title)} · ${hands.length} hand${hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}%${showSeenHands ? ` · ${seen.length} seen` : ""}</span>
+      <span class="spacer"></span>
+      ${hands.length ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
+    </div>
+    ${showSeenHands ? `<div class="rhint">Seen mode — tap a hand to mark that you've watched them turn it up in this spot.</div>` : ""}`;
+  $("od-range-seen").classList.toggle("on", showSeenHands);
+}
+
 /* ================= Opponents list ================= */
 
 function oppStats() {
@@ -1867,6 +1911,7 @@ function renderOppDetail(id) {
     (allHands.length ? `<div class="empty">No hands match these filters. ${allHands.length} total — try clearing.</div>` : `<div class="empty">No hands logged.</div>`);
 
   renderRangeGrid(id);
+  renderOppRanges(o);
 }
 
 /* ================= Hand rendering (rows + full text) ================= */
@@ -4100,6 +4145,35 @@ function bindStatic() {
     if (dim === "sd") handFilters.sd = !handFilters.sd;
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
+  };
+  $("od-range-seen").onclick = () => {
+    showSeenHands = !showSeenHands;
+    const o = oppById(curOppId);
+    if (o) renderOppRanges(o);
+  };
+  $("od-ranges").onclick = async (e) => {
+    const o = oppById(curOppId);
+    if (!o) return;
+    const sp = e.target.closest("[data-rspot]");
+    if (sp) { rangeSpotSel = sp.dataset.rspot; renderOppRanges(o); return; }
+    const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
+    if (!cl && !cell && !clr) return;
+    let { hands, seen } = rangeSpotData(o, rangeSpotSel);
+    if (cl) {                        // class chip: all in → remove all, else add all
+      const ch = RANGE_CLASS_BY_ID[cl.dataset.rclass].hands;
+      hands = ch.every((h) => hands.includes(h)) ? hands.filter((h) => !ch.includes(h)) : hands.concat(ch);
+    } else if (cell) {               // grid tap edits the range — or the seen marks while Seen is on
+      const c = cell.dataset.rcell;
+      const tog = (arr) => arr.includes(c) ? arr.filter((h) => h !== c) : arr.concat(c);
+      if (showSeenHands) seen = tog(seen); else hands = tog(hands);
+    } else if (clr) {
+      const t = RANGE_SPOTS.find((x) => x.id === rangeSpotSel)?.title || "this";
+      if (!confirm(`Clear the ${t} range? Seen marks stay.`)) return;
+      hands = [];
+    }
+    setRangeSpot(o, rangeSpotSel, hands, seen);
+    await dbPut("opponents", o);
+    renderOppRanges(o);
   };
   $("od-rangegrid").onclick = (e) => {
     const b = e.target.closest("[data-rgpos]");

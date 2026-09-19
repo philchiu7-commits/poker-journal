@@ -390,3 +390,45 @@ const EXPLOIT_TEMPLATES = [
   { abbr: "TAL",  name: "Truth After Lie",
     text: "Truth After Lie — slow-plays, then suddenly sizes up for value. When a mostly toy-game (8s) range wants to block-bet but instead sizes up, it's the slow-played nutted (Ks) hand." },
 ];
+
+/* ---------- approximate ranges ----------
+   Phil sketches an opponent's range per spot from hand-class shortcuts, then
+   fixes individual hands on the 13×13 grid. A range is just a set of hand
+   classes ("AKs", "77", "T9o"); class chips add/remove their hands in bulk.
+   Stored as o.ranges[spotId] = { hands: [...], seen: [...] } — `seen` are hands
+   Phil has actually watched the opponent show up with in that spot (marked by
+   hand, never derived). */
+const HAND_CLASSES = (() => {                       // 169 classes in grid order (AA … 32o)
+  const out = [];
+  for (let i = 0; i < RANKS.length; i++)
+    for (let j = 0; j < RANKS.length; j++)
+      out.push(i === j ? RANKS[i] + RANKS[i] : i < j ? RANKS[i] + RANKS[j] + "s" : RANKS[j] + RANKS[i] + "o");
+  return out;
+})();
+const HAND_CLASS_ORDER = Object.fromEntries(HAND_CLASSES.map((c, i) => [c, i]));
+const _hx = (hi, los, suf) => los.split("").map((l) => hi + l + suf);
+const RANGE_CLASSES = [
+  { id: "sc",  label: "SC",       hands: ["54s", "65s", "76s", "87s", "98s", "T9s", "JTs"] },
+  { id: "s1g", label: "S1G",      hands: ["64s", "75s", "86s", "97s", "T8s", "J9s"] },
+  { id: "axs", label: "AXs",      hands: _hx("A", "23456789", "s") },
+  { id: "sbw", label: "SBW",      hands: ["AKs", "AQs", "AJs", "ATs", "KQs", "KJs", "KTs", "QJs", "QTs", "JTs"] },
+  { id: "obw", label: "OBW",      hands: ["AKo", "AQo", "AJo", "ATo", "KQo", "KJo", "KTo", "QJo", "QTo", "JTo"] },
+  { id: "spp", label: "Small PP", hands: ["22", "33", "44", "55", "66"] },
+  { id: "mpp", label: "Mid PP",   hands: ["77", "88", "99"] },
+  { id: "bpp", label: "Big PP",   hands: ["TT", "JJ", "QQ", "KK", "AA"] },
+  { id: "kxs", label: "KXs",      hands: _hx("K", "23456789", "s") },
+  { id: "qxs", label: "QXs",      hands: _hx("Q", "23456789", "s") },
+  { id: "axo", label: "AXo",      hands: _hx("A", "23456789", "o") },
+];
+const RANGE_CLASS_BY_ID = Object.fromEntries(RANGE_CLASSES.map((c) => [c.id, c]));
+/* Spots: the overall range with / without squid, then the four first-raise /
+   limp-reraise ranges split into value and bluff. */
+const RANGE_SPOTS = [
+  { id: "range-ns",      label: "nS",      title: "Range — no squid" },
+  { id: "range-ws",      label: "wS",      title: "Range — with squid" },
+  { id: "first-raise-v", label: "1st R V", title: "First raise — value" },
+  { id: "first-raise-b", label: "1st R B", title: "First raise — bluff" },
+  { id: "lrr-v",         label: "LRR V",   title: "Limp-reraise — value" },
+  { id: "lrr-b",         label: "LRR B",   title: "Limp-reraise — bluff" },
+];
+const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326
