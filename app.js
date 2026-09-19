@@ -72,7 +72,6 @@ const readChip = (id, state) => {
 };
 /* Postflop reads shown as "Label + bubbles" rows; each bubble is its own toggle. */
 const READ_GROUPS = [
-  { cat: "preflop",  label: "Limps monster", bubbles: [["limps-monster-ws", "wS"], ["limps-monster-ns", "nS"]] },
   { cat: "postflop", label: "Station",    bubbles: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
   { cat: "postflop", label: "Lead",       bubbles: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
   { cat: "postflop", label: "Raise nuts", bubbles: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
@@ -140,7 +139,7 @@ function suggestedExploits(o) {
   for (const [id, state] of Object.entries(reads)) {
     if (!state) continue;
     const rule = EXPLOIT_RULES[id];
-    if (!rule) continue;
+    if (!rule || RETIRED_TAG_IDS.has(id)) continue;   // retired reads stay silent
     const useAny = !!rule.any;
     const base = readBase(state);
     const text = useAny ? rule.any : rule[base];
@@ -279,7 +278,6 @@ const READ_LEGACY_MAP = {
   "fit-or-fold":       { to: "floats-wide",   state: "no" },
   "gives-up-turn":     { to: "barrels-off",   state: "no" },
   "never-bluffs":      { to: "bluffs-rivers", state: "no" },
-  "limps-monsters":    { to: "limps-monster-ns", state: "yes" },   // best-guess destination
   "never-folds-pre":   { to: "3bet-tight",    state: "no" },       // never folds pre → not tight
   "range-check-oop":   { to: "check-oop-limped", state: "yes" },   // roll into check-oop
   "no-river-block":    { to: "protected-block", state: "no" },     // polar vs protected — same axis
@@ -1092,6 +1090,16 @@ let showSeenHands = false;              // "Seen" toggle: record + show the hand
 const curRangeSpot = () => rangeSpotId(rangeSquid, showSeenHands ? rangeSitSel : "all");
 const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
 const rangeSpotData = (o, key) => { const s = oppRanges(o)[key] || {}; return { hands: s.hands || [], seen: s.seen || [] }; };
+/* Keep the ▦ counts on the V/B reads in step with the Seen grid without
+   re-rendering the whole reads panel (which would drop an open select). */
+function syncSeenBadges(o) {
+  document.querySelectorAll("[data-rjump]").forEach((b) => {
+    const [sq, sit] = b.dataset.rjump.split("|");
+    const n = rangeSpotData(o, rangeSpotId(sq, sit)).seen.length;
+    b.textContent = "▦" + (n || "");
+    b.classList.toggle("on", !!n);
+  });
+}
 const byGridOrder = (a, b) => (HAND_CLASS_ORDER[a] ?? 999) - (HAND_CLASS_ORDER[b] ?? 999);
 /* Write a spot back; an empty spot is dropped so records stay clean. */
 function setRangeSpot(o, key, hands, seen) {
@@ -1185,7 +1193,9 @@ const readIsActive = (id, state) => {
   if (isPositionRead(id) || isChoiceRead(id)) return !!String(state).trim();
   return true;
 };
-const readIsShown = (o, id) => readIsActive(id, oppReads(o)[id]);
+/* Retired reads are gone from the app everywhere — panel, featured chips, card
+   chips. Old values stay in the record untouched in case a read comes back. */
+const readIsShown = (o, id) => !RETIRED_TAG_IDS.has(id) && readIsActive(id, oppReads(o)[id]);
 
 /* Render one featured item as a compact chip (read chip, or abbreviated exploit
    chip whose full text shows on hover); "" if the item no longer exists. */
@@ -1804,9 +1814,17 @@ function renderOppDetail(id) {
       const opts = ['<option value="">–</option>']
         .concat(POSITIONS.map((p) => `<option value="${p}"${st === p ? " selected" : ""}>${p}</option>`))
         .join("");
+      // V/B reads carry a hidden hand list — the hands watched in that exact
+      // situation. The badge opens the range grid straight into Seen mode.
+      const rs = readRangeSpot(id);
+      const nSeen = rs ? rangeSpotData(o, rangeSpotId(rs.sq, rs.sit)).seen.length : 0;
+      const seenBtn = rs
+        ? `<button class="prseen${nSeen ? " on" : ""}" data-rjump="${rs.sq}|${rs.sit}"
+             title="Hands seen in this situation">▦${nSeen || ""}</button>`
+        : "";
       return `<label class="posread${active ? " on" : ""}" title="${esc(lbl)}">
         <span class="prlbl">${esc(lbl)}</span>
-        <select class="prselect" data-posselect="${id}">${opts}</select>
+        <select class="prselect" data-posselect="${id}">${opts}</select>${seenBtn}
       </label>`;
     }
     if (isChoiceRead(id)) {
@@ -1825,7 +1843,7 @@ function renderOppDetail(id) {
     // Anything not listed falls into "Other" at the end.
     const subgroups = READ_SUBCATS[cat] || [];
     const usedIds = new Set(subgroups.flatMap((s) => s.ids));
-    // Retired reads — data preserved on old opponents, but no longer offered as a toggle.
+    // Retired reads are never rendered; their stored values just sit unused.
     const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isChoiceRead(t.id) && !RETIRED_TAG_IDS.has(t.id);
     const chipFor = (id) => { const t = TAG_BY_ID[id]; return t && isSingle(t) ? readBtn(t.id, t.label, false) : ""; };
     const subHTML = subgroups.map((sg) => {
@@ -1836,9 +1854,7 @@ function renderOppDetail(id) {
       return `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span><div class="chiprow readwrap">${chips}</div></div>`;
     }).join("");
     const otherSingles = TENDENCY_TAGS.filter((t) => isSingle(t) && !usedIds.has(t.id))
-      .map((t) => readBtn(t.id, t.label, false)).join("") +
-      TENDENCY_TAGS.filter((t) => t.cat === cat && RETIRED_TAG_IDS.has(t.id) && readIsActive(t.id, reads[t.id]))
-        .map((t) => readBtn(t.id, t.label + " (retired)", false)).join("");
+      .map((t) => readBtn(t.id, t.label, false)).join("");
     const choices = TENDENCY_TAGS.filter((t) => t.cat === cat && isChoiceRead(t.id))
       .map((t) => readBtn(t.id, t.label, false)).join("");
     return `<div class="tagcat">${cat}</div>${groups}${subHTML}` +
@@ -4199,6 +4215,7 @@ function bindStatic() {
     setRangeSpot(o, key, hands, seen);
     await dbPut("opponents", o);
     renderOppRanges(o);
+    syncSeenBadges(o);
   };
   $("od-rangegrid").onclick = (e) => {
     const b = e.target.closest("[data-rgpos]");
@@ -4277,6 +4294,15 @@ function bindStatic() {
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppDetail(curOppId);
+      return;
+    }
+    const rj = e.target.closest("[data-rjump]");
+    if (rj) {
+      e.preventDefault();
+      const [sq, sit] = rj.dataset.rjump.split("|");
+      rangeSquid = sq; rangeSitSel = sit; showSeenHands = true;
+      renderOppDetail(curOppId);
+      $("od-ranges").scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     const b = e.target.closest("[data-tag]");

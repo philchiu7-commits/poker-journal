@@ -31,6 +31,7 @@ const TENDENCY_TAGS = [
   // preflop — opening
   { id: "open-too-wide",        cat: "preflop",  label: "Open too wide" },
   { id: "ep-range-limp",        cat: "preflop",  label: "EP range limp" },
+  // limps-monster-ws/ns are retired — kept only so old values stay readable.
   { id: "limps-monster-ws",     cat: "preflop",  label: "Limps monster wS" },
   { id: "limps-monster-ns",     cat: "preflop",  label: "Limps monster nS" },
   { id: "attacks-limps",        cat: "preflop",  label: "Attacks limps" },
@@ -139,7 +140,8 @@ const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
 const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak",
-  "first-raise-ns", "first-raise-ws", "lrr-latest-ns", "lrr-latest-ws"]);
+  "first-raise-ns", "first-raise-ws", "lrr-latest-ns", "lrr-latest-ws",
+  "limps-monster-ws", "limps-monster-ns"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
 /* Sub-cluster single-read chips within each category so related reads live
@@ -445,6 +447,12 @@ const RANGE_SITS = [
   { id: "lrr-b",         label: "LRR B",   title: "limp-reraise — bluff" },
 ];
 const rangeSpotId = (sq, sit) => (sit === "all" ? "range-" + sq : sq + "-" + sit);
+/* The V/B position reads are named "<situation>-<squid>", so a read id maps
+   straight onto the Seen spot that holds the hands watched in that situation. */
+const readRangeSpot = (id) => {
+  const m = /^(.*)-(ns|ws)$/.exec(id);
+  return m && RANGE_SITS.some((t) => t.id === m[1]) ? { sq: m[2], sit: m[1] } : null;
+};
 const rangeSpotTitle = (sq, sit) =>
   (RANGE_SITS.find((t) => t.id === sit)?.title || sit) + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
 const RANGE_SPOTS = RANGE_SQUIDS.flatMap((s) => RANGE_SITS.map((t) => (
