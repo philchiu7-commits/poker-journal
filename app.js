@@ -106,7 +106,8 @@ function pillTag(o) {
 }
 
 /* Turn the opponent's set reads into concrete exploit suggestions (EXPLOIT_RULES),
-   minus any Phil has dismissed or already accepted (keys in o.exploitDismissed).
+   minus any Phil has dismissed or already accepted (keys in o.exploitDismissed)
+   or already wrote himself word-for-word.
    Weighted: yes!/no! (strong) count more than yes/no; compound rules count more
    than singles. Suggestions sort best-first. Compounds require at least one
    strong key so a wall of weak reads doesn't produce a confident-looking exploit. */
@@ -128,12 +129,12 @@ function suggestedExploits(o) {
     });
     if (!allMatch) continue;
     if (!anyStrong) continue;                                // compounds need ≥1 strong signal
-    const key = "cmp:" + rule.id;
-    if (dismissed.has(key) || seen.has(key)) continue;
+    const key = "cmp:" + rule.id, text = rule.label + " — " + rule.text;
+    if (dismissed.has(key) || seen.has(key) || have.has(text.toLowerCase())) continue;
     seen.add(key);
     // Compound base weight 6; +2 per additional strong key past the first.
     const weight = 6 + Math.max(0, strongCount - 1) * 2;
-    out.push({ key, text: rule.label + " — " + rule.text, compound: true, weight, strong: true });
+    out.push({ key, text, compound: true, weight, strong: true });
   }
   for (const [id, state] of Object.entries(reads)) {
     if (!state) continue;
@@ -144,7 +145,7 @@ function suggestedExploits(o) {
     const text = useAny ? rule.any : rule[base];
     if (!text) continue;
     const key = id + ":" + (useAny ? "any" : base);
-    if (dismissed.has(key) || seen.has(key)) continue;
+    if (dismissed.has(key) || seen.has(key) || have.has(text.trim().toLowerCase())) continue;
     seen.add(key);
     // Singles: strong=4, regular=2. "any"-kind rules are position/scale reads
     // where strength doesn't apply — treat as 2.
