@@ -1,10 +1,10 @@
 /* Shared vocabulary — stable ids; the future exploit engine aggregates these. */
 
-/* Seats in preflop acting order. "U<n>" is the under-the-gun label read as
-   the number of players still to act behind it, so the same name means the
-   same thing at any table size: 8-handed opens U7, 9-handed opens U8. STD is
-   the UTG seat — the straddle sits there but acts last preflop. */
-const POSITIONS = ["U8", "U7", "U6", "U5", "HJ", "CO", "BN", "SB", "BB", "STD"];
+/* Seats in preflop acting order. "U<n>" numbers the under-the-gun seats down
+   from the table size, so an 8-handed ring opens U8 U7 and a 9-handed one adds
+   U9 ahead of them. STD is the UTG seat — the straddle sits there but acts
+   last preflop and third postflop. */
+const POSITIONS = ["U9", "U8", "U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
 const STREETS = ["pre", "flop", "turn", "river"];
 const SIZED_ACTS = ["bet", "raise", "3bet", "4bet", "5bet"];
 const SIZES_OPEN = ["30k", "40k", "50k", "60k", "Jam"];   // open raise: chip amounts
@@ -479,20 +479,17 @@ const RANGE_CLASS_BY_ID = Object.fromEntries(RANGE_CLASSES.map((c) => [c.id, c])
 /* Every situation, the overall range included, is painted per position group —
    a range belongs to a seat, and one grid covering all ten seats is a range for
    nobody. Groups rather than seats because ten grids per situation is ten grids
-   that never get filled; these five genuinely play differently. Every UTG seat
-   is one group rather than splitting U7 from U6, because which U-label opens
-   depends on how many are seated — U7 at 8-handed is U8 at 9-handed, and the
-   group has to mean the same thing either way. The straddle is its own group
-   because it acts last preflop, not for where it sits. "Any" is
+   that never get filled; these five genuinely play differently. The straddle is
+   its own group because it acts last preflop, not for where it sits. "Any" is
    kept first so a quick ungrouped sketch is still one tap away, and it holds the
    legacy `range-<squid>` spot so nothing painted before this split moved. */
 const RANGE_POSGROUPS = [
   { id: "any", label: "Any", title: "any position", pos: null },
-  { id: "ep",  label: "EP",  title: "UTG seats", pos: ["U9", "U8", "U7", "U6", "U5"] },
-  { id: "mp",  label: "MP",  title: "HJ",        pos: ["HJ"] },
-  { id: "lp",  label: "LP",  title: "CO–BN",     pos: ["CO", "BN"] },
-  { id: "bl",  label: "BL",  title: "SB–BB",     pos: ["SB", "BB"] },
-  { id: "std", label: "STD", title: "straddle",  pos: ["STD"] },
+  { id: "ep",  label: "EP",  title: "U9–U7",   pos: ["U9", "U8", "U7"] },
+  { id: "mp",  label: "MP",  title: "U6–HJ",   pos: ["U6", "HJ"] },
+  { id: "lp",  label: "LP",  title: "CO–BN",   pos: ["CO", "BN"] },
+  { id: "bl",  label: "BL",  title: "SB–BB",   pos: ["SB", "BB"] },
+  { id: "std", label: "STD", title: "straddle", pos: ["STD"] },
 ];
 const RANGE_POSGROUP_BY_ID = Object.fromEntries(RANGE_POSGROUPS.map((g) => [g.id, g]));
 const posGroupOf = (p) => RANGE_POSGROUPS.find((g) => g.pos?.includes(p))?.id || null;

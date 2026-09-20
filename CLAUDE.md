@@ -77,13 +77,11 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   *opportunity* count, never a bare percentage — `renderOppHud` (app.js) prints
   n beside each and dims anything under `HUD_MIN`.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
-  **`U<n>` counts the players still to act behind that seat**, so the label
-  means the same thing at any table size: 8-handed opens U7, 9-handed opens U8.
-  `ringFor` (app.js) derives the ring from that — it numbered from the seat
-  count until v132, which labelled every 8-handed table one seat too early
-  (`U8 U7 HJ …` instead of `U7 U6 HJ …`). Hands logged before v132 carry the
-  old labels. `STD` is the UTG seat: the straddle sits there but acts last
-  preflop and third postflop.
+  **`U<n>` numbers the UTG seats down from the table size** — an 8-handed ring
+  is `SB BB STD U8 U7 HJ CO BN`, a 9-handed one adds U9. `ringFor` (app.js)
+  derives it. This is Phil's own convention, confirmed against his table; don't
+  "correct" it to count seats-behind. `STD` is the UTG seat: the straddle sits
+  there but acts last preflop and third postflop.
   **Tag ids are stable — never rename.** Adding a tag = safe; renaming an id
   breaks every opponent's saved reads.
 - `sw.js` — install/activate/fetch. Uses `cache: "reload"` on install so
@@ -111,10 +109,8 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   `RANGE_POSGROUPS` / `RANGE_CLASSES` in `vocab.js`, hand classes are 13×13 grid
   labels (`AKs`). Spot id is `<squid>-<sit>-<posgroup>`: **every situation, the
   overall range included, gets one grid per position group** (Any, EP U9–U7, MP
-  every UTG seat, HJ, LP CO–BN, BL SB–BB, STD), because a range belongs to a
-  seat. Groups rather than the ten seats: ten grids per situation is ten grids
-  nobody fills. The UTG seats are one group because which `U<n>` opens depends
-  on how many are seated, and the group has to mean the same thing either way.
+  U6–HJ, LP CO–BN, BL SB–BB, STD), because a range belongs to a seat. Groups
+  rather than the ten seats: ten grids per situation is ten grids nobody fills.
   STD is its own group for acting last preflop, not for where it sits. `any` is
   the ungrouped sketch and keeps the legacy `range-<squid>` id — the one
   exception to the scheme, so nothing painted before the split moved; the

@@ -3307,7 +3307,7 @@ function lineText(d) {
 /* ---- turn order + street completion (positions drive who's next) ---- */
 /* Acting order: preflop = UTG→…→blinds→straddle (POSITIONS as listed);
    postflop = blinds first, button last. */
-const ORDER_POST = ["SB", "BB", "STD", "U8", "U7", "U6", "U5", "HJ", "CO", "BN"];
+const ORDER_POST = ["SB", "BB", "STD", "U9", "U8", "U7", "U6", "HJ", "CO", "BN"];
 const actOrderFor = (street) => street === "pre" ? POSITIONS : ORDER_POST;
 const AGG_ACTS = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
 
@@ -3351,8 +3351,7 @@ const lineupId = (actor) => actor === "hero" ? "hero" : draft.villains[Number(ac
 const lineupActive = () => tableLineup.length >= 2;
 /* Seat ring for n seats (4..9), clockwise from SB. Blinds (+ STD when the
    straddle is on) at the head, HJ/CO/BN at the tail, and the seats between
-   filled with UTG labels numbered by how many players act behind them — the
-   first to act at an 8-handed table has seven behind, so it is U7. Short
+   filled with UTG labels numbered down from the table size (U9, U8, …). Short
    tables drop HJ, then CO, so 4-max is SB/BB/CO/BN. When the straddle is off
    no STD seat is offered anywhere (Phil's global rule); the freed seat becomes
    another UTG label so a 9-handed no-straddle ring still shows nine seats. */
@@ -3360,7 +3359,7 @@ const ringFor = (n, stdOn) => {
   const head = stdOn ? ["SB", "BB", "STD"] : ["SB", "BB"];
   const tail = ["HJ", "CO", "BN"];
   const k = n - head.length - tail.length;
-  const utg = k > 0 ? Array.from({ length: k }, (_, i) => "U" + (n - 1 - i)) : [];
+  const utg = k > 0 ? Array.from({ length: k }, (_, i) => "U" + (n - i)) : [];
   return head.concat(utg, tail.slice(Math.max(0, -k)));
 };
 /* Seat count = lineup array length (clamped 4..9), falling back to lineupSeats
