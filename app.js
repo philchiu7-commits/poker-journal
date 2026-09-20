@@ -2086,6 +2086,49 @@ function renderOppReads(o) {
     : "";
 }
 
+/* The HUD reads only imported hands — see stats.js for why. Every number
+   carries its own opportunity count, and anything under HUD_MIN is dimmed
+   rather than hidden: a 100% that happened once should look like what it is. */
+function renderOppHud(o) {
+  const hands = HANDS.filter((h) => h.imported && (h.villainIds || []).includes(o.id));
+  const nEl = $("od-hud-n"), box = $("od-hud");
+  if (!hands.length) {
+    nEl.textContent = "";
+    box.innerHTML = `<div class="hudempty">No imported hands for ${esc(o.name)} yet.
+      The HUD counts every seat and every preflop action, which only the
+      bookmarklet import records — hand-typed hands are the ones worth writing
+      down, so they would read far looser than the player really is.</div>`;
+    return;
+  }
+  const c = hudCount(o.id, hands);
+  nEl.textContent = `${c.seats} hand${c.seats === 1 ? "" : "s"}`;
+  const cell = (label, pct, d, thin, tip) =>
+    `<div class="hudcell${thin ? " thin" : ""}" title="${esc(tip)} — ${d} chance${d === 1 ? "" : "s"}">
+       <b>${pct === null ? "—" : Math.round(pct) + "%"}</b>
+       <span>${esc(label)}</span><i>${d}</i></div>`;
+  const cells = hudStats(c).map((r) => cell(r.label, r.pct, r.d, r.thin, r.tip)).join("");
+  const af = hudAF(c);
+  const afCell = `<div class="hudcell${!af || af.n < HUD_MIN ? " thin" : ""}" title="Postflop bets and raises per call — ${af ? af.n : 0} actions">
+      <b>${!af ? "—" : af.inf ? "∞" : af.v.toFixed(1)}</b><span>Agg factor</span><i>${af ? af.n : 0}</i></div>`;
+
+  // Limping is the read Phil actually plays against, so it gets its own row
+  // broken out by seat rather than one blended number.
+  const seats = POSITIONS.filter((p) => (c.byPos[p] || {}).seats);
+  const row = (label, key, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
+    const b = c.byPos[p], d = key === "limp" ? b.seats : b.limp;
+    const v = d ? Math.round((100 * b[key]) / d) + "%" : "—";
+    return `<td class="${d && d < 8 ? "thin" : ""}" title="${tip} from ${p}: ${b[key]}/${d}">${v}<i>${d}</i></td>`;
+  }).join("") + "</tr>";
+  const posTable = seats.length
+    ? `<div class="hudpos"><table>
+         <tr><th></th>${seats.map((p) => `<td>${p}</td>`).join("")}</tr>
+         ${row("Limp", "limp", "Limped")}
+         ${row("Limp-RR", "lrr", "Limped then raised")}
+       </table></div>`
+    : "";
+  box.innerHTML = `<div class="hudgrid">${cells}${afCell}</div>${posTable}`;
+}
+
 function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
@@ -2109,6 +2152,7 @@ function renderOppDetail(id) {
     return `<button class="ptypechip${on ? " on" : ""}" data-ptype="${t.id}" style="${on ? `background:${t.color};border-color:${t.color};color:#0a0d12` : `border-color:${t.color};color:${t.color}`}">${t.icon} ${esc(t.label)}</button>`;
   }).join("") + (o.type ? ` <button class="chip mini" data-ptype="">Clear</button>` : "") + `</div>`;
   renderOppReads(o);
+  renderOppHud(o);
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
   $("od-e-group").value = o.group || "";

@@ -53,6 +53,11 @@ server. To test a change against fresh assets in the preview:
   newer record wins conflicts) via `mergeOppRecords`. **v30+ also merges
   opponents by exact name match** so bulk imports don't dupe existing
   profiles. Hands/sessions stay plain newer-wins by id.
+- `stats.js` — the HUD engine. `hudCount(oppId, hands)` walks the action
+  stream once per hand and returns raw numerator/denominator counters;
+  `hudStats`/`hudAF` shape them for display. Every stat is a count over its own
+  *opportunity* count, never a bare percentage — `renderOppHud` (app.js) prints
+  n beside each and dims anything under `HUD_MIN`.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
   **Tag ids are stable — never rename.** Adding a tag = safe; renaming an id
   breaks every opponent's saved reads.
@@ -79,10 +84,16 @@ server. To test a change against fresh assets in the preview:
   imported?: {source, tableId, roundId, noK}, showdown}`. `normaliseHand`
   (app.js) tidies tokens/cards on every boot without touching `updatedAt`.
 - The **structured `actions[]` token stream** feeds `handText()` (LLM
-  summaries), the shown-hands range grid and per-opponent *read suggestions*
-  (`READ_SIGNALS`; Phil accepts or dismisses each). It is deliberately **not**
-  aggregated into stats — no VPIP/PFR/3-bet %/fold-to-cbet, no HUD, no
-  sample-size gating. Don't collapse the stream into a string either.
+  summaries), the shown-hands range grid, per-opponent *read suggestions*
+  (`READ_SIGNALS`; Phil accepts or dismisses each) and — since v124 — the
+  **HUD** (`stats.js`). Don't collapse the stream into a string.
+- **The HUD counts imported hands only.** `imported` hands come from the
+  bookmarklet, which records every seat and every preflop action (measured:
+  100% of 1437 villain seats). Hand-typed hands are the ones Phil thought worth
+  writing down and only 65% of their seats carry a preflop action, so folding
+  them in would bias every frequency upward. `hudCount` skips them — don't
+  "fix" that. Reads and exploits are still the primary engine; the HUD is a
+  second opinion, not a replacement.
 
 ## Hand entry — recent shape (v54)
 

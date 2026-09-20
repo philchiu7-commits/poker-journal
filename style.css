@@ -894,3 +894,22 @@ textarea.noteedit { margin-bottom: 0; }
   color: var(--muted); font-size: 18px; cursor: pointer;
 }
 .mergeitem.danger { color: #f85149; }
+
+/* ===== HUD ===== */
+.hudgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.hudcell { background:#161a22; border:1px solid #232a36; border-radius:10px;
+  padding:7px 4px; text-align:center; }
+.hudcell b { display:block; font-size:19px; font-weight:700; color:#e8ecf3; line-height:1.1; }
+.hudcell span { display:block; font-size:10.5px; color:#8b94a5; margin-top:2px; }
+.hudcell i { display:block; font-size:9.5px; color:#5a6374; font-style:normal; margin-top:1px; }
+/* Dimmed, not hidden — a number off three hands should look unreliable. */
+.hudcell.thin b { color:#6d7686; }
+.hudcell.thin i { color:#4d5666; }
+.hudpos { margin-top:8px; overflow-x:auto; }
+.hudpos table { border-collapse:collapse; width:100%; font-size:11px; }
+.hudpos th { text-align:left; color:#8b94a5; font-weight:600; padding:3px 6px 3px 0; white-space:nowrap; }
+.hudpos tr:first-child td { color:#8b94a5; font-size:10px; }
+.hudpos td { text-align:center; color:#d6dbe4; padding:3px 2px; min-width:34px; }
+.hudpos td i { display:block; font-size:9px; color:#5a6374; font-style:normal; }
+.hudpos td.thin { color:#6d7686; }
+.hudempty { color:#8b94a5; font-size:12px; line-height:1.5; }
