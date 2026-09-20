@@ -591,6 +591,9 @@ function hideSheet() {
 }
 
 /* ---------- routing ---------- */
+/* "ranges" — the saved-range library — keeps its view and its route but has no
+   tab of its own (Phil, v139): ranges live on the opponent now. Reachable at
+   #ranges, and nothing saved there was touched. */
 const VIEWS = ["opponents", "opp", "hand", "table", "handview", "ranges", "data"];
 const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", ranges: "ranges", data: "data" };
 
@@ -4708,7 +4711,21 @@ function bindStatic() {
   };
 
   // opponent detail
-  $("od-edit").onclick = () => $("od-editform").classList.toggle("hidden");
+  /* The form sits above the front-page card, so opening it from halfway down a
+     long profile would otherwise drop it off the top of the screen — scroll to
+     it, clear of the sticky header. */
+  $("od-edit").onclick = () => {
+    const f = $("od-editform");
+    if (f.classList.toggle("hidden")) return;
+    const head = document.querySelector("#view-opp .vhead");
+    /* Measured off the offset chain, not a viewport rect: showing the form
+       inserts content above the scroll position and the browser shifts scrollY
+       to compensate, so a rect read across that adjustment scrolls the wrong
+       way. Reading offsetTop forces the layout first. */
+    let y = 0;
+    for (let el = f; el; el = el.offsetParent) y += el.offsetTop;
+    window.scrollTo(0, Math.max(0, y - (head ? head.offsetHeight : 0) - 8));
+  };
   $("od-card-edit").onclick = openCardSheet;
   $("od-handfilters").onclick = (e) => {
     const c = e.target.closest("[data-hf]"); if (!c) return;

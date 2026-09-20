@@ -54,11 +54,19 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
 
 ## Code layout
 
-- `index.html` — one page, six `<section id="view-*">` blocks (opponents,
-  opp-detail, hand-entry, table, hand-detail, data). Hash-routing. On the
+- `index.html` — one page, seven `<section id="view-*">` blocks (opponents,
+  opp-detail, hand-entry, table, hand-detail, ranges, data). Hash-routing.
+  **The tab bar carries four tabs** — Opponents, Hand, Table, Data. The saved-range
+  library lost its tab in v139 (ranges live on the opponent now) but kept its
+  view, its `#ranges` route and every saved grid; it is still in `VIEWS` and
+  `TAB_FOR`, just unreachable from the bar. On the
   opponent detail, `#od-editform` (the ✎ name/group/looks-like form) sits
   directly under the header, **above** the Front-page card — two panels down it
-  opened below the fold, nowhere near the tap that opened it (v138). The Table
+  opened below the fold, nowhere near the tap that opened it (v138). The ✎
+  handler also scrolls the form into view, clear of the sticky header, by
+  walking the `offsetParent` chain: showing content above the scroll position
+  makes the browser shift `scrollY` to compensate, so a `getBoundingClientRect()`
+  read across that adjustment scrolls the wrong way (v139). The Table
   tab shows tonight's seat-ring lineup (same `tableLineup` meta as hand
   entry's Lineup sheet) with each opponent's front-page card chips; its
   renderer is `renderTableTab` (`renderTable` is the hand-entry felt).
