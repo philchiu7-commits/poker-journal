@@ -1450,10 +1450,17 @@ function oppRowHTML(o, st) {
   const typePill = type
     ? `<button class="ptypemini set" data-ptype-open="${o.id}" title="${esc(type.label)} — tap to change">${type.icon}</button>`
     : `<button class="ptypemini empty" data-ptype-open="${o.id}" title="Set player type">◦</button>`;
+  // VPIP/PFR/3-bet on the name line — the three numbers you actually read
+  // mid-hand. Absent entirely when the opponent has no imported hands, so
+  // live-only profiles look exactly as they did before the HUD existed.
+  const m = hudMini(hudFor(o.id, HANDS));
+  const hudLine = !oppEditMode && m
+    ? `<span class="hudline${m.thin ? " thin" : ""}" title="VPIP ${m.vpip}% · PFR ${m.pfr}% · 3-bet ${m.three === null ? "no chances yet" : m.three + "%"} — over ${m.seats} imported hand${m.seats === 1 ? "" : "s"}">${m.vpip}/${m.pfr}/${m.three === null ? "–" : m.three}<i>${m.seats}</i></span>`
+    : "";
   return `<div class="lrow opprow${typeCls}${oppEditMode ? " editing" : ""}" data-opp="${o.id}"${typeStyle}>
     ${handle}
     <div class="opprow-body">
-      <div class="t">${typePill}${esc(o.name)}</div>
+      <div class="t">${typePill}<span class="oppname">${esc(o.name)}</span>${hudLine}</div>
       ${physLine}
       ${showChips ? `<div class="chiprow cardchips">${chips}</div>` : ""}
     </div>
@@ -2090,9 +2097,9 @@ function renderOppReads(o) {
    carries its own opportunity count, and anything under HUD_MIN is dimmed
    rather than hidden: a 100% that happened once should look like what it is. */
 function renderOppHud(o) {
-  const hands = HANDS.filter((h) => h.imported && (h.villainIds || []).includes(o.id));
+  const c = hudFor(o.id, HANDS);
   const nEl = $("od-hud-n"), box = $("od-hud");
-  if (!hands.length) {
+  if (!c.seats) {
     nEl.textContent = "";
     box.innerHTML = `<div class="hudempty">No imported hands for ${esc(o.name)} yet.
       The HUD counts every seat and every preflop action, which only the
@@ -2100,7 +2107,6 @@ function renderOppHud(o) {
       down, so they would read far looser than the player really is.</div>`;
     return;
   }
-  const c = hudCount(o.id, hands);
   nEl.textContent = `${c.seats} hand${c.seats === 1 ? "" : "s"}`;
   const cell = (label, pct, d, thin, tip) =>
     `<div class="hudcell${thin ? " thin" : ""}" title="${esc(tip)} — ${d} chance${d === 1 ? "" : "s"}">

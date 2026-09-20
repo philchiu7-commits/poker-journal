@@ -913,3 +913,12 @@ textarea.noteedit { margin-bottom: 0; }
 .hudpos td i { display:block; font-size:9px; color:#5a6374; font-style:normal; }
 .hudpos td.thin { color:#6d7686; }
 .hudempty { color:#8b94a5; font-size:12px; line-height:1.5; }
+/* Row HUD: VPIP/PFR/3-bet on the name line, pushed to the right edge. */
+.lrow .t .oppname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hudline { margin-left: auto; flex: none; font-size: 12px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: #b9c2d0; letter-spacing: .2px; }
+.hudline i { font-style: normal; font-weight: 500; font-size: 10px; color: #6d7686; margin-left: 4px; }
+.hudline.thin { color: #6d7686; }
+.opprow[style*="--player-color"] .hudline { color: #f2f4f8; }
+.opprow[style*="--player-color"] .hudline.thin { color: #dfe3ea; opacity: .72; }
+.opprow[style*="--player-color"] .hudline i { color: #e6e8ec; opacity: .8; }

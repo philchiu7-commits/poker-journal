@@ -119,3 +119,29 @@ function hudAF(c) {
   if (!c.calls) return c.agg ? { v: null, inf: true, n: c.agg } : null;
   return { v: c.agg / c.calls, inf: false, n: c.agg + c.calls };
 }
+
+/* Row-level numbers get asked for once per opponent per render — 86 rows over
+   300 hands is enough walking to feel on a phone. Memoise per opponent and
+   throw the memo away whenever a hand is added, edited or deleted. */
+let _hudStamp = null, _hudMemo = new Map(), _hudPool = [];
+function hudFor(oppId, hands) {
+  let s = hands.length;
+  for (const h of hands) s += (h.updatedAt || h.ts || 0);
+  if (s !== _hudStamp) { _hudStamp = s; _hudMemo.clear(); _hudPool = hands.filter((h) => h.imported); }
+  if (!_hudMemo.has(oppId)) {
+    _hudMemo.set(oppId, hudCount(oppId, _hudPool.filter((h) => (h.villainIds || []).includes(oppId))));
+  }
+  return _hudMemo.get(oppId);
+}
+
+/* The one-line form for list rows: the standard VPIP/PFR/3-bet triplet that
+   every tracker prints, plus the hand count it came off. Null when there are
+   no imported hands, so live-only profiles stay exactly as they were. */
+function hudMini(c) {
+  if (!c || !c.seats) return null;
+  const p = (n, d) => (d ? Math.round((100 * n) / d) : null);
+  return {
+    seats: c.seats, opp3b: c.opp3b, thin: c.seats < HUD_MIN,
+    vpip: p(c.vpip, c.seats), pfr: p(c.pfr, c.seats), three: p(c.n3b, c.opp3b),
+  };
+}
