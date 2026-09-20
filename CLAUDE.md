@@ -71,6 +71,12 @@ server. To test a change against fresh assets in the preview:
   `philchiu7-commits.github.io`, so an unfiltered sweep would delete their
   offline caches. Keep `CACHE` starting with `PREFIX`.
 - `pinyin.js` — Chinese-name search helper for the opponents list.
+  **Not usable for duplicate detection** — the table is roster-sparse, so
+  阿威少哥 and 大力哥 both collapse to "ge". `findDupes` (app.js) matches
+  characters instead, and applies edit distance only from four characters up:
+  Chinese handles share particles (哥 "bro", 小 "little"), so 财哥/兵哥 and
+  小白/小虎 sit one edit apart and are different people. It never merges —
+  it surfaces the pair and Phil picks which name survives.
 
 ## Data model
 

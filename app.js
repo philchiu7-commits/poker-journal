@@ -17,6 +17,7 @@ let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
 let pinnedGroup = null;           // opponents list: group name that always sorts first (null = auto by recency)
+let dupeDismissed = new Set();    // opponents list: duplicate pairs Phil has said are different people
 let tableLineup = [];             // today's seat ring, ordered: ("hero" | oppId)[] — anchors positions
 let lineupSeats = 9;              // table size (6–9); picks which subset of the seat ring is in play
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
@@ -269,6 +270,87 @@ async function mergeOpponents(fromId, intoId) {
   await dbPut("opponents", into);
   await dbDel("opponents", fromId);
   await refreshCache();
+}
+
+/* ---- possible duplicates ----
+   One player gets two profiles when a name is typed once and imported once:
+   往事随风A vs 往事隨風A (one simplified character), 财哥 vs 财哥666 (the handle
+   suffix dropped). Only character-level shapes are trusted here. Pinyin is no
+   use — the roster collapses onto itself, 阿威少哥 and 大力哥 both reduce to
+   "ge". Plain edit distance is no use on short names either, because Chinese
+   handles share particles: 哥 ("bro") puts 财哥/兵哥 one edit apart and 小
+   ("little") does the same to 小白/小虎, and those are different people. So
+   edit distance only applies from four characters up. Nothing is ever merged
+   automatically — this surfaces the pair and Phil picks the survivor. */
+const dupeNorm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+// a trailing latin/digit tail is a handle suffix far more often than a different player
+const dupeCore = (s) => dupeNorm(s).replace(/[0-9a-z]+$/, "") || dupeNorm(s);
+const dupeKey = (x, y) => [x, y].sort().join("|");
+
+function levDist(a, b) {
+  const A = [...a], B = [...b], m = A.length, n = B.length;
+  let p = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const c = [i];
+    for (let j = 1; j <= n; j++)
+      c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (A[i - 1] === B[j - 1] ? 0 : 1));
+    p = c;
+  }
+  return p[n];
+}
+
+function dupeWhy(an, bn) {
+  const na = dupeNorm(an), nb = dupeNorm(bn);
+  if (!na || !nb) return null;
+  if (na === nb) return "the same name";
+  const ca = dupeCore(an), cb = dupeCore(bn);
+  const la = [...ca].length, lb = [...cb].length;
+  if (ca === cb && la >= 2) return "the same name once the trailing handle is dropped";
+  if ((ca.startsWith(cb) || cb.startsWith(ca)) && Math.min(la, lb) >= 2) return "one name is the start of the other";
+  const d = levDist(ca, cb);
+  if (Math.min(la, lb) >= 4 && d <= 2) return d + " character" + (d === 1 ? "" : "s") + " different";
+  return null;
+}
+
+function findDupes() {
+  const list = OPP.filter((o) => !o.archived && dupeNorm(o.name));
+  const out = [];
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i], b = list[j];
+    if (dupeDismissed.has(dupeKey(a.id, b.id))) continue;
+    const why = dupeWhy(a.name, b.name);
+    if (why) out.push({ a, b, why });
+  }
+  return out;
+}
+
+/* Both merge directions are offered because the bigger half isn't always the
+   one to keep — here the hands sit on one profile and the reads on the other. */
+function openDupesSheet() {
+  const pairs = findDupes();
+  if (!pairs.length) { hideSheet(); renderOpponents(); toast("No possible duplicates left."); return; }
+  const stat = (o) => {
+    const h = HANDS.filter((x) => (x.villainIds || []).includes(o.id)).length;
+    const r = Object.keys(o.reads || {}).length;
+    return `${h} hand${h === 1 ? "" : "s"} · ${r} read${r === 1 ? "" : "s"}`;
+  };
+  sheetGroup = "__dupes__";
+  showSheet(`<div class="sheethead"><span class="t">Possible duplicates</span>
+      <button data-sheetclose>Close</button></div>
+    <div class="sheetnote">Names close enough to be one player entered twice. Nothing merges until you pick
+      which name to keep — the other one's hands, reads, notes and exploits move across and its name is kept
+      as an alias, so search and imports still find it.</div>
+    <div class="dupelist">${pairs.map(({ a, b, why }) => `
+      <div class="dupepair">
+        <div class="dwhy">${esc(why)}</div>
+        <div class="dside"><span class="dnm">${esc(a.name)}</span><span class="muted">${stat(a)}</span></div>
+        <div class="dside"><span class="dnm">${esc(b.name)}</span><span class="muted">${stat(b)}</span></div>
+        <div class="dacts">
+          <button class="dkeep" data-dupemerge="${a.id}|${b.id}">Keep ${esc(a.name)}</button>
+          <button class="dkeep" data-dupemerge="${b.id}|${a.id}">Keep ${esc(b.name)}</button>
+          <button class="dskip" data-dupeskip="${a.id}|${b.id}">Not the same</button>
+        </div>
+      </div>`).join("")}</div>`);
 }
 
 async function refreshCache() {
@@ -1515,9 +1597,15 @@ function renderOpponents() {
       }
       return (groupRecency[b] || 0) - (groupRecency[a] || 0);
     });
+  // Duplicate review only while the list is showing everything as-is — a search
+  // or a reorder is a different job and the banner would just be in the way.
+  const dupes = !oppEditMode && !nq ? findDupes() : [];
+  const dupeBanner = dupes.length
+    ? `<button class="dupebanner" data-dupes>${dupes.length} possible duplicate${dupes.length === 1 ? "" : "s"} — review</button>`
+    : "";
   $("opp-edit").classList.toggle("on", oppEditMode);
   $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
-  $("opp-list").innerHTML = list.length ? groups.map((g) => {
+  $("opp-list").innerHTML = dupeBanner + (list.length ? groups.map((g) => {
     const members = list.filter((o) => (o.group || "") === g);
     const collapsed = collapsedGroups.has(g);
     const rows = members.map((o) => oppRowHTML(o, stats[o.id])).join("");
@@ -1536,7 +1624,7 @@ function renderOpponents() {
            </button>${pinBtn}${add}
          </div>` : "";
     return `${head}<div class="groupsec${collapsed ? " hidden" : ""}" data-group="${esc(g)}">${rows}</div>`;
-  }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`;
+  }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`);
   updateGroupsDatalist();
   if (oppEditMode) bindOppDrag();
 }
@@ -4151,6 +4239,28 @@ function sheetClick(e) {
   if (sheetGroup === "__bulkimport__") {
     if (e.target.closest("[data-bulksave]")) { commitBulkImport(); return; }
   }
+  if (sheetGroup === "__dupes__") {
+    const m = e.target.closest("[data-dupemerge]");
+    if (m) {
+      const [keepId, dropId] = m.dataset.dupemerge.split("|");
+      const keep = oppById(keepId), drop = oppById(dropId);
+      if (!keep || !drop) return;
+      if (!confirm(`Merge "${drop.name}" into "${keep.name}"?\n\n${drop.name}'s hands, reads, notes and exploits move to ${keep.name}, then "${drop.name}" is deleted.`)) return;
+      mergeOpponents(dropId, keepId).then(() => {
+        toast(`Merged into ${keep.name}`);
+        renderOpponents(); renderTableTab();
+        openDupesSheet();                    // straight on to the next pair
+      });
+      return;
+    }
+    const sk = e.target.closest("[data-dupeskip]");
+    if (sk) {
+      const [x, y] = sk.dataset.dupeskip.split("|");
+      dupeDismissed.add(dupeKey(x, y));
+      metaSet("dupeDismissed", [...dupeDismissed]).then(() => { renderOpponents(); openDupesSheet(); });
+      return;
+    }
+  }
   if (sheetGroup === "__ptype__") {
     const b = e.target.closest("[data-ptype-set]");
     if (b) {
@@ -4451,6 +4561,7 @@ function bindStatic() {
     if (ptype) { e.stopPropagation(); openPlayerTypeSheet(ptype.dataset.ptypeOpen); return; }
     const card = e.target.closest(".excard");
     if (card) { toast(card.getAttribute("title") || card.textContent); return; }   // full text, no nav
+    if (e.target.closest("[data-dupes]")) { openDupesSheet(); return; }
     const gc = e.target.closest("[data-groupcollapse]");
     if (gc) { toggleGroupCollapse(gc.dataset.groupcollapse); return; }
     const gpin = e.target.closest("[data-grouppin]");
@@ -5032,6 +5143,7 @@ async function boot() {
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
+  dupeDismissed = new Set((await metaGet("dupeDismissed")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
   lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};

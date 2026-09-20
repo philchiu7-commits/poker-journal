@@ -922,3 +922,22 @@ textarea.noteedit { margin-bottom: 0; }
 .opprow[style*="--player-color"] .hudline { color: #f2f4f8; }
 .opprow[style*="--player-color"] .hudline.thin { color: #dfe3ea; opacity: .72; }
 .opprow[style*="--player-color"] .hudline i { color: #e6e8ec; opacity: .8; }
+
+/* ===== Possible duplicates ===== */
+.dupebanner {
+  display: block; width: 100%; text-align: left; margin-bottom: 10px;
+  background: #2b220a; border: 1px solid #6b551f; border-radius: 10px;
+  padding: 10px 12px; color: #e0a63a; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.dupelist { display: flex; flex-direction: column; gap: 10px; }
+.dupepair { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
+.dupepair .dwhy { font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+.dupepair .dside { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+.dupepair .dnm { font-weight: 600; font-size: 16px; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dupepair .dside .muted { font-size: 12px; flex: none; }
+.dacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.dacts button { border-radius: 9px; padding: 9px 11px; font-size: 14px; cursor: pointer;
+  max-width: 100%; line-height: 1.25; overflow-wrap: anywhere; }
+.dacts .dkeep { flex: 1 1 40%; background: var(--panel); border: 1px solid #3a4658; color: var(--text); font-weight: 600; }
+.dacts .dskip { flex: 1 1 100%; background: transparent; border: 1px solid var(--line); color: var(--muted); }
