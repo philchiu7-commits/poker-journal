@@ -616,7 +616,7 @@ function route() {
   // Leaving a specific opponent, or navigating to a different one → drop filters.
   // A [data-rjump] read deep-link re-enters the same opponent, so scope it to
   // actually leaving them — otherwise the jump would reset what it just set.
-  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = false; rangeRecPos = null; }
+  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = false; }
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
@@ -772,14 +772,12 @@ function topPreGroup(h, idx) {
   }
   return top && top.g;
 }
-/* The record layer: every hand this villain has turned up, keyed by 13×13
-   class. Scoped to the squid state being sketched, so the shown hands belong
-   to the same world as the sketch; `pos` (null = all) narrows the record
-   only — never the sketch. */
-function rangeRecord(oppId, squidId, pos) {
-  const want = pos == null ? null : new Set(Array.isArray(pos) ? pos : [pos]);   // one seat, or a position group
-  const cells = {}, posCounts = {};
-  let total = 0;
+/* The record: every logged hand this villain turned up in one squid state,
+   reduced to the three things the grid asks about — which 13×13 class, which
+   seat, what they did preflop. One pass here lets every chip count itself off
+   the same rows instead of walking HANDS once per chip. */
+function rangeRows(oppId, squidId) {
+  const rows = [];
   for (const h of HANDS) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (idx < 0) continue;
@@ -787,16 +785,27 @@ function rangeRecord(oppId, squidId, pos) {
     const hc = handClass(v.cards);
     if (!hc) continue;                                  // squid cards sit off the grid
     if ((squidBucket(h) === "nS") !== (squidId === "ns")) continue;
-    const p = v.pos || "—";
-    posCounts[p] = (posCounts[p] || 0) + 1;
-    if (want && !want.has(p)) continue;
-    const e = cells[hc] = cells[hc] || { n: 0, acts: {}, hands: [] };
-    e.n++; total++;
-    e.hands.push(h);
-    const g = topPreGroup(h, idx);
-    if (g) e.acts[g] = (e.acts[g] || 0) + 1;
+    rows.push({ hc, pos: v.pos || "—", act: topPreGroup(h, idx), h });
   }
-  return { cells, posCounts, total };
+  return rows;
+}
+/* Narrow the rows to one situation and one seat scope. A situation with no
+   `act` (the overall range) takes every hand; a null scope takes every seat. */
+function rangeRowsIn(rows, sit, pos) {
+  const act = RANGE_SIT_BY_ID[sit]?.act || null;
+  const want = pos == null ? null : new Set(Array.isArray(pos) ? pos : [pos]);
+  return rows.filter((r) => (!act || r.act === act) && (!want || want.has(r.pos)));
+}
+/* Rows folded into the grid's cells: count, action mix, and the hands behind
+   them for the drill-down. */
+function rangeCells(rows) {
+  const cells = {};
+  for (const r of rows) {
+    const e = cells[r.hc] = cells[r.hc] || { n: 0, acts: {}, hands: [] };
+    e.n++; e.hands.push(r.h);
+    if (r.act) e.acts[r.act] = (e.acts[r.act] || 0) + 1;
+  }
+  return cells;
 }
 /* One swatch per action HUE FAMILY. The three reds of the old palette were
    separated only by lightness, which is unreadable at notch size — the exact
@@ -1105,7 +1114,7 @@ function openNoteReviewSheet(note, oppId) {
    as the heading, so one tap answers "what did they do with it?" before you
    open the hand. */
 function openRangeDrill(o) {
-  const { cells } = rangeRecord(o.id, rangeSquid, curRecScope());
+  const cells = rangeCells(rangeRowsIn(rangeRows(o.id, rangeSquid), rangeSitSel, curRecScope()));
   const classes = Object.keys(cells).sort(byGridOrder);
   let nHands = 0;
   const blocks = classes.map((c) => {
@@ -1118,8 +1127,7 @@ function openRangeDrill(o) {
     return `<div class="rdhead"><b>${esc(c)}</b><span class="spacer"></span>${mix || `<span class="rdact muted">no preflop action logged</span>`}</div>`
       + e.hands.slice().sort((a, b) => b.ts - a.ts).map((h) => handRowHTML(h, o.id)).join("");
   }).join("");
-  const seats = rangePosGroup(rangeSitPos).pos ? rangePosGroup(rangeSitPos).title : rangeRecPos;
-  const scope = `${esc(RANGE_SQUIDS.find((s) => s.id === rangeSquid)?.title || rangeSquid)}${seats ? ` · ${esc(seats)}` : ""}`;
+  const scope = esc(rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos));
   sheetGroup = "__rdrill__";
   showSheet(
     `<div class="sheethead"><span class="t">Shown · ${scope}</span>
@@ -1132,15 +1140,15 @@ function openRangeDrill(o) {
 let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being sketched
 let rangeSitSel = RANGE_SITS[0].id;     // which situation is on the grid — "all" is the overall range
 let rangeSitPos = "any";                // which position group is on the grid — "any" is the ungrouped sketch
-let showSeenHands = false;              // "Seen" toggle: record + show the hands you've watched them turn up
-let showShownLayer = true;              // "Shown": the record stamped over the sketch — facts first
-let rangeRecPos = null;                 // record-layer position scope; null = every position
+/* Two tabs, one grid. History is what they have actually turned up — the
+   logged hands, plus any you mark by hand; Estimate is the range you paint. */
+let rangeTab = "estimate";
 /* Both layers write the spot on screen: one situation from one position group.
    Seen marks live in the same spot as the sketch. */
 const curRangeSpot = () => rangeSpotId(rangeSquid, rangeSitSel, rangeSitPos);
-/* Which seats the record layer is allowed to count. A seat scopes it to
-   itself; "Any" hands it back to the free per-seat picker. */
-const curRecScope = () => rangePosGroup(rangeSitPos).pos || rangeRecPos;
+/* Which seats the record is allowed to count — a seat scopes it to itself,
+   "Any" takes the whole table. */
+const curRecScope = () => rangePosGroup(rangeSitPos).pos;
 /* Which seats get their own grid: the seats at tonight's table, plus any this
    villain already has a grid for, in preflop acting order. The ring is asked
    with the straddle on — it is always on in Phil's game — and falls back to
@@ -1186,80 +1194,80 @@ function setRangeSpot(o, key, hands, seen) {
   if (hands.length || seen.length) r[key] = { hands, seen }; else delete r[key];
   o.updatedAt = Date.now();
 }
-/* One grid, two layers. The fill is always the thing your thumb edits — the
-   sketch normally, the Seen marks under Seen. The other layer rides along as a
-   fenced corner notch: the record's action hue over the sketch, or the sketch
-   over the Seen marks. A tap never locks; drill into the hands from the footer. */
+/* One grid, two tabs. History fills itself from the logged hands and takes
+   marks for the ones you watched but never logged; Estimate is the range you
+   paint, with the record riding along as a fenced corner notch so the facts sit
+   over the sketch. The situation and seat rows are shared — they mean the same
+   thing on both sides, so switching tabs never loses your place. */
 function renderOppRanges(o) {
   const pgs = rangePosGroups(o);
   if (!pgs.some((g) => g.id === rangeSitPos)) rangeSitPos = "any";   // seat left over from another table → Any
+  if (!RANGE_SIT_BY_ID[rangeSitSel]) rangeSitSel = "all";            // situation left over from an older build
+  const hist = rangeTab === "history";
   const key = curRangeSpot();
   const cur = rangeSpotData(o, key);
   const anyPos = rangeSitPos === "any";
-  // Every chip counts the layer your thumb is on, so the numbers answer
-  // "where have I painted / where have I marked" rather than two questions.
-  const nOf = (k) => { const d = rangeSpotData(o, k); return (showSeenHands ? d.seen : d.hands).length; };
+  const rowsBy = { ns: rangeRows(o.id, "ns"), ws: rangeRows(o.id, "ws") };
+  const rows = rowsBy[rangeSquid];
+
+  /* Every chip counts the tab your thumb is on: on History the hands on record
+     for that chip, on Estimate what you have painted there. A History count is
+     hands, not spots, so it is taken over the whole scope at once rather than
+     summed per seat — "Any" already is every seat. */
+  const painted = (sq, sit, pg) => rangeSpotData(o, rangeSpotId(sq, sit, pg)).hands.length;
+  const onRecord = (sq, sit, pg) =>
+    rangeRowsIn(rowsBy[sq], sit, rangePosGroup(pg).pos).length
+    + rangeSpotData(o, rangeSpotId(sq, sit, pg)).seen.length;
+
   const squids = RANGE_SQUIDS.map((s) => {
-    const n = nOf(rangeSpotId(s.id, rangeSitSel, rangeSitPos));
+    const n = hist ? onRecord(s.id, rangeSitSel, rangeSitPos) : painted(s.id, rangeSitSel, rangeSitPos);
     return `<button class="chip mini${s.id === rangeSquid ? " on" : ""}" data-rsquid="${s.id}" title="${esc(s.title)}">${esc(s.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const sits = RANGE_SITS.map((t) => {
-    const n = pgs.reduce((m, g) => m + nOf(rangeSpotId(rangeSquid, t.id, g.id)), 0);
+    const n = hist
+      ? onRecord(rangeSquid, t.id, rangeSitPos)
+      : pgs.reduce((m, g) => m + painted(rangeSquid, t.id, g.id), 0);
     return `<button class="chip mini${t.id === rangeSitSel ? " on" : ""}" data-rsit="${t.id}" title="${esc(t.title)}">${esc(t.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const groups = pgs.map((g) => {
-    const n = nOf(rangeSpotId(rangeSquid, rangeSitSel, g.id));
+    const n = hist ? onRecord(rangeSquid, rangeSitSel, g.id) : painted(rangeSquid, rangeSitSel, g.id);
     return `<button class="chip mini${g.id === rangeSitPos ? " on" : ""}" data-rpg="${g.id}" title="${esc(g.title)}">${esc(g.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
+
   const inr = new Set(cur.hands), seenSet = new Set(cur.seen);
+  const rec = rangeCells(rangeRowsIn(rows, rangeSitSel, curRecScope()));
+  const recKeys = Object.keys(rec);
+  const recHands = recKeys.reduce((n, c) => n + rec[c].n, 0);
 
-  // Record layer: suppressed under Seen, where the grid belongs to the marks.
-  const live = showShownLayer && !showSeenHands;
-  const all = live ? rangeRecord(o.id, rangeSquid, null) : { cells: {}, posCounts: {}, total: 0 };
-  const posKeys = Object.keys(all.posCounts).sort(POS_ORDER);
-  if (rangeRecPos && !posKeys.includes(rangeRecPos)) rangeRecPos = null;   // stale pick → All, never a silent other position
-  const scope = curRecScope();
-  const rec = !live ? all : scope ? rangeRecord(o.id, rangeSquid, scope) : all;
-  const recKeys = Object.keys(rec.cells);
-  const recHands = recKeys.reduce((n, c) => n + rec.cells[c].n, 0);
-  const posPicker = live && anyPos && posKeys.length > 1
-    ? `<div class="rgpicker chiprow readwrap">
-         <button class="chip mini${rangeRecPos ? "" : " on"}" data-rpos="">All<i>${all.total}</i></button>
-         ${posKeys.map((p) => `<button class="chip mini${p === rangeRecPos ? " on" : ""}" data-rpos="${esc(p)}">${esc(p)}<i>${all.posCounts[p]}</i></button>`).join("")}
-       </div>`
-    : "";
-
-  // Class chip: lit when every hand of the class is in; dashed when only some are.
-  const classes = showSeenHands ? "" : RANGE_CLASSES.map((c) => {
+  // Class chip: lit when every hand of the class is in; dashed when only some
+  // are. Estimate only — there is nothing to bulk-paint on the record.
+  const classes = hist ? "" : RANGE_CLASSES.map((c) => {
     const n = c.hands.filter((h) => inr.has(h)).length;
     const st = n === c.hands.length ? " on" : n ? " part" : "";
     return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
   }).join("");
 
   const cells = HAND_CLASSES.map((c) => {
-    const inSketch = inr.has(c);
+    const e = rec[c], inSketch = inr.has(c);
     let cls = "rgcell rng", notch = "", title = c;
-    if (showSeenHands) {
-      if (seenSet.has(c)) { cls += " smark"; title += " · seen"; }
-      if (inSketch) { notch = `<i class="rgnotch" style="--nc:var(--accent)"></i>`; title += " · in range"; }
+    if (e) title += ` · shown ${e.n}×${strongestAct(e.acts) ? ` · ${strongestAct(e.acts)}` : ""}`;
+    if (hist) {
+      if (e) cls += " inr";
+      if (seenSet.has(c)) { cls += " smark"; title += " · marked seen"; }
+      if (e) notch = `<i class="rgnotch" style="--nc:${notchColor(strongestAct(e.acts))}"></i>`;
     } else {
       if (inSketch) cls += " inr";
-      const e = rec.cells[c];
-      if (e) {
-        const act = strongestAct(e.acts);
-        notch = `<i class="rgnotch" style="--nc:${notchColor(act)}"></i>`;
-        title += ` · shown ${e.n}×${act ? ` · ${act}` : ""}`;
-      }
+      if (e) notch = `<i class="rgnotch" style="--nc:${notchColor(strongestAct(e.acts))}"></i>`;
     }
     return `<div class="${cls}" data-rcell="${c}" role="button" title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
 
   const byHue = {};
   for (const c of recKeys) {
-    const a = strongestAct(rec.cells[c].acts);
+    const a = strongestAct(rec[c].acts);
     (byHue[notchColor(a)] = byHue[notchColor(a)] || new Set()).add(a);
   }
-  const legend = live && recKeys.length
+  const legend = recKeys.length
     ? `<div class="rglegend">${Object.entries(byHue)
          .map(([col, set]) => [col, [...set].sort((a, b) => (RANK_ACT[a] ?? -1) - (RANK_ACT[b] ?? -1))])
          .sort((a, b) => (RANK_ACT[b[1].at(-1)] ?? -1) - (RANK_ACT[a[1].at(-1)] ?? -1))
@@ -1267,40 +1275,35 @@ function renderOppRanges(o) {
        <span class="rglegnote">corner = what they did with it</span></div>`
     : "";
 
-  const combos = cur.hands.reduce((n, c) => n + handClassCombos(c), 0);
   const title = esc(rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos));
-  const foot = showSeenHands
-    ? `${title} · ${cur.seen.length} hand${cur.seen.length === 1 ? "" : "s"} seen`
-    : `${title} · ${cur.hands.length} hand${cur.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}%`;
+  const combos = cur.hands.reduce((n, c) => n + handClassCombos(c), 0);
   // Tappable counts are the way into the hands — the cells themselves always paint.
-  const recFoot = !live ? ""
-    : recKeys.length
-      ? ` · <button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
-        + (!anyPos ? ` <span class="rgscope">${esc(rangePosGroup(rangeSitPos).title)} only</span>`
-         : rangeRecPos ? ` <span class="rgscope">${esc(rangeRecPos)} only</span>` : "")
-      : " · no shown hands yet";
-  const clearable = showSeenHands ? cur.seen.length : cur.hands.length;
+  const drill = recKeys.length
+    ? `<button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
+    : `no hands on record yet`;
+  const foot = hist
+    ? `${title} · ${drill}${cur.seen.length ? ` · ${cur.seen.length} marked by hand` : ""}`
+    : `${title} · ${cur.hands.length} hand${cur.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}% · ${drill}`;
+  const clearable = hist ? cur.seen.length : cur.hands.length;
   $("od-ranges").innerHTML = `
     <div class="rsquid">${squids}</div>
     <div class="rspots chiprow readwrap">${sits}</div>
     <div class="rpgroups chiprow readwrap">${groups}</div>
-    ${posPicker}
     ${classes ? `<div class="rclasses chiprow readwrap">${classes}</div>` : ""}
     <div class="rggrid">${cells}</div>
     ${legend}
     <div class="rfoot">
-      <span>${foot}${recFoot}</span>
+      <span>${foot}</span>
       <span class="spacer"></span>
       ${clearable ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
     </div>
-    ${showSeenHands
-      ? `<div class="rhint">Seen mode — tap the hands you've watched them turn up here. The blue corner marks your sketched range.</div>`
-      : !anyPos && !cur.hands.length
-        ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SITS.find((t) => t.id === rangeSitSel).title)}`} from ${esc(rangePosGroup(rangeSitPos).title)}. Each seat is its own grid — a range belongs to a seat.</div>`
+    ${hist
+      ? `<div class="rhint">Hands they turned up fill in from your hand histories. Tap a cell to mark one you watched but never logged.</div>`
+      : !cur.hands.length
+        ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SIT_BY_ID[rangeSitSel].title)}`} from ${esc(rangePosGroup(rangeSitPos).title)} — tap the category chips to paint in blocks. The corner notches are what they have actually shown.</div>`
         : ""}`;
-  $("od-range-seen").classList.toggle("on", showSeenHands);
-  $("od-range-shown").classList.toggle("on", showShownLayer);
-  $("od-range-shown").hidden = showSeenHands;
+  $("od-range-hist").classList.toggle("on", hist);
+  $("od-range-est").classList.toggle("on", !hist);
 }
 
 /* ================= Saved ranges (library tab) =================
@@ -4678,16 +4681,13 @@ function bindStatic() {
     else { const s = handFilters[dim]; if (s.has(v)) s.delete(v); else s.add(v); }
     if (curOppId) renderOppDetail(curOppId);
   };
-  $("od-range-shown").onclick = () => {
-    showShownLayer = !showShownLayer;
+  const rangeTabClick = (tab) => () => {
+    rangeTab = tab;
     const o = oppById(curOppId);
     if (o) renderOppRanges(o);
   };
-  $("od-range-seen").onclick = () => {
-    showSeenHands = !showSeenHands;
-    const o = oppById(curOppId);
-    if (o) renderOppRanges(o);
-  };
+  $("od-range-hist").onclick = rangeTabClick("history");
+  $("od-range-est").onclick = rangeTabClick("estimate");
   $("od-ranges").onclick = async (e) => {
     const o = oppById(curOppId);
     if (!o) return;
@@ -4696,8 +4696,7 @@ function bindStatic() {
     if (st) { rangeSitSel = st.dataset.rsit; renderOppRanges(o); return; }
     const pg = e.target.closest("[data-rpg]");
     if (pg) { rangeSitPos = pg.dataset.rpg; renderOppRanges(o); return; }
-    const rp = e.target.closest("[data-rpos]"), dr = e.target.closest("[data-rdrill]");
-    if (rp) { rangeRecPos = rp.dataset.rpos || null; renderOppRanges(o); return; }
+    const dr = e.target.closest("[data-rdrill]");
     if (dr) { openRangeDrill(o); return; }
     const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
     if (!cl && !cell && !clr) return;
@@ -4706,17 +4705,17 @@ function bindStatic() {
     if (cl) {                        // class chip: all in → remove all, else add all
       const ch = RANGE_CLASS_BY_ID[cl.dataset.rclass].hands;
       hands = ch.every((h) => hands.includes(h)) ? hands.filter((h) => !ch.includes(h)) : hands.concat(ch);
-    } else if (cell) {               // grid tap edits the range — or the seen marks while Seen is on
+    } else if (cell) {               // grid tap paints the estimate, or marks a hand on History
       const c = cell.dataset.rcell;
       const tog = (arr) => arr.includes(c) ? arr.filter((h) => h !== c) : arr.concat(c);
-      if (showSeenHands) seen = tog(seen); else hands = tog(hands);
+      if (rangeTab === "history") seen = tog(seen); else hands = tog(hands);
     } else if (clr) {
       const what = rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos);
-      if (showSeenHands) {
-        if (!confirm(`Clear the hands seen in ${what}?`)) return;
+      if (rangeTab === "history") {
+        if (!confirm(`Clear the hands you marked by hand in ${what}? Logged hands stay.`)) return;
         seen = [];
       } else {
-        if (!confirm(`Clear the ${what}? Seen marks stay.`)) return;
+        if (!confirm(`Clear your estimate of the ${what}? Marked hands stay.`)) return;
         hands = [];
       }
     }
@@ -4889,7 +4888,7 @@ function bindStatic() {
     if (rj) {
       e.preventDefault();
       const [sq, sit, pg] = rj.dataset.rjump.split("|");
-      rangeSquid = sq; rangeSitSel = sit; showSeenHands = true;
+      rangeSquid = sq; rangeSitSel = sit; rangeTab = "history";
       rangeSitPos = pg || "any";             // land on the seat the read names, not wherever the grid was left
 
       renderOppDetail(curOppId);

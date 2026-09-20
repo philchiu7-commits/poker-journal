@@ -494,23 +494,40 @@ const RANGE_SQUIDS = [
   { id: "ns", label: "nS", title: "no squid" },
   { id: "ws", label: "wS", title: "with squid" },
 ];
+/* Situations: the overall range, then the preflop actions themselves. `act` is
+   the bucket `topPreGroup` (app.js) reads off a logged hand's action stream, so
+   one vocabulary serves both halves of the panel — History filters the hands on
+   record by it, Estimate paints the matching grid. Value/bluff is deliberately
+   not split: it is a judgement the action stream can't make, and two grids per
+   action is two grids that never get filled. */
 const RANGE_SITS = [
-  { id: "all",           label: "Range",   title: "overall range" },
-  { id: "first-raise-v", label: "1st R V", title: "first raise — value" },
-  { id: "first-raise-b", label: "1st R B", title: "first raise — bluff" },
-  { id: "lrr-v",         label: "LRR V",   title: "limp-reraise — value" },
-  { id: "lrr-b",         label: "LRR B",   title: "limp-reraise — bluff" },
+  { id: "all",   label: "Range", title: "overall range", act: null },
+  { id: "raise", label: "Raise", title: "raise",         act: "raise" },
+  { id: "limp",  label: "Limp",  title: "limp",          act: "limp" },
+  { id: "3bet",  label: "3bet",  title: "3-bet",         act: "3bet" },
+  { id: "4bet",  label: "4bet+", title: "4-bet or more", act: "4bet+" },
+  { id: "call",  label: "Call",  title: "call",          act: "call" },
+  { id: "lrr",   label: "LRR",   title: "limp-reraise",  act: "Lrr" },
 ];
+const RANGE_SIT_BY_ID = Object.fromEntries(RANGE_SITS.map((t) => [t.id, t]));
 const rangeSpotId = (sq, sit, pg = "any") =>
   (sit === "all" && pg === "any" ? "range-" + sq : `${sq}-${sit}-${pg}`);
-/* The V/B position reads are named "<situation>-<squid>", so a read id maps
-   straight onto the Seen spot that holds the hands watched in that situation. */
+/* Position reads are named "<situation>-<squid>", so a read id maps straight
+   onto the grid that holds the hands seen in that situation. Tag ids are
+   stable, so the reads that predate the dropped value/bluff split keep their
+   ids and land on the plain action instead. */
+const READ_SIT = {
+  "first-raise": "raise", "first-raise-v": "raise", "first-raise-b": "raise",
+  "lrr-latest": "lrr", "lrr-v": "lrr", "lrr-b": "lrr",
+};
 const readRangeSpot = (id) => {
   const m = /^(.*)-(ns|ws)$/.exec(id);
-  return m && RANGE_SITS.some((t) => t.id === m[1]) ? { sq: m[2], sit: m[1] } : null;
+  if (!m) return null;
+  const sit = READ_SIT[m[1]] || (RANGE_SIT_BY_ID[m[1]] ? m[1] : null);
+  return sit ? { sq: m[2], sit } : null;
 };
 const rangeSpotTitle = (sq, sit, pg) =>
-  (RANGE_SITS.find((t) => t.id === sit)?.title || sit)
+  (RANGE_SIT_BY_ID[sit]?.title || sit)
   + (!pg || pg === "any" ? "" : " from " + rangePosGroup(pg).title)
   + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326

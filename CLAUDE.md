@@ -107,15 +107,28 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   seen: [class…]}}, order?, createdAt?, updatedAt, archived?}`. Reads: see
   `TENDENCY_TAGS` (kinds: yes/no, `position`, `choice`); ranges: `RANGE_SITS` /
   `RANGE_CLASSES` in `vocab.js`, hand classes are 13×13 grid labels (`AKs`).
-  Spot id is `<squid>-<sit>-<seat>` with the seat lowercased
-  (`ns-first-raise-v-u8`): **every situation, the overall range included, gets
-  one grid per seat**, because a range belongs to a seat. Which seats get a chip
-  is decided at render time by `rangePosGroups` (app.js) — tonight's ring
-  (straddle on, falling back to 8-handed) plus any seat that already has a grid
-  — so the row is `Any U8 U7 HJ CO BN SB BB STD` by default and grows a U9 chip
-  when a ninth player is seated. `any` is the seatless sketch and keeps the
-  legacy `range-<squid>` id — the one exception to the scheme, so nothing
-  painted before the split moved; the saved-ranges library reads that spot.
+  Spot id is `<squid>-<sit>-<seat>` with the seat lowercased (`ns-raise-u8`):
+  **every situation, the overall range included, gets one grid per seat**,
+  because a range belongs to a seat. Which seats get a chip is decided at render
+  time by `rangePosGroups` (app.js) — tonight's ring (straddle on, falling back
+  to 8-handed) plus any seat that already has a grid — so the row is
+  `Any U8 U7 HJ CO BN SB BB STD` by default and grows a U9 chip when a ninth
+  player is seated. `any` is the seatless sketch and keeps the legacy
+  `range-<squid>` id — the one exception to the scheme, so nothing painted
+  before the split moved; the saved-ranges library reads that spot.
+- The Ranges panel has **two tabs over one grid**. *History* is what the villain
+  has actually turned up — `rangeRows` (app.js) reads it straight off `HANDS`,
+  so it needs no storage; a cell tapped there lands in `seen[]`, for a hand Phil
+  watched but never logged. *Estimate* is the range he paints (`hands[]`), with
+  the `RANGE_CLASSES` chips to fill it in blocks; the corner notch on an
+  Estimate cell is the History fact showing through. Situations are the preflop
+  actions themselves — `Range · Raise · Limp · 3bet · 4bet+ · Call · LRR` —
+  and each carries the `act` bucket `topPreGroup` produces, so one vocabulary
+  serves both tabs: History filters the hands on record by it, Estimate paints
+  the matching grid. **Value/bluff is deliberately not split** (Phil, v135): the
+  action stream can't make that call, and two grids per action is two grids that
+  never get filled. Tag ids stay stable, so `READ_SIT` (vocab.js) maps the
+  older `first-raise-v|-b` and `lrr-v|-b` read ids onto the plain action.
 - `hands`: `{id, ts, updatedAt, villains: [{opponentId, pos, cards, chips?}],
   villainIds, hero, heroPos, heroCards, actions: [{street, actor, act, size?}],
   board: [5], blinds: {sb, bb, std, ante}, effStack, note, mode?, srcNoteId?,
