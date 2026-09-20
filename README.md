@@ -55,7 +55,8 @@ python3 -m http.server 8002
 ## Notes
 
 - Deploying an update: bump `CACHE` in `sw.js` (e.g. `journal-v2`) so installed
-  phones pick up the new version on next launch.
+  phones pick up the new version. It takes **two** launches/reloads: the first
+  is still served by the old service worker while the new one installs.
 - Data model is structured (action tokens + read ids) so `handText` can render
   a plain-text hand history for LLM summaries and the app can *suggest* reads
   from logged hands. By design there are no aggregate stats (no VPIP /

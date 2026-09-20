@@ -18,6 +18,11 @@ curl -s https://philchiu7-commits.github.io/poker-journal/sw.js | sed -n 2p
 **Never skip the cache bump.** The SW is cache-first — installed phones will
 keep serving the old assets otherwise. Current cache: see `sw.js` line 2.
 
+**A cache bump needs two reloads.** The first reload is still served by the old
+worker while the new one installs, activates and claims the page; the second
+reload gets the new assets. Only the second one proves a deploy landed — don't
+read the first as a failed deploy and bump again.
+
 ## Local preview
 
 Launch config `poker-journal` in `.claude/launch.json` runs
@@ -52,7 +57,11 @@ server. To test a change against fresh assets in the preview:
   **Tag ids are stable — never rename.** Adding a tag = safe; renaming an id
   breaks every opponent's saved reads.
 - `sw.js` — install/activate/fetch. Uses `cache: "reload"` on install so
-  phones fetch fresh assets on version bump.
+  phones fetch fresh assets on version bump. The activate sweep is filtered to
+  `PREFIX` (`journal-`) — Cache Storage is keyed per **origin**, not per SW
+  scope, and the sibling PWAs (shortdeck-journal, range-lab, squid-web) share
+  `philchiu7-commits.github.io`, so an unfiltered sweep would delete their
+  offline caches. Keep `CACHE` starting with `PREFIX`.
 - `pinyin.js` — Chinese-name search helper for the opponents list.
 
 ## Data model
