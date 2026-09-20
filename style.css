@@ -612,8 +612,9 @@ textarea.noteedit { margin-bottom: 0; }
 .rsquid .chip { border-color: transparent; background: transparent; }
 .rsquid .chip.on { background: var(--accent); color: #0a0d12; border-color: var(--accent); box-shadow: none; }
 .rspots { margin-bottom: 8px; }
-/* The position groups sit under their situation and read as a second rank of
-   the same picker, so they are indented and quieter than the row above. */
+/* The seat chips sit under their situation and read as a second rank of the
+   same picker, so they are indented and quieter than the row above. Nine of
+   them wrap to two lines on the phone — that is the point of readwrap. */
 .rpgroups { margin: -4px 0 8px 10px; }
 .rpgroups .chip.on { background: #1d3050; border-color: #3f6ea8; color: #cfe2ff; }
 .rclasses { margin-bottom: 8px; }

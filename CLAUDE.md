@@ -106,15 +106,16 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   featured?: [{type,id}], notes: [...], ranges?: {spotId: {hands: [class…],
   seen: [class…]}}, order?, createdAt?, updatedAt, archived?}`. Reads: see
   `TENDENCY_TAGS` (kinds: yes/no, `position`, `choice`); ranges: `RANGE_SITS` /
-  `RANGE_POSGROUPS` / `RANGE_CLASSES` in `vocab.js`, hand classes are 13×13 grid
-  labels (`AKs`). Spot id is `<squid>-<sit>-<posgroup>`: **every situation, the
-  overall range included, gets one grid per position group** (Any, EP U9–U7, MP
-  U6–HJ, LP CO–BN, BL SB–BB, STD), because a range belongs to a seat. Groups
-  rather than the ten seats: ten grids per situation is ten grids nobody fills.
-  STD is its own group for acting last preflop, not for where it sits. `any` is
-  the ungrouped sketch and keeps the legacy `range-<squid>` id — the one
-  exception to the scheme, so nothing painted before the split moved; the
-  saved-ranges library reads that spot.
+  `RANGE_CLASSES` in `vocab.js`, hand classes are 13×13 grid labels (`AKs`).
+  Spot id is `<squid>-<sit>-<seat>` with the seat lowercased
+  (`ns-first-raise-v-u8`): **every situation, the overall range included, gets
+  one grid per seat**, because a range belongs to a seat. Which seats get a chip
+  is decided at render time by `rangePosGroups` (app.js) — tonight's ring
+  (straddle on, falling back to 8-handed) plus any seat that already has a grid
+  — so the row is `Any U8 U7 HJ CO BN SB BB STD` by default and grows a U9 chip
+  when a ninth player is seated. `any` is the seatless sketch and keeps the
+  legacy `range-<squid>` id — the one exception to the scheme, so nothing
+  painted before the split moved; the saved-ranges library reads that spot.
 - `hands`: `{id, ts, updatedAt, villains: [{opponentId, pos, cards, chips?}],
   villainIds, hero, heroPos, heroCards, actions: [{street, actor, act, size?}],
   board: [5], blinds: {sb, bb, std, ante}, effStack, note, mode?, srcNoteId?,

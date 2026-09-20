@@ -1118,7 +1118,7 @@ function openRangeDrill(o) {
     return `<div class="rdhead"><b>${esc(c)}</b><span class="spacer"></span>${mix || `<span class="rdact muted">no preflop action logged</span>`}</div>`
       + e.hands.slice().sort((a, b) => b.ts - a.ts).map((h) => handRowHTML(h, o.id)).join("");
   }).join("");
-  const seats = RANGE_POSGROUP_BY_ID[rangeSitPos].pos ? RANGE_POSGROUP_BY_ID[rangeSitPos].title : rangeRecPos;
+  const seats = rangePosGroup(rangeSitPos).pos ? rangePosGroup(rangeSitPos).title : rangeRecPos;
   const scope = `${esc(RANGE_SQUIDS.find((s) => s.id === rangeSquid)?.title || rangeSquid)}${seats ? ` · ${esc(seats)}` : ""}`;
   sheetGroup = "__rdrill__";
   showSheet(
@@ -1138,9 +1138,23 @@ let rangeRecPos = null;                 // record-layer position scope; null = e
 /* Both layers write the spot on screen: one situation from one position group.
    Seen marks live in the same spot as the sketch. */
 const curRangeSpot = () => rangeSpotId(rangeSquid, rangeSitSel, rangeSitPos);
-/* Which seats the record layer is allowed to count. A group scopes it to its
-   own seats; "Any" hands it back to the free per-seat picker. */
-const curRecScope = () => RANGE_POSGROUP_BY_ID[rangeSitPos].pos || rangeRecPos;
+/* Which seats the record layer is allowed to count. A seat scopes it to
+   itself; "Any" hands it back to the free per-seat picker. */
+const curRecScope = () => rangePosGroup(rangeSitPos).pos || rangeRecPos;
+/* Which seats get their own grid: the seats at tonight's table, plus any this
+   villain already has a grid for, in preflop acting order. The ring is asked
+   with the straddle on — it is always on in Phil's game — and falls back to
+   eight-handed rather than the hand-entry default of nine, because a seat
+   nobody sits in is a chip that never gets tapped. Seat the ninth player in
+   the lineup and U9 appears. */
+function rangePosGroups(o) {
+  const seats = new Set(ringFor(Math.max(4, Math.min(9, tableLineup.length || 8)), true));
+  for (const k of Object.keys(oppRanges(o))) {
+    const p = k.slice(k.lastIndexOf("-") + 1).toUpperCase();
+    if (POSITIONS.includes(p)) seats.add(p);
+  }
+  return [RANGE_ANY].concat(POSITIONS.filter((p) => seats.has(p)).map(rangePosGroup));
+}
 const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
 const rangeSpotData = (o, key) => { const s = oppRanges(o)[key] || {}; return { hands: s.hands || [], seen: s.seen || [] }; };
 /* Keep the ▦ counts on the V/B reads in step with the Seen grid without
@@ -1154,10 +1168,15 @@ function syncSeenBadges(o) {
   });
 }
 /* A read names one seat but the badge speaks for the situation, so it counts
-   every group's marks — otherwise a hand seen from CO would vanish off a read
-   pointing at BN. */
-const seenAcrossGroups = (o, sq, sit) =>
-  RANGE_POSGROUPS.reduce((n, g) => n + rangeSpotData(o, rangeSpotId(sq, sit, g.id)).seen.length, 0);
+   every seat's marks — otherwise a hand seen from CO would vanish off a read
+   pointing at BN. Counted off the stored keys rather than tonight's seat list,
+   so marks on a seat that isn't at the table still show. */
+const seenAcrossGroups = (o, sq, sit) => {
+  const r = oppRanges(o);
+  const legacy = rangeSpotId(sq, sit, "any");
+  return Object.keys(r).reduce(
+    (n, k) => k === legacy || k.startsWith(`${sq}-${sit}-`) ? n + (r[k].seen || []).length : n, 0);
+};
 const byGridOrder = (a, b) => (HAND_CLASS_ORDER[a] ?? 999) - (HAND_CLASS_ORDER[b] ?? 999);
 /* Write a spot back; an empty spot is dropped so records stay clean. */
 function setRangeSpot(o, key, hands, seen) {
@@ -1172,6 +1191,8 @@ function setRangeSpot(o, key, hands, seen) {
    fenced corner notch: the record's action hue over the sketch, or the sketch
    over the Seen marks. A tap never locks; drill into the hands from the footer. */
 function renderOppRanges(o) {
+  const pgs = rangePosGroups(o);
+  if (!pgs.some((g) => g.id === rangeSitPos)) rangeSitPos = "any";   // seat left over from another table → Any
   const key = curRangeSpot();
   const cur = rangeSpotData(o, key);
   const anyPos = rangeSitPos === "any";
@@ -1183,10 +1204,10 @@ function renderOppRanges(o) {
     return `<button class="chip mini${s.id === rangeSquid ? " on" : ""}" data-rsquid="${s.id}" title="${esc(s.title)}">${esc(s.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const sits = RANGE_SITS.map((t) => {
-    const n = RANGE_POSGROUPS.reduce((m, g) => m + nOf(rangeSpotId(rangeSquid, t.id, g.id)), 0);
+    const n = pgs.reduce((m, g) => m + nOf(rangeSpotId(rangeSquid, t.id, g.id)), 0);
     return `<button class="chip mini${t.id === rangeSitSel ? " on" : ""}" data-rsit="${t.id}" title="${esc(t.title)}">${esc(t.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
-  const groups = RANGE_POSGROUPS.map((g) => {
+  const groups = pgs.map((g) => {
     const n = nOf(rangeSpotId(rangeSquid, rangeSitSel, g.id));
     return `<button class="chip mini${g.id === rangeSitPos ? " on" : ""}" data-rpg="${g.id}" title="${esc(g.title)}">${esc(g.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
@@ -1255,7 +1276,7 @@ function renderOppRanges(o) {
   const recFoot = !live ? ""
     : recKeys.length
       ? ` · <button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
-        + (!anyPos ? ` <span class="rgscope">${esc(RANGE_POSGROUP_BY_ID[rangeSitPos].title)} only</span>`
+        + (!anyPos ? ` <span class="rgscope">${esc(rangePosGroup(rangeSitPos).title)} only</span>`
          : rangeRecPos ? ` <span class="rgscope">${esc(rangeRecPos)} only</span>` : "")
       : " · no shown hands yet";
   const clearable = showSeenHands ? cur.seen.length : cur.hands.length;
@@ -1275,7 +1296,7 @@ function renderOppRanges(o) {
     ${showSeenHands
       ? `<div class="rhint">Seen mode — tap the hands you've watched them turn up here. The blue corner marks your sketched range.</div>`
       : !anyPos && !cur.hands.length
-        ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SITS.find((t) => t.id === rangeSitSel).title)}`} from ${esc(RANGE_POSGROUP_BY_ID[rangeSitPos].title)}. Each group is its own grid — a range belongs to a seat.</div>`
+        ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SITS.find((t) => t.id === rangeSitSel).title)}`} from ${esc(rangePosGroup(rangeSitPos).title)}. Each seat is its own grid — a range belongs to a seat.</div>`
         : ""}`;
   $("od-range-seen").classList.toggle("on", showSeenHands);
   $("od-range-shown").classList.toggle("on", showShownLayer);
@@ -4869,7 +4890,7 @@ function bindStatic() {
       e.preventDefault();
       const [sq, sit, pg] = rj.dataset.rjump.split("|");
       rangeSquid = sq; rangeSitSel = sit; showSeenHands = true;
-      rangeSitPos = pg || "any";             // land on the group the read names, not wherever the grid was left
+      rangeSitPos = pg || "any";             // land on the seat the read names, not wherever the grid was left
 
       renderOppDetail(curOppId);
       $("od-ranges").scrollIntoView({ behavior: "smooth", block: "start" });

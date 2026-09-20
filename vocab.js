@@ -476,23 +476,20 @@ const RANGE_CLASSES = [
 const RANGE_CLASS_BY_ID = Object.fromEntries(RANGE_CLASSES.map((c) => [c.id, c]));
 /* Spots: the overall range with / without squid, then the four first-raise /
    limp-reraise ranges split into value and bluff. */
-/* Every situation, the overall range included, is painted per position group —
-   a range belongs to a seat, and one grid covering all ten seats is a range for
-   nobody. Groups rather than seats because ten grids per situation is ten grids
-   that never get filled; these five genuinely play differently. The straddle is
-   its own group because it acts last preflop, not for where it sits. "Any" is
-   kept first so a quick ungrouped sketch is still one tap away, and it holds the
-   legacy `range-<squid>` spot so nothing painted before this split moved. */
-const RANGE_POSGROUPS = [
-  { id: "any", label: "Any", title: "any position", pos: null },
-  { id: "ep",  label: "EP",  title: "U9–U7",   pos: ["U9", "U8", "U7"] },
-  { id: "mp",  label: "MP",  title: "U6–HJ",   pos: ["U6", "HJ"] },
-  { id: "lp",  label: "LP",  title: "CO–BN",   pos: ["CO", "BN"] },
-  { id: "bl",  label: "BL",  title: "SB–BB",   pos: ["SB", "BB"] },
-  { id: "std", label: "STD", title: "straddle", pos: ["STD"] },
-];
-const RANGE_POSGROUP_BY_ID = Object.fromEntries(RANGE_POSGROUPS.map((g) => [g.id, g]));
-const posGroupOf = (p) => RANGE_POSGROUPS.find((g) => g.pos?.includes(p))?.id || null;
+/* Every situation, the overall range included, is painted per seat — a range
+   belongs to a seat, and one grid covering the whole table is a range for
+   nobody. A group id is just the seat token lowercased, so a spot reads
+   `ns-first-raise-v-u8`. "Any" stays first so a quick seatless sketch is one
+   tap away, and it holds the legacy `range-<squid>` spot so nothing painted
+   before the split moved. Which seats get a chip is a runtime question —
+   `rangePosGroups` (app.js) asks tonight's table. */
+const RANGE_ANY = { id: "any", label: "Any", title: "any position", pos: null };
+const rangePosGroup = (id) => {
+  if (!id || id === "any") return RANGE_ANY;
+  const seat = String(id).toUpperCase();
+  return { id: seat.toLowerCase(), label: seat, title: seat, pos: [seat] };   // id is always the lowercase seat
+};
+const posGroupOf = (p) => POSITIONS.includes(p) ? p.toLowerCase() : null;
 const RANGE_SQUIDS = [
   { id: "ns", label: "nS", title: "no squid" },
   { id: "ws", label: "wS", title: "with squid" },
@@ -514,6 +511,6 @@ const readRangeSpot = (id) => {
 };
 const rangeSpotTitle = (sq, sit, pg) =>
   (RANGE_SITS.find((t) => t.id === sit)?.title || sit)
-  + (!pg || pg === "any" ? "" : " from " + (RANGE_POSGROUP_BY_ID[pg]?.title || pg))
+  + (!pg || pg === "any" ? "" : " from " + rangePosGroup(pg).title)
   + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326
