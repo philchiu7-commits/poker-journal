@@ -15,7 +15,8 @@ const HUD_MIN = 15;
 function hudCount(oppId, hands) {
   const c = {
     seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, f3b: 0, oppF3b: 0,
-    cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0, fcb: 0, oppFcb: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
+    cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
+    fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, byPos: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0 });
@@ -67,14 +68,16 @@ function hudCount(oppId, hands) {
       else if (a.act === "call") c.calls++;
     }
 
+    // Betting and folding into a cbet are three separate decisions each, so
+    // both families are bucketed the same way. Out of position = first to act
+    // once the cards are out, which the flop order already tells us — don't map
+    // seats for it, the straddle acts third postflop and a seat map gets that
+    // wrong.
+    const order = [...new Set(flop.map((a) => a.actor))];
+    const k = order.length > 2 ? "Mw" : order[0] === me ? "Oop" : "Ip";
+
     // cbet + second barrel, when our player is the preflop aggressor
     if (lastAgg === me) {
-      // Three separate cbets, because they are three separate decisions.
-      // Out of position = first to act once the cards are out, which is what
-      // the flop order already tells us — don't map seats for it, the straddle
-      // acts third postflop and a seat map gets that wrong.
-      const order = [...new Set(flop.map((a) => a.actor))];
-      const k = order.length > 2 ? "Mw" : order[0] === me ? "Oop" : "Ip";
       c["oppCb" + k]++;
       const first = flop.find((a) => a.actor === me);
       const didCb = !!first && first.act === "bet";
@@ -91,8 +94,8 @@ function hudCount(oppId, hands) {
     if (cbIdx < 0) continue;
     const resp = flop.slice(cbIdx + 1).find((a) => a.actor === me);
     if (!resp) continue;
-    c.oppFcb++;
-    if (resp.act === "fold") { c.fcb++; continue; }
+    c["oppFcb" + k]++;
+    if (resp.act === "fold") { c["fcb" + k]++; continue; }
     if (resp.act !== "call") continue;
     // called the flop cbet — did they fold to the turn barrel?
     const tBet = turn.findIndex((a) => a.actor === lastAgg && a.act === "bet");
@@ -116,7 +119,9 @@ function hudStats(c) {
     r("Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
     r("Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
     r("Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
-    r("Fold v CB", c.fcb, c.oppFcb, "Folded facing a flop cbet"),
+    r("Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
+    r("Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
+    r("Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
     r("Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
     r("Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
   ];
