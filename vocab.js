@@ -128,19 +128,24 @@ const TENDENCY_TAGS = [
 ];
 /* Player archetype — Phil sets it manually and it themes the opponent's row
    on the list plus a pill in the detail header. Colors chosen so the list
-   reads at a glance: teal/orange/green/yellow = the fish family, blue = reg,
+   reads at a glance: teal/green/purple = the fish family, blue = reg,
    red = the good reg to stay away from, gray = tight/nit. */
 const PLAYER_TYPES = [
   { id: "whale",      label: "Whale",      icon: "🐋", color: "#3ec7c7" },
-  { id: "fish",       label: "Fish",       icon: "🐠", color: "#e08a3c" },
   { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#4fbf5a" },
   { id: "aggro-fish", label: "Aggro fish", icon: "💥", color: "#a35bd6" },
-  { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
   { id: "reg",        label: "ABC reg",    icon: "🃏", color: "#4f7fdf" },
   { id: "good-reg",   label: "Good reg",   icon: "🦈", color: "#d64848" },
   { id: "tight-reg",  label: "Tight reg",  icon: "🔒", color: "#7a8496" },
 ];
-const PLAYER_TYPE_BY_ID = Object.fromEntries(PLAYER_TYPES.map((t) => [t.id, t]));
+/* No longer offered, but anyone still carrying one keeps their badge and can
+   re-pick or Clear — dropping the entry would leave the id set and unclearable. */
+const RETIRED_PLAYER_TYPES = [
+  { id: "fish",       label: "Fish",       icon: "🐠", color: "#e08a3c" },
+  { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
+];
+const PLAYER_TYPE_BY_ID = Object.fromEntries(
+  PLAYER_TYPES.concat(RETIRED_PLAYER_TYPES).map((t) => [t.id, t]));
 const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
