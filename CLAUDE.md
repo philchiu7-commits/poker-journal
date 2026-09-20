@@ -102,12 +102,14 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   seen: [class…]}}, order?, createdAt?, updatedAt, archived?}`. Reads: see
   `TENDENCY_TAGS` (kinds: yes/no, `position`, `choice`); ranges: `RANGE_SITS` /
   `RANGE_POSGROUPS` / `RANGE_CLASSES` in `vocab.js`, hand classes are 13×13 grid
-  labels (`AKs`). Spot ids: the overall range is `range-<squid>`; the four
-  first-raise / limp-reraise situations are `<squid>-<sit>-<posgroup>` — **one
-  grid per position group** (EP U9–U7, MP U6–HJ, LP CO–BN, BL SB–BB, STD),
-  because an opening range belongs to a seat. Groups rather than the ten seats:
-  ten grids per situation is ten grids nobody fills. STD is its own group for
-  acting last preflop, not for where it sits.
+  labels (`AKs`). Spot id is `<squid>-<sit>-<posgroup>`: **every situation, the
+  overall range included, gets one grid per position group** (Any, EP U9–U7, MP
+  U6–HJ, LP CO–BN, BL SB–BB, STD), because a range belongs to a seat. Groups
+  rather than the ten seats: ten grids per situation is ten grids nobody fills.
+  STD is its own group for acting last preflop, not for where it sits. `any` is
+  the ungrouped sketch and keeps the legacy `range-<squid>` id — the one
+  exception to the scheme, so nothing painted before the split moved; the
+  saved-ranges library reads that spot.
 - `hands`: `{id, ts, updatedAt, villains: [{opponentId, pos, cards, chips?}],
   villainIds, hero, heroPos, heroCards, actions: [{street, actor, act, size?}],
   board: [5], blinds: {sb, bb, std, ante}, effStack, note, mode?, srcNoteId?,
