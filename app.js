@@ -1233,13 +1233,24 @@ function renderOppRanges(o) {
     return `<button class="chip mini${st}" data-rclass="${c.id}" title="${c.hands.join(" ")}">${esc(c.label)}</button>`;
   }).join("");
 
+  /* The grid fills in the selected action's own colour — the hue its corner
+     notch already carries — so the estimate and the record speak the same
+     colours. The overall range has no single action and stays accent blue. */
+  const sitAct = (RANGE_SIT_BY_ID[rangeSitSel] || {}).act;
+  const sitFill = sitAct ? notchColor(sitAct) : "";
+
   const cells = HAND_CLASSES.map((c) => {
     const e = rec[c];
+    const on = hist ? !!e : inr.has(c);
     let cls = "rgcell rng", notch = "", title = c;
     if (e) title += ` · shown ${e.n}×${strongestAct(e.acts) ? ` · ${strongestAct(e.acts)}` : ""}`;
-    if (hist ? !!e : inr.has(c)) cls += " inr";
+    if (on) cls += " inr";
     if (hist) cls += " ro";                         // History is a record, not a canvas
-    if (e) notch = `<i class="rgnotch" style="--nc:${notchColor(strongestAct(e.acts))}"></i>`;
+    /* Under one action the fill already carries the colour, so on History the
+       notch would only repeat it, and on a painted Estimate cell it would
+       vanish into it — ink it dark there so "on record" still shows. */
+    if (e && !(hist && sitFill))
+      notch = `<i class="rgnotch" style="--nc:${sitFill && on ? "#0a0d12" : notchColor(strongestAct(e.acts))}"></i>`;
     return `<div class="${cls}" data-rcell="${c}"${hist ? "" : ' role="button"'} title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
 
@@ -1253,7 +1264,7 @@ function renderOppRanges(o) {
          .map(([col, set]) => [col, [...set].sort((a, b) => (RANK_ACT[a] ?? -1) - (RANK_ACT[b] ?? -1))])
          .sort((a, b) => (RANK_ACT[b[1].at(-1)] ?? -1) - (RANK_ACT[a[1].at(-1)] ?? -1))
          .map(([col, acts]) => `<span class="rglegitem"><span class="rgswatch" style="background:${col}"></span>${esc(acts.map((a) => a || "no action").join(" / "))}</span>`).join("")}
-       <span class="rglegnote">corner = what they did with it</span></div>`
+       ${hist && sitFill ? "" : `<span class="rglegnote">corner = what they did with it</span>`}</div>`
     : "";
 
   const title = esc(rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos));
@@ -1271,7 +1282,7 @@ function renderOppRanges(o) {
     <div class="rspots chiprow readwrap">${sits}</div>
     <div class="rpgroups chiprow readwrap">${groups}</div>
     ${classes ? `<div class="rclasses chiprow readwrap">${classes}</div>` : ""}
-    <div class="rggrid">${cells}</div>
+    <div class="rggrid"${sitFill ? ` style="--fill:${sitFill}"` : ""}>${cells}</div>
     ${legend}
     <div class="rfoot">
       <span>${foot}</span>

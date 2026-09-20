@@ -620,7 +620,18 @@ textarea.noteedit { margin-bottom: 0; }
 .chip.part { border-style: dashed; color: var(--text); }
 .rgcell.rng { background: #1a1d23; color: #949ba6; cursor: pointer; }
 .rgcell.rng:active { transform: scale(.92); }
-.rgcell.rng.inr { background: var(--accent); color: #0a0d12; }
+/* One situation on the grid means one action, so the cells take that action's
+   own colour — the same hue its corner notch carries — and the estimate reads
+   in the same language as the record. The overall range has no single action,
+   so it keeps the neutral accent and lets the notches do the talking. */
+.rgcell.rng.inr { background: var(--fill, var(--accent)); color: #0a0d12; }
+/* The two Ranges tabs read as one switch, so they sit against each other with
+   a single seam rather than drifting to opposite ends of the panel head. */
+.tabpair { display: inline-flex; }
+.tabpair .linkbtn { border-radius: 0; }
+.tabpair .linkbtn:first-child { border-radius: 8px 0 0 8px; }
+.tabpair .linkbtn:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+.tabpair .linkbtn.on { position: relative; z-index: 1; }
 /* History is a record, so its cells don't invite a tap — no pointer, no press. */
 .rgcell.rng.ro { cursor: default; }
 .rgcell.rng.ro:active { transform: none; }

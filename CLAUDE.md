@@ -124,7 +124,13 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   logged (the old Seen mode) is gone as of v136, and stored `seen[]` arrays are
   left alone, just not surfaced. *Estimate* is the range he paints (`hands[]`),
   with the `RANGE_CLASSES` chips to fill it in blocks; the corner notch on an
-  Estimate cell is the History fact showing through. Situations are the preflop
+  Estimate cell is the History fact showing through. **Both tabs fill in the
+  selected action's own colour** (v137) — the hue its notch carries, via a
+  `--fill` custom property on `.rggrid` — so the estimate and the record read
+  in one colour language; the overall range has no single action and stays
+  accent blue. Under one action History drops the notch (the fill already says
+  it) and a painted Estimate cell inks its notch dark so "on record" survives
+  the matching background. Situations are the preflop
   actions themselves — `Range · Raise · Limp · 3bet · 4bet+ · Call · LRR` —
   and each carries the `act` bucket `topPreGroup` produces, so one vocabulary
   serves both tabs: History filters the hands on record by it, Estimate paints
