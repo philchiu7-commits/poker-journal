@@ -37,6 +37,21 @@ server. To test a change against fresh assets in the preview:
 })()
 ```
 
+**Unregistering the worker is not enough.** `python3 -m http.server` sends no
+cache headers, so the browser applies its own heuristic freshness and keeps
+running a `vocab.js` from an edit ago — the preview then shows a build that no
+longer exists on disk, and `?fresh=N` doesn't help because it only busts the
+HTML. `.claude/devserver.py` is the same static server with
+`Cache-Control: no-store`; run it by hand (`python3 .claude/devserver.py 8002`)
+after `preview_stop`, because `preview_start` ignores `runtimeArgs` and runs
+`-m http.server` regardless. Entries the browser stored earlier survive the
+switch — overwrite them once with:
+
+```js
+for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js","style.css","sw.js"])
+  await fetch(f, {cache: "reload"});
+```
+
 ## Code layout
 
 - `index.html` — one page, six `<section id="view-*">` blocks (opponents,
