@@ -596,8 +596,7 @@ textarea.noteedit { margin-bottom: 0; }
 }
 /* Record notch: a corner triangle in the action's hue, with a 1px dark fence
    along its inner edge. The fence separates the hue from the blue sketch fill
-   (6.2:1), from the red outside-ring (5.0:1), and vanishes into the empty
-   ground — one element doing all three jobs. */
+   (6.2:1) and vanishes into the empty ground. */
 .rgnotch {
   position: absolute; top: 0; right: 0; width: 11px; height: 11px; pointer-events: none;
   clip-path: polygon(100% 0, 0 0, 100% 100%);
@@ -625,9 +624,6 @@ textarea.noteedit { margin-bottom: 0; }
 /* Seen mode: the gold fill is the mark you're logging; the sketch rides along
    as the blue notch. Gold on the empty ground is 8.5:1, ink on gold 9.8:1. */
 .rgcell.rng.smark { background: #e0b23e; color: #0a0d12; }
-/* Shown outside the sketch — only ever on an unpainted cell, where a 5:1 red
-   reads clean. (A red bright enough to sit on the blue fill doesn't exist.) */
-.rgcell.rng.out { box-shadow: 0 0 0 2px #f85149 inset; }
 .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .rfoot .spacer { flex: 1; }
 .rhint { margin-top: 6px; font-size: 12px; color: #e0b23e; }
@@ -645,7 +641,6 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .rdhead b { color: var(--text); font-size: 13px; }
 .rdhead .spacer { flex: 1; }
-.rdout { color: #f85149; font-weight: 700; text-transform: uppercase; font-size: 10px; }
 .rdact { display: inline-flex; align-items: center; gap: 4px; }
 .rdact i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
 
@@ -879,7 +874,6 @@ textarea.noteedit { margin-bottom: 0; }
 .actionpad-sheet { padding-top: 4px; }
 .actionpad-sheet .actgrid { margin-bottom: 8px; }
 .rfoot .rgshown { color: #e0b23e; }
-.rfoot .rgout { color: #f85149; }
 
 /* ---- saved-ranges library ---- */
 #rl-name { font-size: 17px; font-weight: 600; margin-bottom: 10px; }

@@ -773,9 +773,9 @@ function topPreGroup(h, idx) {
   return top && top.g;
 }
 /* The record layer: every hand this villain has turned up, keyed by 13×13
-   class. Scoped to the squid state being sketched so "outside the range" is
-   an honest claim and not a squid-blind one; `pos` (null = all) narrows the
-   record only — never the sketch. */
+   class. Scoped to the squid state being sketched, so the shown hands belong
+   to the same world as the sketch; `pos` (null = all) narrows the record
+   only — never the sketch. */
 function rangeRecord(oppId, squidId, pos) {
   const want = pos == null ? null : new Set(Array.isArray(pos) ? pos : [pos]);   // one seat, or a position group
   const cells = {}, posCounts = {};
@@ -1100,17 +1100,13 @@ function openNoteReviewSheet(note, oppId) {
        </div>
      </div>`);
 }
-/* Sheet: the record drill-down. "Shown" lists every hand the villain has
-   turned up in the current squid + position scope; "Outside" narrows that to
-   the classes your sketch doesn't cover. Rows group by hand class with the
-   action mix as the heading, so one tap answers "what did they do with it?"
-   before you open the hand. */
-function openRangeDrill(o, which) {
-  const inr = new Set(rangeSpotData(o, curRangeSpot()).hands);
+/* Sheet: the record drill-down. Lists every hand the villain has turned up in
+   the current squid + position scope, grouped by hand class with the action mix
+   as the heading, so one tap answers "what did they do with it?" before you
+   open the hand. */
+function openRangeDrill(o) {
   const { cells } = rangeRecord(o.id, rangeSquid, curRecScope());
-  const classes = Object.keys(cells)
-    .filter((c) => which === "shown" || !inr.has(c))
-    .sort(byGridOrder);
+  const classes = Object.keys(cells).sort(byGridOrder);
   let nHands = 0;
   const blocks = classes.map((c) => {
     const e = cells[c];
@@ -1119,14 +1115,14 @@ function openRangeDrill(o, which) {
       .sort((x, y) => (RANK_ACT[y[0]] ?? 0) - (RANK_ACT[x[0]] ?? 0))
       .map(([a, n]) => `<span class="rdact"><i style="background:${notchColor(a)}"></i>${esc(a)}${n > 1 ? ` ×${n}` : ""}</span>`)
       .join("");
-    return `<div class="rdhead"><b>${esc(c)}</b>${inr.has(c) ? "" : `<span class="rdout">outside</span>`}<span class="spacer"></span>${mix || `<span class="rdact muted">no preflop action logged</span>`}</div>`
+    return `<div class="rdhead"><b>${esc(c)}</b><span class="spacer"></span>${mix || `<span class="rdact muted">no preflop action logged</span>`}</div>`
       + e.hands.slice().sort((a, b) => b.ts - a.ts).map((h) => handRowHTML(h, o.id)).join("");
   }).join("");
   const seats = RANGE_POSGROUP_BY_ID[rangeSitPos].pos ? RANGE_POSGROUP_BY_ID[rangeSitPos].title : rangeRecPos;
   const scope = `${esc(RANGE_SQUIDS.find((s) => s.id === rangeSquid)?.title || rangeSquid)}${seats ? ` · ${esc(seats)}` : ""}`;
   sheetGroup = "__rdrill__";
   showSheet(
-    `<div class="sheethead"><span class="t">${which === "outside" ? "Outside the range" : "Shown"} · ${scope}</span>
+    `<div class="sheethead"><span class="t">Shown · ${scope}</span>
        <button data-sheetclose>Close</button></div>
      <div class="rdsub">${classes.length} class${classes.length === 1 ? "" : "es"} · ${nHands} hand${nHands === 1 ? "" : "s"}</div>
      <div class="list rgcell-hands">${blocks || `<div class="empty">Nothing here.</div>`}</div>`);
@@ -1204,9 +1200,7 @@ function renderOppRanges(o) {
   const scope = curRecScope();
   const rec = !live ? all : scope ? rangeRecord(o.id, rangeSquid, scope) : all;
   const recKeys = Object.keys(rec.cells);
-  const outKeys = recKeys.filter((c) => !inr.has(c));
   const recHands = recKeys.reduce((n, c) => n + rec.cells[c].n, 0);
-  const outHands = outKeys.reduce((n, c) => n + rec.cells[c].n, 0);
   const posPicker = live && anyPos && posKeys.length > 1
     ? `<div class="rgpicker chiprow readwrap">
          <button class="chip mini${rangeRecPos ? "" : " on"}" data-rpos="">All<i>${all.total}</i></button>
@@ -1233,8 +1227,7 @@ function renderOppRanges(o) {
       if (e) {
         const act = strongestAct(e.acts);
         notch = `<i class="rgnotch" style="--nc:${notchColor(act)}"></i>`;
-        if (!inSketch) cls += " out";
-        title += ` · shown ${e.n}×${act ? ` · ${act}` : ""}${inSketch ? "" : " · outside"}`;
+        title += ` · shown ${e.n}×${act ? ` · ${act}` : ""}`;
       }
     }
     return `<div class="${cls}" data-rcell="${c}" role="button" title="${esc(title)}">${c}${notch}</div>`;
@@ -1262,7 +1255,6 @@ function renderOppRanges(o) {
   const recFoot = !live ? ""
     : recKeys.length
       ? ` · <button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
-        + (outKeys.length ? ` · <button class="rdrill rgout" data-rdrill="outside">${outKeys.length} outside · ${outHands} hand${outHands === 1 ? "" : "s"}</button>` : "")
         + (!anyPos ? ` <span class="rgscope">${esc(RANGE_POSGROUP_BY_ID[rangeSitPos].title)} only</span>`
          : rangeRecPos ? ` <span class="rgscope">${esc(rangeRecPos)} only</span>` : "")
       : " · no shown hands yet";
@@ -3315,7 +3307,7 @@ function lineText(d) {
 /* ---- turn order + street completion (positions drive who's next) ---- */
 /* Acting order: preflop = UTG→…→blinds→straddle (POSITIONS as listed);
    postflop = blinds first, button last. */
-const ORDER_POST = ["SB", "BB", "STD", "U9", "U8", "U7", "U6", "HJ", "CO", "BN"];
+const ORDER_POST = ["SB", "BB", "STD", "U8", "U7", "U6", "U5", "HJ", "CO", "BN"];
 const actOrderFor = (street) => street === "pre" ? POSITIONS : ORDER_POST;
 const AGG_ACTS = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
 
@@ -3359,7 +3351,8 @@ const lineupId = (actor) => actor === "hero" ? "hero" : draft.villains[Number(ac
 const lineupActive = () => tableLineup.length >= 2;
 /* Seat ring for n seats (4..9), clockwise from SB. Blinds (+ STD when the
    straddle is on) at the head, HJ/CO/BN at the tail, and the seats between
-   filled with UTG labels numbered from the table size (U9, U8, …). Short
+   filled with UTG labels numbered by how many players act behind them — the
+   first to act at an 8-handed table has seven behind, so it is U7. Short
    tables drop HJ, then CO, so 4-max is SB/BB/CO/BN. When the straddle is off
    no STD seat is offered anywhere (Phil's global rule); the freed seat becomes
    another UTG label so a 9-handed no-straddle ring still shows nine seats. */
@@ -3367,7 +3360,7 @@ const ringFor = (n, stdOn) => {
   const head = stdOn ? ["SB", "BB", "STD"] : ["SB", "BB"];
   const tail = ["HJ", "CO", "BN"];
   const k = n - head.length - tail.length;
-  const utg = k > 0 ? Array.from({ length: k }, (_, i) => "U" + (n - i)) : [];
+  const utg = k > 0 ? Array.from({ length: k }, (_, i) => "U" + (n - 1 - i)) : [];
   return head.concat(utg, tail.slice(Math.max(0, -k)));
 };
 /* Seat count = lineup array length (clamped 4..9), falling back to lineupSeats
@@ -4685,7 +4678,7 @@ function bindStatic() {
     if (pg) { rangeSitPos = pg.dataset.rpg; renderOppRanges(o); return; }
     const rp = e.target.closest("[data-rpos]"), dr = e.target.closest("[data-rdrill]");
     if (rp) { rangeRecPos = rp.dataset.rpos || null; renderOppRanges(o); return; }
-    if (dr) { openRangeDrill(o, dr.dataset.rdrill); return; }
+    if (dr) { openRangeDrill(o); return; }
     const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
     if (!cl && !cell && !clr) return;
     const key = curRangeSpot();
