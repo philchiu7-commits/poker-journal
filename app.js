@@ -616,7 +616,7 @@ function route() {
   // Leaving a specific opponent, or navigating to a different one → drop filters.
   // A [data-rjump] read deep-link re-enters the same opponent, so scope it to
   // actually leaving them — otherwise the jump would reset what it just set.
-  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = false; }
+  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = true; }
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
@@ -633,9 +633,11 @@ function route() {
 let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false };
 const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false }; };
 const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd;
-/* Hands where we never saw this player's cards sit in a collapsed group
-   (stats-only). One open/closed flag, reset when you switch opponents. */
-let noCardsOpen = false;
+/* Hands where we never saw this player's cards sit in their own group, below
+   the ones you can review. Open by default: four hands in five are imported
+   with no cards on this villain, so collapsing the group hides most of what
+   you logged. One open/closed flag, reset when you switch opponents. */
+let noCardsOpen = true;
 const cardsSeen = (h, oppId) => {
   const v = (h.villains || []).find((x) => x.opponentId === oppId);
   return !!(v && (v.cards || []).some(Boolean));
@@ -1140,23 +1142,24 @@ function openRangeDrill(o) {
 let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being sketched
 let rangeSitSel = RANGE_SITS[0].id;     // which situation is on the grid — "all" is the overall range
 let rangeSitPos = "any";                // which position group is on the grid — "any" is the ungrouped sketch
-/* Two tabs, one grid. History is what they have actually turned up — the
-   logged hands, plus any you mark by hand; Estimate is the range you paint. */
+/* Two tabs, one grid. History is the hands on record — read off the hand
+   histories, nothing to fill in; Estimate is the range you paint. */
 let rangeTab = "estimate";
-/* Both layers write the spot on screen: one situation from one position group.
-   Seen marks live in the same spot as the sketch. */
+/* Both layers write the spot on screen: one situation from one position group. */
 const curRangeSpot = () => rangeSpotId(rangeSquid, rangeSitSel, rangeSitPos);
 /* Which seats the record is allowed to count — a seat scopes it to itself,
    "Any" takes the whole table. */
 const curRecScope = () => rangePosGroup(rangeSitPos).pos;
-/* Which seats get their own grid: the seats at tonight's table, plus any this
-   villain already has a grid for, in preflop acting order. The ring is asked
-   with the straddle on — it is always on in Phil's game — and falls back to
-   eight-handed rather than the hand-entry default of nine, because a seat
-   nobody sits in is a chip that never gets tapped. Seat the ninth player in
-   the lineup and U9 appears. */
-function rangePosGroups(o) {
-  const seats = new Set(ringFor(Math.max(4, Math.min(9, tableLineup.length || 8)), true));
+/* Which seats get their own grid, in preflop acting order. The full eight-handed
+   ring is always offered — a seat empty tonight is still a seat you have hands
+   from, and a missing chip is a range you cannot open — plus every seat this
+   villain has actually been logged in (U9 or U6 from a bigger or shorter table)
+   and every seat already holding a grid. Derived from the villain, not from
+   tonight's lineup: the lineup answers who is sitting down, not what you know. */
+function rangePosGroups(o, rowsBy) {
+  const seats = new Set(ringFor(8, true));
+  for (const sq of Object.keys(rowsBy || {}))
+    for (const r of rowsBy[sq]) if (POSITIONS.includes(r.pos)) seats.add(r.pos);
   for (const k of Object.keys(oppRanges(o))) {
     const p = k.slice(k.lastIndexOf("-") + 1).toUpperCase();
     if (POSITIONS.includes(p)) seats.add(p);
@@ -1165,26 +1168,10 @@ function rangePosGroups(o) {
 }
 const oppRanges = (o) => (o.ranges && typeof o.ranges === "object") ? o.ranges : {};
 const rangeSpotData = (o, key) => { const s = oppRanges(o)[key] || {}; return { hands: s.hands || [], seen: s.seen || [] }; };
-/* Keep the ▦ counts on the V/B reads in step with the Seen grid without
-   re-rendering the whole reads panel (which would drop an open select). */
-function syncSeenBadges(o) {
-  document.querySelectorAll("[data-rjump]").forEach((b) => {
-    const [sq, sit] = b.dataset.rjump.split("|");
-    const n = seenAcrossGroups(o, sq, sit);
-    b.textContent = "▦" + (n || "");
-    b.classList.toggle("on", !!n);
-  });
-}
 /* A read names one seat but the badge speaks for the situation, so it counts
-   every seat's marks — otherwise a hand seen from CO would vanish off a read
-   pointing at BN. Counted off the stored keys rather than tonight's seat list,
-   so marks on a seat that isn't at the table still show. */
-const seenAcrossGroups = (o, sq, sit) => {
-  const r = oppRanges(o);
-  const legacy = rangeSpotId(sq, sit, "any");
-  return Object.keys(r).reduce(
-    (n, k) => k === legacy || k.startsWith(`${sq}-${sit}-`) ? n + (r[k].seen || []).length : n, 0);
-};
+   every seat at once — otherwise a hand turned up from CO would vanish off a
+   read pointing at BN. */
+const recordAcross = (oppId, sq, sit) => rangeRowsIn(rangeRows(oppId, sq), sit, null).length;
 const byGridOrder = (a, b) => (HAND_CLASS_ORDER[a] ?? 999) - (HAND_CLASS_ORDER[b] ?? 999);
 /* Write a spot back; an empty spot is dropped so records stay clean. */
 function setRangeSpot(o, key, hands, seen) {
@@ -1194,30 +1181,29 @@ function setRangeSpot(o, key, hands, seen) {
   if (hands.length || seen.length) r[key] = { hands, seen }; else delete r[key];
   o.updatedAt = Date.now();
 }
-/* One grid, two tabs. History fills itself from the logged hands and takes
-   marks for the ones you watched but never logged; Estimate is the range you
-   paint, with the record riding along as a fenced corner notch so the facts sit
-   over the sketch. The situation and seat rows are shared — they mean the same
-   thing on both sides, so switching tabs never loses your place. */
+/* One grid, two tabs. History fills itself from the logged hands and is
+   read-only — it is the record, and hand-marking it was a chore with nothing
+   on the other end; Estimate is the range you paint, with the record riding
+   along as a fenced corner notch so the facts sit over the sketch. The
+   situation and seat rows are shared — they mean the same thing on both sides,
+   so switching tabs never loses your place. Stored `seen` marks are left
+   untouched, just no longer shown. */
 function renderOppRanges(o) {
-  const pgs = rangePosGroups(o);
-  if (!pgs.some((g) => g.id === rangeSitPos)) rangeSitPos = "any";   // seat left over from another table → Any
+  const rowsBy = { ns: rangeRows(o.id, "ns"), ws: rangeRows(o.id, "ws") };
+  const rows = rowsBy[rangeSquid];
+  const pgs = rangePosGroups(o, rowsBy);
+  if (!pgs.some((g) => g.id === rangeSitPos)) rangeSitPos = "any";   // seat left over from an older build → Any
   if (!RANGE_SIT_BY_ID[rangeSitSel]) rangeSitSel = "all";            // situation left over from an older build
   const hist = rangeTab === "history";
   const key = curRangeSpot();
   const cur = rangeSpotData(o, key);
-  const anyPos = rangeSitPos === "any";
-  const rowsBy = { ns: rangeRows(o.id, "ns"), ws: rangeRows(o.id, "ws") };
-  const rows = rowsBy[rangeSquid];
 
   /* Every chip counts the tab your thumb is on: on History the hands on record
      for that chip, on Estimate what you have painted there. A History count is
      hands, not spots, so it is taken over the whole scope at once rather than
      summed per seat — "Any" already is every seat. */
   const painted = (sq, sit, pg) => rangeSpotData(o, rangeSpotId(sq, sit, pg)).hands.length;
-  const onRecord = (sq, sit, pg) =>
-    rangeRowsIn(rowsBy[sq], sit, rangePosGroup(pg).pos).length
-    + rangeSpotData(o, rangeSpotId(sq, sit, pg)).seen.length;
+  const onRecord = (sq, sit, pg) => rangeRowsIn(rowsBy[sq], sit, rangePosGroup(pg).pos).length;
 
   const squids = RANGE_SQUIDS.map((s) => {
     const n = hist ? onRecord(s.id, rangeSitSel, rangeSitPos) : painted(s.id, rangeSitSel, rangeSitPos);
@@ -1234,7 +1220,7 @@ function renderOppRanges(o) {
     return `<button class="chip mini${g.id === rangeSitPos ? " on" : ""}" data-rpg="${g.id}" title="${esc(g.title)}">${esc(g.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
 
-  const inr = new Set(cur.hands), seenSet = new Set(cur.seen);
+  const inr = new Set(cur.hands);
   const rec = rangeCells(rangeRowsIn(rows, rangeSitSel, curRecScope()));
   const recKeys = Object.keys(rec);
   const recHands = recKeys.reduce((n, c) => n + rec[c].n, 0);
@@ -1248,18 +1234,13 @@ function renderOppRanges(o) {
   }).join("");
 
   const cells = HAND_CLASSES.map((c) => {
-    const e = rec[c], inSketch = inr.has(c);
+    const e = rec[c];
     let cls = "rgcell rng", notch = "", title = c;
     if (e) title += ` · shown ${e.n}×${strongestAct(e.acts) ? ` · ${strongestAct(e.acts)}` : ""}`;
-    if (hist) {
-      if (e) cls += " inr";
-      if (seenSet.has(c)) { cls += " smark"; title += " · marked seen"; }
-      if (e) notch = `<i class="rgnotch" style="--nc:${notchColor(strongestAct(e.acts))}"></i>`;
-    } else {
-      if (inSketch) cls += " inr";
-      if (e) notch = `<i class="rgnotch" style="--nc:${notchColor(strongestAct(e.acts))}"></i>`;
-    }
-    return `<div class="${cls}" data-rcell="${c}" role="button" title="${esc(title)}">${c}${notch}</div>`;
+    if (hist ? !!e : inr.has(c)) cls += " inr";
+    if (hist) cls += " ro";                         // History is a record, not a canvas
+    if (e) notch = `<i class="rgnotch" style="--nc:${notchColor(strongestAct(e.acts))}"></i>`;
+    return `<div class="${cls}" data-rcell="${c}"${hist ? "" : ' role="button"'} title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
 
   const byHue = {};
@@ -1282,9 +1263,9 @@ function renderOppRanges(o) {
     ? `<button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
     : `no hands on record yet`;
   const foot = hist
-    ? `${title} · ${drill}${cur.seen.length ? ` · ${cur.seen.length} marked by hand` : ""}`
+    ? `${title} · ${drill}`
     : `${title} · ${cur.hands.length} hand${cur.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}% · ${drill}`;
-  const clearable = hist ? cur.seen.length : cur.hands.length;
+  const clearable = hist ? 0 : cur.hands.length;
   $("od-ranges").innerHTML = `
     <div class="rsquid">${squids}</div>
     <div class="rspots chiprow readwrap">${sits}</div>
@@ -1298,7 +1279,7 @@ function renderOppRanges(o) {
       ${clearable ? `<button class="chip mini" data-rclear>Clear</button>` : ""}
     </div>
     ${hist
-      ? `<div class="rhint">Hands they turned up fill in from your hand histories. Tap a cell to mark one you watched but never logged.</div>`
+      ? `<div class="rhint">Every hand they turned up from ${esc(rangePosGroup(rangeSitPos).title)}, read off your logged hands.</div>`
       : !cur.hands.length
         ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SIT_BY_ID[rangeSitSel].title)}`} from ${esc(rangePosGroup(rangeSitPos).title)} — tap the category chips to paint in blocks. The corner notches are what they have actually shown.</div>`
         : ""}`;
@@ -2127,13 +2108,13 @@ function renderOppReads(o) {
       const opts = ['<option value="">–</option>']
         .concat(POSITIONS.map((p) => `<option value="${p}"${st === p ? " selected" : ""}>${p}</option>`))
         .join("");
-      // V/B reads carry a hidden hand list — the hands watched in that exact
-      // situation. The badge opens the range grid straight into Seen mode.
+      // The badge counts the hands on record in the situation this read names,
+      // and opens the grid on them.
       const rs = readRangeSpot(id);
-      const nSeen = rs ? seenAcrossGroups(o, rs.sq, rs.sit) : 0;
+      const nRec = rs ? recordAcross(o.id, rs.sq, rs.sit) : 0;
       const seenBtn = rs
-        ? `<button class="prseen${nSeen ? " on" : ""}" data-rjump="${rs.sq}|${rs.sit}|${esc(posGroupOf(st) || "")}"
-             title="Hands seen in this situation">▦${nSeen || ""}</button>`
+        ? `<button class="prseen${nRec ? " on" : ""}" data-rjump="${rs.sq}|${rs.sit}|${esc(posGroupOf(st) || "")}"
+             title="Hands they turned up in this situation">▦${nRec || ""}</button>`
         : "";
       return `<label class="posread${active ? " on" : ""}" title="${esc(lbl)}">
         <span class="prlbl">${esc(lbl)}</span>
@@ -4700,28 +4681,21 @@ function bindStatic() {
     if (dr) { openRangeDrill(o); return; }
     const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
     if (!cl && !cell && !clr) return;
+    if (rangeTab === "history") return;   // History is the hand histories talking; nothing to edit
     const key = curRangeSpot();
     let { hands, seen } = rangeSpotData(o, key);   // the overall range, or one situation from one position group
     if (cl) {                        // class chip: all in → remove all, else add all
       const ch = RANGE_CLASS_BY_ID[cl.dataset.rclass].hands;
       hands = ch.every((h) => hands.includes(h)) ? hands.filter((h) => !ch.includes(h)) : hands.concat(ch);
-    } else if (cell) {               // grid tap paints the estimate, or marks a hand on History
+    } else if (cell) {               // grid tap paints one hand class in or out
       const c = cell.dataset.rcell;
-      const tog = (arr) => arr.includes(c) ? arr.filter((h) => h !== c) : arr.concat(c);
-      if (rangeTab === "history") seen = tog(seen); else hands = tog(hands);
+      hands = hands.includes(c) ? hands.filter((h) => h !== c) : hands.concat(c);
     } else if (clr) {
-      const what = rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos);
-      if (rangeTab === "history") {
-        if (!confirm(`Clear the hands you marked by hand in ${what}? Logged hands stay.`)) return;
-        seen = [];
-      } else {
-        if (!confirm(`Clear your estimate of the ${what}? Marked hands stay.`)) return;
-        hands = [];
-      }
+      if (!confirm(`Clear your estimate of the ${rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos)}?`)) return;
+      hands = [];
     }
     setRangeSpot(o, key, hands, seen);
     renderOppRanges(o);
-    syncSeenBadges(o);
     await dbPut("opponents", o);
   };
   /* ---- saved-ranges tab ---- */

@@ -110,17 +110,20 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   Spot id is `<squid>-<sit>-<seat>` with the seat lowercased (`ns-raise-u8`):
   **every situation, the overall range included, gets one grid per seat**,
   because a range belongs to a seat. Which seats get a chip is decided at render
-  time by `rangePosGroups` (app.js) — tonight's ring (straddle on, falling back
-  to 8-handed) plus any seat that already has a grid — so the row is
-  `Any U8 U7 HJ CO BN SB BB STD` by default and grows a U9 chip when a ninth
-  player is seated. `any` is the seatless sketch and keeps the legacy
+  time by `rangePosGroups` (app.js) — the **whole eight-handed ring, always**,
+  plus any seat this villain has been logged in and any seat already holding a
+  grid — so the row is `Any U8 U7 HJ CO BN SB BB STD` and grows a U9 or U6 chip
+  off the villain's own hands. It is deliberately *not* derived from tonight's
+  lineup: a short table drops HJ and the UTG seats off the ring (v135 bug), and
+  the lineup answers who is sitting down, not what you know. `any` is the seatless sketch and keeps the legacy
   `range-<squid>` id — the one exception to the scheme, so nothing painted
   before the split moved; the saved-ranges library reads that spot.
 - The Ranges panel has **two tabs over one grid**. *History* is what the villain
   has actually turned up — `rangeRows` (app.js) reads it straight off `HANDS`,
-  so it needs no storage; a cell tapped there lands in `seen[]`, for a hand Phil
-  watched but never logged. *Estimate* is the range he paints (`hands[]`), with
-  the `RANGE_CLASSES` chips to fill it in blocks; the corner notch on an
+  so it needs no storage and is **read-only** — marking hands watched but never
+  logged (the old Seen mode) is gone as of v136, and stored `seen[]` arrays are
+  left alone, just not surfaced. *Estimate* is the range he paints (`hands[]`),
+  with the `RANGE_CLASSES` chips to fill it in blocks; the corner notch on an
   Estimate cell is the History fact showing through. Situations are the preflop
   actions themselves — `Range · Raise · Limp · 3bet · 4bet+ · Call · LRR` —
   and each carries the `act` bucket `topPreGroup` produces, so one vocabulary
@@ -134,6 +137,10 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   board: [5], blinds: {sb, bb, std, ante}, effStack, note, mode?, srcNoteId?,
   imported?: {source, tableId, roundId, noK}, showdown}`. `normaliseHand`
   (app.js) tidies tokens/cards on every boot without touching `updatedAt`.
+  On the opponent's Hands panel, hands where **that** villain's cards were never
+  seen sit in their own "No cards seen" group below the reviewable ones. The
+  group is **open by default** (`noCardsOpen`): four villain-rows in five have
+  no cards, so collapsing it hid most of what Phil had imported.
 - The **structured `actions[]` token stream** feeds `handText()` (LLM
   summaries), the shown-hands range grid, per-opponent *read suggestions*
   (`READ_SIGNALS`; Phil accepts or dismisses each) and — since v124 — the
