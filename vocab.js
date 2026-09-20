@@ -472,8 +472,22 @@ const RANGE_CLASSES = [
 const RANGE_CLASS_BY_ID = Object.fromEntries(RANGE_CLASSES.map((c) => [c.id, c]));
 /* Spots: the overall range with / without squid, then the four first-raise /
    limp-reraise ranges split into value and bluff. */
-/* Two sketched ranges, nS and wS. The situations only hold Seen marks — the
-   hands you've watched them show — and the positions live in the reads. */
+/* Two sketched ranges, nS and wS, each with the four first-raise / limp-reraise
+   situations under it. Those four are painted per position group: an opening
+   range belongs to a seat, and one grid covering all ten seats is a range for
+   nobody. Groups rather than seats because ten grids per situation is ten grids
+   that never get filled — these are the five that genuinely play differently.
+   The straddle is its own group because it acts last preflop, not for where it
+   sits. The overall range stays one grid per squid state. */
+const RANGE_POSGROUPS = [
+  { id: "ep",  label: "EP",  title: "U9–U7",    pos: ["U9", "U8", "U7"] },
+  { id: "mp",  label: "MP",  title: "U6–HJ",    pos: ["U6", "HJ"] },
+  { id: "lp",  label: "LP",  title: "CO–BN",    pos: ["CO", "BN"] },
+  { id: "bl",  label: "BL",  title: "SB–BB",    pos: ["SB", "BB"] },
+  { id: "std", label: "STD", title: "straddle", pos: ["STD"] },
+];
+const RANGE_POSGROUP_BY_ID = Object.fromEntries(RANGE_POSGROUPS.map((g) => [g.id, g]));
+const posGroupOf = (p) => RANGE_POSGROUPS.find((g) => g.pos.includes(p))?.id || null;
 const RANGE_SQUIDS = [
   { id: "ns", label: "nS", title: "no squid" },
   { id: "ws", label: "wS", title: "with squid" },
@@ -485,13 +499,15 @@ const RANGE_SITS = [
   { id: "lrr-v",         label: "LRR V",   title: "limp-reraise — value" },
   { id: "lrr-b",         label: "LRR B",   title: "limp-reraise — bluff" },
 ];
-const rangeSpotId = (sq, sit) => (sit === "all" ? "range-" + sq : sq + "-" + sit);
+const rangeSpotId = (sq, sit, pg) => (sit === "all" ? "range-" + sq : `${sq}-${sit}-${pg}`);
 /* The V/B position reads are named "<situation>-<squid>", so a read id maps
    straight onto the Seen spot that holds the hands watched in that situation. */
 const readRangeSpot = (id) => {
   const m = /^(.*)-(ns|ws)$/.exec(id);
   return m && RANGE_SITS.some((t) => t.id === m[1]) ? { sq: m[2], sit: m[1] } : null;
 };
-const rangeSpotTitle = (sq, sit) =>
-  (RANGE_SITS.find((t) => t.id === sit)?.title || sit) + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
+const rangeSpotTitle = (sq, sit, pg) =>
+  (RANGE_SITS.find((t) => t.id === sit)?.title || sit)
+  + (sit === "all" || !pg ? "" : " from " + (RANGE_POSGROUP_BY_ID[pg]?.title || pg))
+  + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326

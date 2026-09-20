@@ -581,7 +581,7 @@ textarea.noteedit { margin-bottom: 0; }
 .himbulkmeta { flex: 1; color: var(--muted); font-size: 11px; }
 .himdup { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #4a3319; color: #e0a63a; font-weight: 700; text-transform: uppercase; }
 .himbulknames { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rgpicker .chip i, .rspots .chip i, .rsquid .chip i {
+.rgpicker .chip i, .rspots .chip i, .rsquid .chip i, .rpgroups .chip i {
   font-style: normal; margin-left: 4px; font-size: 10px; opacity: .9;
 }
 .rggrid {
@@ -613,6 +613,10 @@ textarea.noteedit { margin-bottom: 0; }
 .rsquid .chip { border-color: transparent; background: transparent; }
 .rsquid .chip.on { background: var(--accent); color: #0a0d12; border-color: var(--accent); box-shadow: none; }
 .rspots { margin-bottom: 8px; }
+/* The position groups sit under their situation and read as a second rank of
+   the same picker, so they are indented and quieter than the row above. */
+.rpgroups { margin: -4px 0 8px 10px; }
+.rpgroups .chip.on { background: #1d3050; border-color: #3f6ea8; color: #cfe2ff; }
 .rclasses { margin-bottom: 8px; }
 .chip.part { border-style: dashed; color: var(--text); }
 .rgcell.rng { background: #1a1d23; color: #949ba6; cursor: pointer; }
