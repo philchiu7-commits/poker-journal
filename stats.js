@@ -15,7 +15,7 @@ const HUD_MIN = 15;
 function hudCount(oppId, hands) {
   const c = {
     seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, f3b: 0, oppF3b: 0,
-    cb: 0, oppCb: 0, fcb: 0, oppFcb: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
+    cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0, fcb: 0, oppFcb: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, byPos: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0 });
@@ -69,10 +69,16 @@ function hudCount(oppId, hands) {
 
     // cbet + second barrel, when our player is the preflop aggressor
     if (lastAgg === me) {
-      c.oppCb++;
+      // Three separate cbets, because they are three separate decisions.
+      // Out of position = first to act once the cards are out, which is what
+      // the flop order already tells us — don't map seats for it, the straddle
+      // acts third postflop and a seat map gets that wrong.
+      const order = [...new Set(flop.map((a) => a.actor))];
+      const k = order.length > 2 ? "Mw" : order[0] === me ? "Oop" : "Ip";
+      c["oppCb" + k]++;
       const first = flop.find((a) => a.actor === me);
       const didCb = !!first && first.act === "bet";
-      if (didCb) c.cb++;
+      if (didCb) c["cb" + k]++;
       if (didCb && turn.length) {
         const t = turn.find((a) => a.actor === me);
         if (t) { c.oppBar++; if (t.act === "bet") c.bar++; }
@@ -107,7 +113,9 @@ function hudStats(c) {
     r("PFR", c.pfr, c.seats, "Raised preflop"),
     r("3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
     r("Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
-    r("Cbet F", c.cb, c.oppCb, "Bet the flop as the preflop aggressor"),
+    r("Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
+    r("Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
+    r("Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
     r("Fold v CB", c.fcb, c.oppFcb, "Folded facing a flop cbet"),
     r("Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
     r("Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),

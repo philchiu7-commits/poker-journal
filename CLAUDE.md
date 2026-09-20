@@ -55,7 +55,10 @@ server. To test a change against fresh assets in the preview:
   profiles. Hands/sessions stay plain newer-wins by id.
 - `stats.js` — the HUD engine. `hudCount(oppId, hands)` walks the action
   stream once per hand and returns raw numerator/denominator counters;
-  `hudStats`/`hudAF` shape them for display. Every stat is a count over its own
+  `hudStats`/`hudAF` shape them for display. Flop cbet is split three ways
+  (heads-up IP, heads-up OOP, multiway); **position comes from the flop action
+  order, not a seat map** — the straddle acts third postflop and any seat
+  ordering gets that wrong. Every stat is a count over its own
   *opportunity* count, never a bare percentage — `renderOppHud` (app.js) prints
   n beside each and dims anything under `HUD_MIN`.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
