@@ -189,6 +189,17 @@ function mergeOppRecords(into, from) {
       t.seen = [...new Set([...(t.seen || []), ...(v.seen || [])])]; // factual — never lose one
     }
   }
+  // Sizing tallies: each entry is one observation, so union the timestamps —
+  // same rule as `seen` ranges, never lose one.
+  if (from.sizing && typeof from.sizing === "object") {
+    const sz = (into.sizing = into.sizing && typeof into.sizing === "object" ? into.sizing : {});
+    for (const [k, v] of Object.entries(from.sizing)) {
+      if (!v || typeof v !== "object") continue;
+      const t = (sz[k] = sz[k] || {});
+      for (const [step, arr] of Object.entries(v))
+        if (Array.isArray(arr)) t[step] = [...new Set([...(t[step] || []), ...arr])].sort((x, y) => x - y);
+    }
+  }
   into.updatedAt = Date.now();
 }
 

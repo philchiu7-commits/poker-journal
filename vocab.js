@@ -8,6 +8,29 @@ const SIZES_3BET = ["3x", "4x", "5x", "Jam"];              // 3bet: multipliers
 const SIZES_4BET = ["2x", "2.5x", "3x", "Jam"];            // 4bet/5bet: multipliers
 const SIZES_POST = ["33%", "50%", "66%", "75%", "pot", "Jam"];
 
+/* Sizing tallies: which bet size a player picks, by street and by whether the
+   hand turned out to be value or a bluff. Not a read — a read is one state and
+   this is a frequency, so each observation is stored as its own timestamp.
+   Deliberately its own ladder, not SIZES_POST: overbets are the whole point of
+   watching this, and 75%/pot/Jam don't separate a 1.5x from a shove. */
+const SIZING_STEPS = [
+  { id: "33",  label: "B33"  },
+  { id: "50",  label: "B50"  },
+  { id: "66",  label: "B66"  },
+  { id: "100", label: "B100" },
+  { id: "150", label: "B150" },
+];
+const SIZING_ROWS = [
+  { id: "flop-v",  street: "Flop",  kind: "V" },
+  { id: "turn-v",  street: "Turn",  kind: "V" },
+  { id: "river-v", street: "River", kind: "V" },
+  { id: "flop-b",  street: "Flop",  kind: "B" },
+  { id: "turn-b",  street: "Turn",  kind: "B" },
+  { id: "river-b", street: "River", kind: "B" },
+];
+const SIZING_STEP_BY_ID = Object.fromEntries(SIZING_STEPS.map((x) => [x.id, x]));
+const SIZING_ROW_BY_ID = Object.fromEntries(SIZING_ROWS.map((r) => [r.id, r]));
+
 const RANKS = "AKQJT98765432";
 const SUITS = [
   { id: "s", sym: "♠", cls: "cs" },   // spade  — white

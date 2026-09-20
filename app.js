@@ -18,6 +18,7 @@ let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
 let pinnedGroup = null;           // opponents list: group name that always sorts first (null = auto by recency)
 let dupeDismissed = new Set();    // opponents list: duplicate pairs Phil has said are different people
+let sizingUndo = false;           // Sizings panel: a tap takes one off instead of adding
 let tableLineup = [];             // today's seat ring, ordered: ("hero" | oppId)[] — anchors positions
 let lineupSeats = 9;              // table size (6–9); picks which subset of the seat ring is in play
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
@@ -2184,6 +2185,43 @@ function renderOppReads(o) {
 /* The HUD reads only imported hands — see stats.js for why. Every number
    carries its own opportunity count, and anything under HUD_MIN is dimmed
    rather than hidden: a 100% that happened once should look like what it is. */
+/* ---- Sizings ----
+   How often this player picks each size, by street and by value/bluff. Tap the
+   size when you see it; one tap is one observation, stored as a timestamp so a
+   miscount can be taken back and the tally stays datable. Counts are shown raw
+   over their own total — the same rule as the HUD, because three observations
+   read as a tendency if you print them as a percentage and they aren't one. */
+function sizingCounts(o, rowId) {
+  const row = (o.sizing || {})[rowId] || {};
+  const counts = {}; let total = 0;
+  for (const st of SIZING_STEPS) { const n = (row[st.id] || []).length; counts[st.id] = n; total += n; }
+  return { counts, total };
+}
+
+function renderOppSizing(o) {
+  $("od-size-edit").textContent = sizingUndo ? "Done" : "Undo";
+  $("od-size-edit").classList.toggle("on", sizingUndo);
+  const rowHTML = (r) => {
+    const { counts, total } = sizingCounts(o, r.id);
+    const top = total ? Math.max(...SIZING_STEPS.map((st) => counts[st.id])) : 0;
+    const chips = SIZING_STEPS.map((st) => {
+      const n = counts[st.id];
+      const cls = [n ? "has" : "", n && n === top ? "top" : "", sizingUndo && n ? "undo" : ""].filter(Boolean).join(" ");
+      const tip = n ? ` title="${n} of ${total} — ${Math.round((100 * n) / total)}%"` : "";
+      return `<button class="sizechip${cls ? " " + cls : ""}" data-size="${r.id}|${st.id}"${tip}>${st.label}${n ? `<i>${n}</i>` : ""}</button>`;
+    }).join("");
+    return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
+      <div class="sizechips">${chips}</div></div>`;
+  };
+  $("od-sizing").innerHTML =
+    `<div class="sizenote">${sizingUndo
+      ? "Tapping a size now takes one off — tap Done when the count is right."
+      : "Tap a size each time you see it, once you know whether it was value or a bluff."}</div>` +
+    ["V", "B"].map((k) =>
+      `<div class="sizehead">${k === "V" ? "Value" : "Bluff"}</div>` +
+      SIZING_ROWS.filter((r) => r.kind === k).map(rowHTML).join("")).join("");
+}
+
 function renderOppHud(o) {
   const c = hudFor(o.id, HANDS);
   const nEl = $("od-hud-n"), box = $("od-hud");
@@ -2246,6 +2284,7 @@ function renderOppDetail(id) {
     return `<button class="ptypechip${on ? " on" : ""}" data-ptype="${t.id}" style="${on ? `background:${t.color};border-color:${t.color};color:#0a0d12` : `border-color:${t.color};color:${t.color}`}">${t.icon} ${esc(t.label)}</button>`;
   }).join("") + (o.type ? ` <button class="chip mini" data-ptype="">Clear</button>` : "") + `</div>`;
   renderOppReads(o);
+  renderOppSizing(o);
   renderOppHud(o);
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
@@ -4760,6 +4799,33 @@ function bindStatic() {
   $("od-name").onclick = (e) => {
     const b = e.target.closest("[data-ptype-open]");
     if (b) openPlayerTypeSheet(b.dataset.ptypeOpen);
+  };
+  $("od-size-edit").onclick = () => {
+    sizingUndo = !sizingUndo;
+    const o = oppById(curOppId);
+    if (o) renderOppSizing(o);
+  };
+  $("od-sizing").onclick = async (e) => {
+    const b = e.target.closest("[data-size]");
+    if (!b) return;
+    const o = oppById(curOppId);
+    if (!o) return;
+    const [rowId, stepId] = b.dataset.size.split("|");
+    if (!SIZING_ROW_BY_ID[rowId] || !SIZING_STEP_BY_ID[stepId]) return;
+    const sz = o.sizing || {}, row = sz[rowId] || {}, arr = row[stepId] || [];
+    if (sizingUndo) {
+      if (!arr.length) return;
+      arr.pop();
+      if (!arr.length) delete row[stepId];
+      if (!Object.keys(row).length) delete sz[rowId];
+      if (!Object.keys(sz).length) delete o.sizing;
+    } else {
+      arr.push(Date.now());
+      row[stepId] = arr; sz[rowId] = row; o.sizing = sz;
+    }
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppSizing(o);
   };
   $("od-reads-edit").onclick = () => {
     showReadPicker = !showReadPicker;

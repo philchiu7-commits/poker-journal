@@ -941,3 +941,23 @@ textarea.noteedit { margin-bottom: 0; }
   max-width: 100%; line-height: 1.25; overflow-wrap: anywhere; }
 .dacts .dkeep { flex: 1 1 40%; background: var(--panel); border: 1px solid #3a4658; color: var(--text); font-weight: 600; }
 .dacts .dskip { flex: 1 1 100%; background: transparent; border: 1px solid var(--line); color: var(--muted); }
+
+/* ===== Sizings ===== */
+.sizenote { color: var(--muted); font-size: 12px; line-height: 1.35; margin-bottom: 9px; }
+.sizehead { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+  color: var(--muted); margin: 11px 0 5px; }
+.sizehead:first-child { margin-top: 0; }
+.sizerow { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.sizelab { flex: none; width: 52px; font-size: 13px; font-weight: 600; color: var(--text); }
+.sizelab .sizen { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.sizechips { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.sizechip {
+  flex: 1; min-width: 0; padding: 8px 2px; border-radius: 9px; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.sizechip i { font-style: normal; font-size: 11px; font-weight: 700; margin-left: 3px; }
+.sizechip.has { color: var(--text); border-color: #3a4658; }
+.sizechip.top { background: #1d3050; border-color: #3f6ea8; color: #cfe2ff; }
+.sizechip.undo { border-color: #6b2f2f; color: #f0a0a0; }
+#od-size-edit.on { color: #f85149; }
