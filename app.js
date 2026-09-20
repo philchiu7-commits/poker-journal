@@ -761,14 +761,17 @@ function limpReraiseClass(preActs) {
 /* Rank the preflop actions so a cell showing several lines can name the
    strongest one — escalation is what you read a range for. */
 const RANK_ACT = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
+/* This villain's preflop action tokens, in order. */
+const preActs = (h, idx) =>
+  (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
 /* The single preflop action that characterises this villain's line in a hand. */
 function topPreGroup(h, idx) {
-  const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre");
+  const pre = preActs(h, idx);
   if (!pre.length) return null;
-  if (limpReraiseClass(pre.map((a) => a.act))) return "Lrr";
+  if (limpReraiseClass(pre)) return "Lrr";
   let top = null;
-  for (const a of pre) {
-    const g = ACT_GROUP[a.act] || a.act;
+  for (const t of pre) {
+    const g = ACT_GROUP[t] || t;
     const r = RANK_ACT[g] ?? 0;
     if (!top || r > top.r) top = { g, r };
   }
@@ -787,7 +790,8 @@ function rangeRows(oppId, squidId) {
     const hc = handClass(v.cards);
     if (!hc) continue;                                  // squid cards sit off the grid
     if ((squidBucket(h) === "nS") !== (squidId === "ns")) continue;
-    rows.push({ hc, pos: v.pos || "—", act: topPreGroup(h, idx), h });
+    const pre = preActs(h, idx);
+    rows.push({ hc, pos: v.pos || "—", act: topPreGroup(h, idx), limp: pre.includes("limp"), h });
   }
   return rows;
 }
@@ -796,7 +800,32 @@ function rangeRows(oppId, squidId) {
 function rangeRowsIn(rows, sit, pos) {
   const act = RANGE_SIT_BY_ID[sit]?.act || null;
   const want = pos == null ? null : new Set(Array.isArray(pos) ? pos : [pos]);
-  return rows.filter((r) => (!act || r.act === act) && (!want || want.has(r.pos)));
+  /* A limp-reraise is still a limp. Every other situation takes the hand's one
+     strongest action, but Limp counts every hand he put a limp in — the trap
+     hands included — and LRR is the subset of those that came back over the
+     top, so the two read as "how often does he limp" and "and then what".
+     Phil, v138. */
+  const hit = (r) => (act === "limp" ? r.limp : r.act === act);
+  return rows.filter((r) => (!act || hit(r)) && (!want || want.has(r.pos)));
+}
+/* The limp-reraise rate, counted over every logged hand rather than the grid's
+   own rows: the grid only holds hands he turned his cards up in, and a limp
+   that folds is almost never shown while a limp-reraise nearly always is, so a
+   rate off those rows would read several times too high. */
+function limpLines(oppId, squidId, pos) {
+  const want = pos == null ? null : new Set(Array.isArray(pos) ? pos : [pos]);
+  let limps = 0, lrr = 0;
+  for (const h of HANDS) {
+    const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+    if (idx < 0) continue;
+    if ((squidBucket(h) === "nS") !== (squidId === "ns")) continue;
+    if (want && !want.has(h.villains[idx].pos || "—")) continue;
+    const pre = preActs(h, idx);
+    if (!pre.includes("limp")) continue;
+    limps++;
+    if (limpReraiseClass(pre)) lrr++;
+  }
+  return { limps, lrr };
 }
 /* Rows folded into the grid's cells: count, action mix, and the hands behind
    them for the drill-down. */
@@ -1239,18 +1268,25 @@ function renderOppRanges(o) {
   const sitAct = (RANGE_SIT_BY_ID[rangeSitSel] || {}).act;
   const sitFill = sitAct ? notchColor(sitAct) : "";
 
+  let notches = 0;
   const cells = HAND_CLASSES.map((c) => {
     const e = rec[c];
     const on = hist ? !!e : inr.has(c);
+    const top = e ? strongestAct(e.acts) : null;
     let cls = "rgcell rng", notch = "", title = c;
-    if (e) title += ` · shown ${e.n}×${strongestAct(e.acts) ? ` · ${strongestAct(e.acts)}` : ""}`;
+    if (e) title += ` · shown ${e.n}×${top ? ` · ${top}` : ""}`;
     if (on) cls += " inr";
     if (hist) cls += " ro";                         // History is a record, not a canvas
     /* Under one action the fill already carries the colour, so on History the
-       notch would only repeat it, and on a painted Estimate cell it would
-       vanish into it — ink it dark there so "on record" still shows. */
-    if (e && !(hist && sitFill))
-      notch = `<i class="rgnotch" style="--nc:${sitFill && on ? "#0a0d12" : notchColor(strongestAct(e.acts))}"></i>`;
+       notch would only repeat it. The exception is a hand whose own line isn't
+       the bucket's — a limp that came back over the top — which keeps its own
+       colour, because picking those out of the limps is the whole point. On a
+       painted Estimate cell a matching notch is inked dark instead of
+       vanishing into the fill. */
+    if (e && !(hist && sitFill && top === sitAct)) {
+      notches++;
+      notch = `<i class="rgnotch" style="--nc:${sitFill && on && top === sitAct ? "#0a0d12" : notchColor(top)}"></i>`;
+    }
     return `<div class="${cls}" data-rcell="${c}"${hist ? "" : ' role="button"'} title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
 
@@ -1264,7 +1300,7 @@ function renderOppRanges(o) {
          .map(([col, set]) => [col, [...set].sort((a, b) => (RANK_ACT[a] ?? -1) - (RANK_ACT[b] ?? -1))])
          .sort((a, b) => (RANK_ACT[b[1].at(-1)] ?? -1) - (RANK_ACT[a[1].at(-1)] ?? -1))
          .map(([col, acts]) => `<span class="rglegitem"><span class="rgswatch" style="background:${col}"></span>${esc(acts.map((a) => a || "no action").join(" / "))}</span>`).join("")}
-       ${hist && sitFill ? "" : `<span class="rglegnote">corner = what they did with it</span>`}</div>`
+       ${notches ? `<span class="rglegnote">corner = what they did with it</span>` : ""}</div>`
     : "";
 
   const title = esc(rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos));
@@ -1273,9 +1309,17 @@ function renderOppRanges(o) {
   const drill = recKeys.length
     ? `<button class="rdrill rgshown" data-rdrill="shown">${recKeys.length} shown · ${recHands} hand${recHands === 1 ? "" : "s"}</button>`
     : `no hands on record yet`;
+  /* On either limp chip, how often the limp was the trap. Counted off every
+     logged hand, not off the grid, so it is a real frequency and not a
+     shown-cards one — and shown on both tabs, because it is the number you
+     paint the estimate against. */
+  const ll = rangeSitSel === "limp" || rangeSitSel === "lrr" ? limpLines(o.id, rangeSquid, curRecScope()) : null;
+  const lrate = ll && ll.limps
+    ? ` · <b class="rlrate">${ll.lrr} of ${ll.limps} limp${ll.limps === 1 ? "" : "s"} reraised · ${Math.round((ll.lrr / ll.limps) * 100)}%</b>`
+    : "";
   const foot = hist
-    ? `${title} · ${drill}`
-    : `${title} · ${cur.hands.length} hand${cur.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}% · ${drill}`;
+    ? `${title} · ${drill}${lrate}`
+    : `${title} · ${cur.hands.length} hand${cur.hands.length === 1 ? "" : "s"} · ${combos} combos · ${(combos / 13.26).toFixed(1)}% · ${drill}${lrate}`;
   const clearable = hist ? 0 : cur.hands.length;
   $("od-ranges").innerHTML = `
     <div class="rsquid">${squids}</div>

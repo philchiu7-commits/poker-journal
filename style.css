@@ -969,3 +969,7 @@ textarea.noteedit { margin-bottom: 0; }
 .sizechip.top { background: #1d3050; border-color: #3f6ea8; color: #cfe2ff; }
 .sizechip.undo { border-color: #6b2f2f; color: #f0a0a0; }
 #od-size-edit.on { color: #f85149; }
+
+/* The limp-reraise rate rides in the range footer: a frequency off every
+   logged hand, next to counts that are shown-cards only. */
+.rlrate { color: var(--text); font-weight: 600; }

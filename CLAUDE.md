@@ -55,7 +55,10 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
 ## Code layout
 
 - `index.html` — one page, six `<section id="view-*">` blocks (opponents,
-  opp-detail, hand-entry, table, hand-detail, data). Hash-routing. The Table
+  opp-detail, hand-entry, table, hand-detail, data). Hash-routing. On the
+  opponent detail, `#od-editform` (the ✎ name/group/looks-like form) sits
+  directly under the header, **above** the Front-page card — two panels down it
+  opened below the fold, nowhere near the tap that opened it (v138). The Table
   tab shows tonight's seat-ring lineup (same `tableLineup` meta as hand
   entry's Lineup sheet) with each opponent's front-page card chips; its
   renderer is `renderTableTab` (`renderTable` is the hand-entry felt).
@@ -134,7 +137,16 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   actions themselves — `Range · Raise · Limp · 3bet · 4bet+ · Call · LRR` —
   and each carries the `act` bucket `topPreGroup` produces, so one vocabulary
   serves both tabs: History filters the hands on record by it, Estimate paints
-  the matching grid. **Value/bluff is deliberately not split** (Phil, v135): the
+  the matching grid. **Limp is the one non-exclusive situation** (Phil, v138):
+  every other chip takes the hand's single strongest action, but Limp counts
+  every hand he put a limp in — traps included — and LRR is the subset that came
+  back over the top, so the pair reads "how often does he limp" then "and then
+  what". A trap keeps its purple notch inside the yellow Limp grid. The footer
+  on either chip carries the conditional rate from `limpLines` (app.js), which
+  counts **every logged hand, not the grid's rows**: the grid only holds hands
+  he turned up, and a limp that folds is almost never shown while a
+  limp-reraise nearly always is, so a rate off those rows reads several times
+  too high. **Value/bluff is deliberately not split** (Phil, v135): the
   action stream can't make that call, and two grids per action is two grids that
   never get filled. Tag ids stay stable, so `READ_SIT` (vocab.js) maps the
   older `first-raise-v|-b` and `lrr-v|-b` read ids onto the plain action.
