@@ -156,14 +156,17 @@ const TENDENCY_TAGS = [
 /* Player archetype — Phil sets it manually and it themes the opponent's row
    on the list plus a pill in the detail header. Colors chosen so the list
    reads at a glance: teal/green/purple = the fish family, blue = reg,
-   red = the good reg to stay away from, gray = tight/nit. */
+   red = the good reg to stay away from, gray = tight/nit. Station fish is
+   the calling station: loose like the loose fish but passive with it, so it
+   sits beside him in a lighter green (Phil, v140). */
 const PLAYER_TYPES = [
-  { id: "whale",      label: "Whale",      icon: "🐋", color: "#3ec7c7" },
-  { id: "loose-fish", label: "Loose fish", icon: "🐟", color: "#4fbf5a" },
-  { id: "aggro-fish", label: "Aggro fish", icon: "💥", color: "#a35bd6" },
-  { id: "reg",        label: "ABC reg",    icon: "🃏", color: "#4f7fdf" },
-  { id: "good-reg",   label: "Good reg",   icon: "🦈", color: "#d64848" },
-  { id: "tight-reg",  label: "Tight reg",  icon: "🔒", color: "#7a8496" },
+  { id: "whale",        label: "Whale",        icon: "🐋", color: "#3ec7c7" },
+  { id: "loose-fish",   label: "Loose fish",   icon: "🐟", color: "#4fbf5a" },
+  { id: "station-fish", label: "Station fish", icon: "☎️", color: "#7ad6a0" },
+  { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#a35bd6" },
+  { id: "reg",          label: "ABC reg",      icon: "🃏", color: "#4f7fdf" },
+  { id: "good-reg",     label: "Good reg",     icon: "🦈", color: "#d64848" },
+  { id: "tight-reg",    label: "Tight reg",    icon: "🔒", color: "#7a8496" },
 ];
 /* No longer offered, but anyone still carrying one keeps their badge and can
    re-pick or Clear — dropping the entry would leave the id set and unclearable. */
