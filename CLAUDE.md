@@ -136,6 +136,18 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   known 66% turn bet comes out B50 under a per-seat reading and B66 under this
   one. Any new import source must land in chips or in sub-1 k-units, nothing in
   between.
+  **The DX screen-reader drops decimal points**, and `SZ_MAX_POT` (v148) is the
+  guard: a non-jam postflop bet over 3x the pot is treated as a corrupt amount
+  and ends the hand's walk, exactly as a missing one does. `19.72K` comes back
+  as `1972K`, so the amount lands 100x high and — being larger than the bet it
+  faced — gets relabelled a *raise* when the player only called. Six hands in
+  the 2026-09-21 export trip it, and each poisoned every street after it.
+  **The underlying data is still wrong and has not been rewritten** — that needs
+  Phil's go-ahead, and in two of the six there is no way to tell a dropped
+  hundredths point from a dropped tenths one (`306k` is either `3.06k` or
+  `30.6k`). Root cause is OCR, not `dxocr.js:21`, which parses correctly; a
+  plausibility warning belongs in `shortdeck-journal/tools/dx/dx2rec.js`, which
+  already tracks `potCheck`.
 - **Hands-panel filters belong to an opponent, not to a screen.** The route
   guard in `go()` only calls `resetHandFilters()` when a *different* opponent
   comes up (`handFiltersFor`), so opening a hand and coming back keeps them —

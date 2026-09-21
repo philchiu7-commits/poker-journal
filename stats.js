@@ -226,6 +226,10 @@ function sizeAmount(s) {
   return isFinite(v) ? (m[2] ? v * 1000 : v) : null;
 }
 const SZ_AGG = new Set(["bet", "raise", "3bet", "4bet", "5bet", "jam"]);
+/* Past this multiple of the pot, a non-jam bet is a data error rather than a
+   read. Real overbets run to about 2x; nothing Phil has logged sits between
+   3x and the 8x where the corrupted ones start. */
+const SZ_MAX_POT = 3;
 const SZ_STREETS = ["pre", "flop", "turn", "river"];
 const SZ_BOARD_N = { flop: 3, turn: 4, river: 5 };
 /* Walk the money. Returns one entry per postflop bet/raise whose amount is
@@ -277,7 +281,17 @@ function betsVsPot(h) {
       if (SZ_AGG.has(a.act)) {
         const v = sizeAmount(a.size);
         if (v === null) return out;                   // unknown amount — stop here
-        if (st !== "pre") out.push({ a, street: st, pot: base + street(), bet: v - (inv[a.actor] || 0) });
+        if (st !== "pre") {
+          const p = base + street(), bet = v - (inv[a.actor] || 0);
+          /* An amount that can't be true is worse than a missing one, so it gets
+             the same treatment. The DX screen-reader loses the decimal point now
+             and then — 19.72K comes back as 1972K — and the tell is a bet many
+             times the pot it was made into. A shove is exempt: a jam really can
+             dwarf the pot when the stacks are deep. Six hands in the export trip
+             this, and each one used to poison every street that followed it. */
+          if (a.act !== "jam" && p > 0 && bet > p * SZ_MAX_POT) return out;
+          out.push({ a, street: st, pot: p, bet });
+        }
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
