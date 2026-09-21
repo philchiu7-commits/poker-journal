@@ -142,12 +142,18 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   as `1972K`, so the amount lands 100x high and — being larger than the bet it
   faced — gets relabelled a *raise* when the player only called. Six hands in
   the 2026-09-21 export trip it, and each poisoned every street after it.
-  **The underlying data is still wrong and has not been rewritten** — that needs
-  Phil's go-ahead, and in two of the six there is no way to tell a dropped
-  hundredths point from a dropped tenths one (`306k` is either `3.06k` or
-  `30.6k`). Root cause is OCR, not `dxocr.js:21`, which parses correctly; a
-  plausibility warning belongs in `shortdeck-journal/tools/dx/dx2rec.js`, which
-  already tracks `potCheck`.
+  Root cause is OCR, not `dxocr.js:21`, which parses correctly.
+
+  Five of the six were repaired on Phil's go-ahead (2026-09-21) via a
+  `poker-journal-fix-dx-decimal.json` import file — two `raise`s became `call`s,
+  three sizes lost their extra 100x — taking the derived grid from 304 to 309
+  classified bets. **`DX0005-20260920050805` river `bet 176k` into 16.2k is still
+  stored wrong and left alone**: `1.76k` (an 11% blocker) and `17.6k` (a 109%
+  overbet) are both real river bets, the raw OCR text is not kept anywhere, and
+  the stack numbers in `dx-bulk.json` are themselves misreads. Nothing in the
+  data can settle it. `shortdeck-journal/tools/dx/dx2rec.js` now warns at capture
+  time (`MAX_POT_MULT`, same threshold) and names the likely true value, so this
+  class should not reach the journal again. Full write-up: `DX-DECIMAL-DROP.md`.
 - **Hands-panel filters belong to an opponent, not to a screen.** The route
   guard in `go()` only calls `resetHandFilters()` when a *different* opponent
   comes up (`handFiltersFor`), so opening a hand and coming back keeps them —
