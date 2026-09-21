@@ -2909,7 +2909,15 @@ function handRowHTML(h, oppId) {
   const dot = res ? `<span class="dot ${res}"></span>` : "";
   // Table-state squid count (how many are up) — used on the general feed.
   const squid = h.squid?.have != null ? `<span class="hr-squid">${h.squid.have}🦑</span>` : "";
-  const subFor = (html) => html ? `<div class="s hh-line">${html}</div>` : "";
+  /* 35 hands in the journal are a typed note and no actions at all, and the
+     action line renders empty for those — so the row showed a seat and two
+     cards with the entire hand invisible until you tapped in. Fall back to the
+     note, which is what those rows are actually made of. Only when the hand has
+     no stream at all: an imported hand whose note is "Imported · table …" has a
+     blank line for any villain who never acted, and provenance is not a hand. */
+  const noteLine = h.note && !(h.actions || []).length
+    ? `<div class="s hr-note">${esc(h.note)}</div>` : "";
+  const subFor = (html) => html ? `<div class="s hh-line">${html}</div>` : noteLine;
   if (oppId) {
     const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
     if (i >= 0) {

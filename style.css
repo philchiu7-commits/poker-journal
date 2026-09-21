@@ -665,6 +665,9 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 10px; text-transform: uppercase; margin-right: 1px;
 }
 .hh-line .ctile { transform: scale(.85); margin: 0 -1px; align-self: center; }
+/* A note-only hand's row: the typed note stands in for the action line. Set
+   apart so it doesn't read as a logged hand history. */
+.hr-note { font-style: italic; opacity: .92; }
 .hh-colon { color: var(--muted); margin-right: 2px; }
 .hh-verb { color: var(--text); }
 .hh-act { display: inline-flex; align-items: baseline; gap: 4px; }
