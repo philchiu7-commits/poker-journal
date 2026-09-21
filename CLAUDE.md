@@ -135,13 +135,16 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   logged (the old Seen mode) is gone as of v136, and stored `seen[]` arrays are
   left alone, just not surfaced. *Estimate* is the range he paints (`hands[]`),
   with the `RANGE_CLASSES` chips to fill it in blocks; the corner notch on an
-  Estimate cell is the History fact showing through. **Both tabs fill in the
-  selected action's own colour** (v137) — the hue its notch carries, via a
-  `--fill` custom property on `.rggrid` — so the estimate and the record read
-  in one colour language; the overall range has no single action and stays
-  accent blue. Under one action History drops the notch (the fill already says
-  it) and a painted Estimate cell inks its notch dark so "on record" survives
-  the matching background. Situations are the preflop
+  Estimate cell is the History fact showing through. **History paints each cell whole in that
+  hand's own action colour** (Phil, v141) and carries no notch at all — a corner
+  mark is a lot to read across 169 squares when the cell itself can carry it, and
+  on the overall range the grid becomes a map of how he plays each hand instead
+  of a wall of blue. A limp that came back over the top keeps its purple inside
+  the yellow Limp grid. The per-cell colour is a `--fill` custom property on the
+  cell, overriding the situation-wide `--fill` on `.rggrid` (v137). Estimate is a
+  canvas, so there the fill is the sketch — accent blue, or the situation's own
+  hue — and the record rides on top as a corner notch, inked dark when a matching
+  fill would swallow it. Situations are the preflop
   actions themselves — `Range · Raise · Limp · 3bet · 4bet+ · Call · LRR` —
   and each carries the `act` bucket `topPreGroup` produces, so one vocabulary
   serves both tabs: History filters the hands on record by it, Estimate paints

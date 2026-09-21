@@ -1267,7 +1267,8 @@ function renderOppRanges(o) {
 
   /* The grid fills in the selected action's own colour — the hue its corner
      notch already carries — so the estimate and the record speak the same
-     colours. The overall range has no single action and stays accent blue. */
+     colours. The overall range has no single action and stays accent blue;
+     on History each cell overrides it with its own action's colour, below. */
   const sitAct = (RANGE_SIT_BY_ID[rangeSitSel] || {}).act;
   const sitFill = sitAct ? notchColor(sitAct) : "";
 
@@ -1276,21 +1277,25 @@ function renderOppRanges(o) {
     const e = rec[c];
     const on = hist ? !!e : inr.has(c);
     const top = e ? strongestAct(e.acts) : null;
-    let cls = "rgcell rng", notch = "", title = c;
+    let cls = "rgcell rng", notch = "", style = "", title = c;
     if (e) title += ` · shown ${e.n}×${top ? ` · ${top}` : ""}`;
     if (on) cls += " inr";
     if (hist) cls += " ro";                         // History is a record, not a canvas
-    /* Under one action the fill already carries the colour, so on History the
-       notch would only repeat it. The exception is a hand whose own line isn't
-       the bucket's — a limp that came back over the top — which keeps its own
-       colour, because picking those out of the limps is the whole point. On a
-       painted Estimate cell a matching notch is inked dark instead of
-       vanishing into the fill. */
-    if (e && !(hist && sitFill && top === sitAct)) {
+    /* History paints the whole cell in the action's own colour (Phil, v141) —
+       a corner notch is a lot to read across 169 squares when the cell itself
+       can carry it, and on the overall range the grid turns into a map of how
+       he plays each hand rather than a wall of blue. A limp that came back over
+       the top keeps its purple inside the yellow Limp grid, same as before.
+       Estimate is a canvas, so there the fill is the sketch and the notch stays
+       the fact riding on top — inked dark when it would vanish into a matching
+       fill. */
+    if (hist) {
+      if (on) style = ` style="--fill:${notchColor(top)}"`;
+    } else if (e) {
       notches++;
       notch = `<i class="rgnotch" style="--nc:${sitFill && on && top === sitAct ? "#0a0d12" : notchColor(top)}"></i>`;
     }
-    return `<div class="${cls}" data-rcell="${c}"${hist ? "" : ' role="button"'} title="${esc(title)}">${c}${notch}</div>`;
+    return `<div class="${cls}"${style} data-rcell="${c}"${hist ? "" : ' role="button"'} title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
 
   const byHue = {};
@@ -1303,7 +1308,7 @@ function renderOppRanges(o) {
          .map(([col, set]) => [col, [...set].sort((a, b) => (RANK_ACT[a] ?? -1) - (RANK_ACT[b] ?? -1))])
          .sort((a, b) => (RANK_ACT[b[1].at(-1)] ?? -1) - (RANK_ACT[a[1].at(-1)] ?? -1))
          .map(([col, acts]) => `<span class="rglegitem"><span class="rgswatch" style="background:${col}"></span>${esc(acts.map((a) => a || "no action").join(" / "))}</span>`).join("")}
-       ${notches ? `<span class="rglegnote">corner = what they did with it</span>` : ""}</div>`
+       ${hist || notches ? `<span class="rglegnote">${hist ? "colour" : "corner"} = what they did with it</span>` : ""}</div>`
     : "";
 
   const title = esc(rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos));
