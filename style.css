@@ -974,6 +974,16 @@ textarea.noteedit { margin-bottom: 0; }
 .sizechip.has { color: var(--text); border-color: #3a4658; }
 .sizechip.top { background: #1d3050; border-color: #3f6ea8; color: #cfe2ff; }
 .sizechip.undo { border-color: #6b2f2f; color: #f0a0a0; }
+/* The derived half of the panel. Dashed so it reads as a reading, not a tally
+   Phil made, and greened where the manual rows are blue — two sources, never
+   confusable at a glance. */
+.sizehead.autohead { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px;
+  display: flex; align-items: center; gap: 6px; }
+.sizesub { font-size: 10.5px; font-weight: 600; color: var(--muted); margin: 7px 0 3px; }
+.sizechip.auto { border-style: dashed; }
+.sizechip.auto.has { color: var(--text); border-color: #3c5a45; border-style: solid; cursor: pointer; }
+.sizechip.auto.top { background: #1b3326; border-color: #3f8a5d; color: #c8ecd6; }
+.sizechip.auto.has:active { background: #244934; }
 #od-size-edit.on { color: #f85149; }
 
 /* The limp-reraise rate rides in the range footer: a frequency off every

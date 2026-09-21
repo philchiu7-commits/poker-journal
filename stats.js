@@ -195,3 +195,139 @@ function hudMini(c) {
     vpip: p(c.vpip, c.seats), pfr: p(c.pfr, c.seats), three: p(c.n3b, c.opp3b),
   };
 }
+
+/* ================= Sizing, read off the hand histories =================
+   Phil already tallies "which size did he pick, by street, value or bluff" by
+   hand. The imported hands can answer the same question on their own: 439 of
+   his 456 logged postflop bets carry an amount, and most of the villains whose
+   bets matter have their cards recorded. So reconstruct the pot, turn the
+   amount into a fraction of it, and let the evaluator say whether the hand was
+   value or a bluff.
+
+   Two things this is NOT, and the UI must say so:
+   · It only sees hands where the villain's cards are known, and cards are
+     mostly known because the hand got shown down. Bluffs that took it down
+     without a showdown are invisible, so the BLUFF rows undercount badly.
+     Phil's manual taps are the corrective, not a duplicate — he saw the hands
+     this can't.
+   · "Value or bluff" here is the hand's actual strength on the street he bet,
+     not his intent. A semi-bluff is neither, so draws are left out rather than
+     forced into a column. */
+
+/* "$6,000" · "6.8k" · "50%" · "Jam" → a number, or null when it isn't one. */
+function sizeAmount(s) {
+  if (s === null || s === undefined) return null;
+  const t = String(s).trim().replace(/[$,]/g, "");
+  const m = /^([\d.]+)\s*([kK]?)$/.exec(t);
+  if (!m) return null;
+  const v = parseFloat(m[1]);
+  return isFinite(v) ? (m[2] ? v * 1000 : v) : null;
+}
+const SZ_AGG = new Set(["bet", "raise", "3bet", "4bet", "5bet", "jam"]);
+const SZ_STREETS = ["pre", "flop", "turn", "river"];
+const SZ_BOARD_N = { flop: 3, turn: 4, river: 5 };
+/* Walk the money. Returns one entry per postflop bet/raise whose amount is
+   known, with the pot as it stood *before* that bet went in — the denominator
+   everyone actually quotes a size against. Bails out of a hand the moment an
+   amount is missing rather than guessing, because one guessed number poisons
+   every later street in that hand. */
+function betsVsPot(h) {
+  const b = h.blinds || {};
+  if (b.bb === null || b.bb === undefined) return [];
+  /* Post the blinds to the seats that actually posted them. Keying them to a
+     placeholder instead would double-count the moment a blind raises — his
+     post is part of what he has in, not money sitting beside it. */
+  const actorAt = {};
+  (h.villains || []).forEach((v, i) => { if (v.pos) actorAt[v.pos] = "v" + i; });
+  if (h.heroPos) actorAt[h.heroPos] = actorAt[h.heroPos] || "hero";
+  const post = {};
+  const put = (posName, amt) => {
+    if (!amt) return 0;
+    post[actorAt[posName] || "_" + posName] = amt;
+    return amt;
+  };
+  put("SB", b.sb);
+  put("BB", b.bb);
+  const straddle = actorAt.STD && b.std ? put("STD", b.std) : 0;
+  let pot = 0;
+  const out = [];
+  for (const st of SZ_STREETS) {
+    const A = (h.actions || []).filter((a) => a.street === st);
+    if (!A.length) continue;
+    let level = st === "pre" ? (straddle || b.bb) : 0;
+    const inv = st === "pre" ? { ...post } : {};      // what each actor has in *this* street
+    const base = pot;
+    const street = () => Object.values(inv).reduce((s, v) => s + v, 0);
+    for (const a of A) {
+      if (SZ_AGG.has(a.act)) {
+        const v = sizeAmount(a.size);
+        if (v === null) return out;                   // unknown amount — stop here
+        if (st !== "pre") out.push({ a, street: st, pot: base + street(), bet: v - (inv[a.actor] || 0) });
+        inv[a.actor] = v;
+        level = Math.max(level, v);
+      } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
+    }
+    pot = base + street();
+  }
+  return out;
+}
+/* Was the hand value or a bluff on the street he bet it? Strength only — a
+   read on his cards, never on his thinking. Top pair or better is value;
+   no pair and no draw is a bluff; a draw or a weak pair is neither and is
+   deliberately left uncounted. */
+function madeClass(hole, board) {
+  if (!hole || hole.length !== 2 || board.length < 3) return null;
+  const cat = best7(hole.concat(board))[0];
+  if (cat >= 2) return "V";                           // two pair or better
+  const bv = board.map((c) => RVAL[c[0]]);
+  if (cat === 1) {
+    const cnt = {};
+    for (const c of hole.concat(board)) cnt[RVAL[c[0]]] = (cnt[RVAL[c[0]]] || 0) + 1;
+    const pair = Math.max(...Object.keys(cnt).filter((v) => cnt[v] >= 2).map(Number));
+    if (!hole.some((c) => RVAL[c[0]] === pair)) return null;   // playing the board's pair
+    return pair === Math.max(...bv) ? "V" : null;              // top pair = value, rest unclear
+  }
+  const suits = {};
+  for (const c of hole.concat(board)) suits[c[1]] = (suits[c[1]] || 0) + 1;
+  if (Object.values(suits).some((n) => n >= 4)) return null;   // flush draw — semi-bluff
+  let vs = [...new Set(hole.concat(board).map((c) => RVAL[c[0]]))].sort((x, y) => x - y);
+  if (vs.includes(14)) vs = [1].concat(vs);
+  for (let i = 0; i + 3 < vs.length; i++) if (vs[i + 3] - vs[i] === 3) return null;  // open-ender
+  return "B";
+}
+/* Phil's ladder is B33/B50/B66/B100/B150. Bucket to the nearest rung so a 62%
+   bet reads as the 66% he was going for, not as its own category. */
+const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.83, "66"], [1.25, "100"], [Infinity, "150"]];
+const sizeStepFor = (r) => (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[4])[1];
+/* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, n, skipped:{…} } */
+function sizingAuto(oppId, hands) {
+  const rows = {}, skipped = { noCards: 0, unclear: 0, noAmount: 0 };
+  let n = 0;
+  for (const h of hands) {
+    const V = h.villains || [];
+    const board = (h.board || []).filter(Boolean);
+    const got = betsVsPot(h);
+    const agg = (h.actions || []).filter((a) => a.street !== "pre" && SZ_AGG.has(a.act));
+    skipped.noAmount += Math.max(0, agg.length - got.length);
+    for (const e of got) {
+      const m = /^v(\d+)$/.exec(String(e.a.actor || ""));
+      if (!m || e.pot <= 0 || e.bet <= 0) continue;
+      const v = V[Number(m[1])];
+      if (!v || v.opponentId !== oppId) continue;
+      const hole = (v.cards || []).filter(Boolean);
+      if (hole.length !== 2) { skipped.noCards++; continue; }
+      const vis = board.slice(0, SZ_BOARD_N[e.street]);
+      if (vis.length < SZ_BOARD_N[e.street]) { skipped.noCards++; continue; }
+      const k = madeClass(hole, vis);
+      if (!k) { skipped.unclear++; continue; }
+      const rid = e.street + "-" + k.toLowerCase();
+      const cell = (rows[rid] = rows[rid] || {});
+      const step = sizeStepFor(e.bet / e.pot);
+      (cell[step] = cell[step] || { n: 0, ids: [] });
+      cell[step].n++;
+      cell[step].ids.push(h.id);
+      n++;
+    }
+  }
+  return { rows, n, skipped };
+}

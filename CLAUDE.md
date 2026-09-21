@@ -103,6 +103,28 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   Hand-filter roles come from `villainRoles` (app.js), which returns a **list**:
   a limp-reraise answers to both `LRR` and `Limp`, the same way the range grid
   counts it. Everything else is exclusive.
+  stats.js also carries the **sizing engine** — `sizeAmount` parses `"$6,000"` /
+  `"6.8k"`, `betsVsPot` replays the money street by street and returns each
+  postflop bet with the pot *before* it went in, `madeClass` calls the villain's
+  hand value or bluff off his shown cards, `sizeStepFor` buckets the fraction
+  onto Phil's B33/B50/B66/B100/B150 ladder, and `sizingAuto` tallies the grid.
+  Two standing caveats, both stated in the UI copy: it only sees hands where the
+  villain's cards are on record, and cards are mostly on record because the hand
+  went to showdown — **so the Bluff rows are a floor, not a count**, and Phil's
+  manual taps are the corrective rather than a duplicate. Draws and weak pairs
+  are deliberately left uncounted instead of forced into a column. `betsVsPot`
+  **ignores `ante`** (188 hands carry one), which understates the preflop pot
+  and so overstates flop bet-% slightly for those hands — a known approximation.
+- **Hands-panel filters belong to an opponent, not to a screen.** The route
+  guard in `go()` only calls `resetHandFilters()` when a *different* opponent
+  comes up (`handFiltersFor`), so opening a hand and coming back keeps them —
+  filtering down to four hands is usually the prelude to reading them one by
+  one (v144). The **3BP chip is opponent-relative**: `in3betPot` requires he
+  3-bet or called the 3-bet, so a hand he folded to a 3-bet in drops out. The
+  other pot buckets stay table-shaped.
+- Suggested reads (`derivedReads`) carry the hand ids they were counted off, and
+  `openReadProof` lists them in the same sheet the HUD drill uses. Looking
+  commits nothing — **Add read still needs Phil's tap.**
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
   **`U<n>` numbers the UTG seats down from the table size** — an 8-handed ring
   is `SB BB STD U8 U7 HJ CO BN`, a 9-handed one adds U9. `ringFor` (app.js)

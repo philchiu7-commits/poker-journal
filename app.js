@@ -199,11 +199,20 @@ const READ_SIGNALS = [
 function derivedReads(o) {
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(o.id));
   const cnt = {};
-  const bump = (k) => (cnt[k] = (cnt[k] || 0) + 1);
+  /* A suggestion keeps the hands it was counted off. "Seen in 4 hands" is a
+     claim; the four hands are the evidence, and a read Phil is about to commit
+     to his card should be checkable before he commits it (Phil, v144). */
+  const why = {};
+  let cur = null;
+  const bump = (k) => {
+    cnt[k] = (cnt[k] || 0) + 1;
+    (why[k] = why[k] || []).push(cur);
+  };
   const aggr = (arr) => arr.some((a) => a === "bet" || a === "raise");
   for (const h of hands) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === o.id);
     if (idx < 0) continue;
+    cur = h.id;
     const s = villainStreetActs(h, "v" + idx);
     const raisedPre = s.pre.some((a) => ["raise", "3bet", "4bet", "5bet"].includes(a));
     if (s.pre.includes("3bet")) bump("3bets-light:yes");
@@ -222,7 +231,8 @@ function derivedReads(o) {
     const c = cnt[key] || 0;
     if (c < sig.th || reads[sig.id] || dismissed.has(key) || !TAG_BY_ID[sig.id]) return null;
     const suffix = sig.state === "no" ? " (NO)" : "";
-    return { tagId: sig.id, state: sig.state, key, count: c, label: TAG_BY_ID[sig.id].label + suffix };
+    return { tagId: sig.id, state: sig.state, key, count: c, hands: why[key] || [],
+             label: TAG_BY_ID[sig.id].label + suffix };
   }).filter(Boolean).sort((a, b) => b.count - a.count);
 }
 
@@ -616,10 +626,13 @@ function route() {
     return;
   }
   const v = VIEWS.includes(view) ? view : "opponents";
-  // Leaving a specific opponent, or navigating to a different one → drop filters.
-  // A [data-rjump] read deep-link re-enters the same opponent, so scope it to
-  // actually leaving them — otherwise the jump would reset what it just set.
-  if (v !== "opp" || arg !== curOppId) { resetHandFilters(); noCardsOpen = true; }
+  /* Filters belong to an opponent, not to a screen. Opening a hand and coming
+     back used to wipe them, which is the one moment you most want them kept —
+     you filtered down to four hands *in order to* read them one by one (Phil,
+     v144). So they only drop when a different opponent comes up. */
+  if (v === "opp" && arg && arg !== handFiltersFor) {
+    resetHandFilters(); noCardsOpen = true; handFiltersFor = arg;
+  }
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
@@ -631,8 +644,10 @@ function route() {
 }
 
 /* ================= Hands-panel filters (per opponent detail) =================
-   Multi-select within a dimension (OR), AND across dimensions. Cleared on
-   navigation away by resetHandFilters(). */
+   Multi-select within a dimension (OR), AND across dimensions. They survive a
+   trip into a hand and back; only a different opponent clears them, and the
+   Clear-filters button is showing the whole time any are on. */
+let handFiltersFor = null;                 // whose filters these are
 let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false };
 const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false }; };
 const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd;
@@ -666,6 +681,20 @@ function potBucket(h) {
   if (raises === 2) return "3BP";
   return "4BP+";
 }
+/* "3-bet pot" from this player's side, not the table's. He either made the
+   3-bet or called one; a hand where he folded to it is a 3-bet pot that he
+   never actually played, and it isn't what you asked for when you tapped 3BP
+   (Phil, v144). */
+function in3betPot(h, oppId) {
+  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  if (idx < 0) return false;
+  const pre = (h.actions || []).filter((a) => a.street === "pre");
+  const three = pre.findIndex((a) => a.act === "3bet");
+  if (three < 0) return false;
+  const me = "v" + idx;
+  if (pre[three].actor === me) return true;                       // he 3-bet
+  return pre.slice(three + 1).some((a) => a.actor === me && a.act === "call");  // he called it
+}
 /* Squid state bucket from h.squid.have. */
 function squidBucket(h) {
   const n = h?.squid?.have;
@@ -694,7 +723,11 @@ function villainRoles(h, oppId) {
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
   if (f.sd && !h.showdown) return false;
-  if (f.pot.size && !f.pot.has(potBucket(h))) return false;
+  if (f.pot.size) {
+    const b = potBucket(h);
+    if (!f.pot.has(b)) return false;
+    if (b === "3BP" && !in3betPot(h, oppId)) return false;
+  }
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
     if (!villainRoles(h, oppId).some((r) => f.role.has(r))) return false;
@@ -725,10 +758,12 @@ function renderHandFilters(oppId, allHands) {
     handFilters = save;
     return n;
   };
+  const HF_TIP = { "3BP": "Hands where he 3-bet or called a 3-bet" };
   const chip = (dim, val, label) => {
     const on = dim === "sd" ? f.sd : f[dim].has(val);
     const n = countIf(dim, val);
-    return `<button class="hfchip${on ? " on" : ""}" data-hf="${dim}" data-hfv="${esc(val ?? "")}">${esc(label)}<i>${n}</i></button>`;
+    const t = HF_TIP[val] ? ` title="${esc(HF_TIP[val])}"` : "";
+    return `<button class="hfchip${on ? " on" : ""}"${t} data-hf="${dim}" data-hfv="${esc(val ?? "")}">${esc(label)}<i>${n}</i></button>`;
   };
   const row = (label, dim, vals) =>
     `<div class="hfrow"><span class="hflbl">${label}</span><div class="chiprow tight">${vals.map((v) => chip(dim, v, v)).join("")}</div></div>`;
@@ -1175,6 +1210,22 @@ function openRangeDrill(o) {
      <div class="list rgcell-hands">${blocks || `<div class="empty">Nothing here.</div>`}</div>`);
 }
 
+/* The hands behind one suggested read. Same sheet as the HUD drill — the
+   question is the same one ("show me") and so is the answer. Nothing is
+   committed by looking: Add read still needs Phil's tap. */
+function openReadProof(o, label, ids, sub) {
+  const byId = new Map(HANDS.map((h) => [h.id, h]));
+  const hands = [...new Set(ids)].map((id) => byId.get(id)).filter(Boolean)
+    .sort((a, b) => b.ts - a.ts);
+  if (!hands.length) return;
+  sheetGroup = "__rdrill__";
+  showSheet(
+    `<div class="sheethead"><span class="t">${esc(label)} · ${esc(o.name)}</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="rdsub">${hands.length} hand${hands.length === 1 ? "" : "s"} ${sub || "behind this suggestion"}</div>
+     <div class="list rgcell-hands">${hands.map((h) => handRowHTML(h, o.id)).join("")}</div>`);
+}
+
 /* The hands behind one HUD number: every hand it had a chance in, split into
    the ones that counted and the ones that did not. The split is the point — a
    fold-to-cbet of 60% is four hands you want to read and six you want to read
@@ -1225,8 +1276,10 @@ let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being 
 let rangeSitSel = RANGE_SITS[0].id;     // which situation is on the grid — "all" is the overall range
 let rangeSitPos = "any";                // which position group is on the grid — "any" is the ungrouped sketch
 /* Two tabs, one grid. History is the hands on record — read off the hand
-   histories, nothing to fill in; Estimate is the range you paint. */
-let rangeTab = "estimate";
+   histories, nothing to fill in; Estimate is the range you paint. History
+   opens first — the record is the thing you check, the estimate is the thing
+   you go and write (Phil, v144). */
+let rangeTab = "history";
 /* Both layers write the spot on screen: one situation from one position group. */
 const curRangeSpot = () => rangeSpotId(rangeSquid, rangeSitSel, rangeSitPos);
 /* Which seats the record is allowed to count — a seat scopes it to itself,
@@ -2292,6 +2345,7 @@ function renderOppReads(o) {
         `<div class="suggitem" data-dtag="${esc(s.tagId)}" data-dstate="${esc(s.state || "yes")}" data-dkey="${esc(s.key)}">
            <div class="notetext">📊 <b>${esc(s.label)}</b> — seen in ${s.count} hand${s.count > 1 ? "s" : ""}</div>
            <div class="noterowbtns">
+             <button class="chip mini" data-dwhy>Show the hands</button>
              <button class="chip mini on sgreen" data-dacc>＋ Add read</button>
              <button class="chip mini" data-ddismiss>Dismiss</button>
            </div></div>`).join("") : "")
@@ -2348,13 +2402,48 @@ function renderOppSizing(o) {
     return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
       <div class="sizechips">${chips}</div></div>`;
   };
+  /* The same grid, filled in by the hand histories instead of by tapping.
+     Separate rows on purpose: these are counted off the villain's actual cards
+     and the pot as it stood, and they can only see hands where his cards are
+     known — which mostly means hands that got shown down. Bluffs that took it
+     down uncontested never appear, so the Bluff rows read low and the manual
+     tallies above are the part only Phil can supply. */
+  const auto = sizingAuto(o.id, HANDS);
+  const autoRow = (r) => {
+    const cell = auto.rows[r.id] || {};
+    const total = SIZING_STEPS.reduce((n, st) => n + ((cell[st.id] || {}).n || 0), 0);
+    const top = total ? Math.max(...SIZING_STEPS.map((st) => (cell[st.id] || {}).n || 0)) : 0;
+    const chips = SIZING_STEPS.map((st) => {
+      const n = (cell[st.id] || {}).n || 0;
+      const cls = [n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
+      return `<button class="sizechip auto${cls ? " " + cls : ""}"${n ? ` data-szauto="${r.id}|${st.id}"` : ""}
+        title="${n ? `${n} of ${total} — ${Math.round((100 * n) / total)}%. Tap for the hands.` : "Nothing on record"}"
+        >${st.label}${n ? `<i>${n}</i>` : ""}</button>`;
+    }).join("");
+    return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
+      <div class="sizechips">${chips}</div></div>`;
+  };
+  const sk = auto.skipped;
+  const autoHTML = auto.n
+    ? `<div class="sizehead autohead">From hand histories<span class="sizen">${auto.n}</span></div>
+       <div class="sizenote">Counted off his shown cards and the pot at the time. Bluffs
+         he never had to show don't appear here, so read the Bluff rows as a floor.
+         ${sk.unclear ? `${sk.unclear} bet${sk.unclear === 1 ? "" : "s"} left out as neither — a draw or a weak pair.` : ""}
+         ${sk.noCards ? ` ${sk.noCards} left out with no cards on record.` : ""}</div>` +
+      ["V", "B"].map((k) =>
+        `<div class="sizesub">${k === "V" ? "Value" : "Bluff"}</div>` +
+        SIZING_ROWS.filter((r) => r.kind === k).map(autoRow).join("")).join("")
+    : `<div class="sizehead autohead">From hand histories</div>
+       <div class="sizenote">Nothing yet — this needs imported hands where his cards
+         and the bet amounts are both on record.</div>`;
   $("od-sizing").innerHTML =
     `<div class="sizenote">${sizingUndo
       ? "Tapping a size now takes one off — tap Done when the count is right."
       : "Tap a size each time you see it, once you know whether it was value or a bluff."}</div>` +
     ["V", "B"].map((k) =>
       `<div class="sizehead">${k === "V" ? "Value" : "Bluff"}</div>` +
-      SIZING_ROWS.filter((r) => r.kind === k).map(rowHTML).join("")).join("");
+      SIZING_ROWS.filter((r) => r.kind === k).map(rowHTML).join("")).join("") +
+    autoHTML;
 }
 
 function renderOppHud(o) {
@@ -4964,6 +5053,19 @@ function bindStatic() {
     if (o) renderOppSizing(o);
   };
   $("od-sizing").onclick = async (e) => {
+    const az = e.target.closest("[data-szauto]");
+    if (az) {
+      const o = oppById(curOppId);
+      if (!o) return;
+      const [rowId, stepId] = az.dataset.szauto.split("|");
+      const r = SIZING_ROW_BY_ID[rowId], st = SIZING_STEP_BY_ID[stepId];
+      const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId];
+      if (r && st && cell) {
+        openReadProof(o, `${r.street} ${r.kind === "V" ? "value" : "bluff"} · ${st.label}`, cell.ids,
+          "he sized this way, off his shown cards");
+      }
+      return;
+    }
     const b = e.target.closest("[data-size]");
     if (!b) return;
     const o = oppById(curOppId);
@@ -5212,6 +5314,11 @@ function bindStatic() {
     const tag = item.dataset.dtag;
     const state = item.dataset.dstate || "yes";
     const dkey = item.dataset.dkey || tag;                   // per-direction dismiss key
+    if (e.target.closest("[data-dwhy]")) {
+      const s = derivedReads(o).find((x) => x.key === dkey);
+      if (s) openReadProof(o, s.label, s.hands);
+      return;
+    }
     if (e.target.closest("[data-dacc]")) {
       oppReads(o)[tag] = state;                              // accept → set the read (yes or no)
     } else if (e.target.closest("[data-ddismiss]")) {
