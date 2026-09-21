@@ -111,15 +111,20 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   Two standing caveats, both stated in the UI copy: it only sees hands where the
   villain's cards are on record, and cards are mostly on record because the hand
   went to showdown — **so the Bluff rows are a floor, not a count**, and Phil's
-  manual taps are the corrective rather than a duplicate. Draws and weak pairs
-  are deliberately left uncounted instead of forced into a column. `betsVsPot`
+  manual taps are the corrective rather than a duplicate. **The value/bluff line
+  is Phil's, set in v146:** two pair or better, or top or second pair, is value;
+  everything under that — third pair, bottom pair, a naked draw, air — is a
+  bluff. Nothing goes uncounted, so `skipped.unclear` is now always 0. Only
+  pairs he made with his *own* cards count, so a hand that is "two pair" solely
+  because the board paired is graded on his own card. `betsVsPot`
   **ignores `ante`** (188 hands carry one), which understates the preflop pot
   and so overstates flop bet-% slightly for those hands — a known approximation.
 - **Hands-panel filters belong to an opponent, not to a screen.** The route
   guard in `go()` only calls `resetHandFilters()` when a *different* opponent
   comes up (`handFiltersFor`), so opening a hand and coming back keeps them —
   filtering down to four hands is usually the prelude to reading them one by
-  one (v144). The **3BP chip is opponent-relative**: `in3betPot` requires he
+  one (v144). The ranges tab resets to History there too — "default" means per
+  player, not once per app launch. The **3BP chip is opponent-relative**: `in3betPot` requires he
   3-bet or called the 3-bet, so a hand he folded to a 3-bet in drops out. The
   other pot buckets stay table-shaped. The **Post row** (`postRoles`) reads
   position-in-street rather than the token: an aggressive action on a street

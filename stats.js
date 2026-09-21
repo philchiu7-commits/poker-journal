@@ -211,8 +211,10 @@ function hudMini(c) {
      Phil's manual taps are the corrective, not a duplicate — he saw the hands
      this can't.
    · "Value or bluff" here is the hand's actual strength on the street he bet,
-     not his intent. A semi-bluff is neither, so draws are left out rather than
-     forced into a column. */
+     not his intent. The line is Phil's: two pair or better, or top or second
+     pair, is value — everything below that is a bluff, draws included. A flush
+     draw betting with nothing made is betting to fold you out, so it belongs in
+     the bluff column rather than in no column at all (Phil, v146). */
 
 /* "$6,000" · "6.8k" · "50%" · "Jam" → a number, or null when it isn't one. */
 function sizeAmount(s) {
@@ -272,28 +274,24 @@ function betsVsPot(h) {
   return out;
 }
 /* Was the hand value or a bluff on the street he bet it? Strength only — a
-   read on his cards, never on his thinking. Top pair or better is value;
-   no pair and no draw is a bluff; a draw or a weak pair is neither and is
-   deliberately left uncounted. */
+   read on his cards, never on his thinking. Two pair or better is value, and so
+   is top or second pair. Everything under that — third pair, bottom pair, a
+   naked draw, air — is a bluff, so nothing goes uncounted any more. */
 function madeClass(hole, board) {
   if (!hole || hole.length !== 2 || board.length < 3) return null;
-  const cat = best7(hole.concat(board))[0];
-  if (cat >= 2) return "V";                           // two pair or better
-  const bv = board.map((c) => RVAL[c[0]]);
-  if (cat === 1) {
-    const cnt = {};
-    for (const c of hole.concat(board)) cnt[RVAL[c[0]]] = (cnt[RVAL[c[0]]] || 0) + 1;
-    const pair = Math.max(...Object.keys(cnt).filter((v) => cnt[v] >= 2).map(Number));
-    if (!hole.some((c) => RVAL[c[0]] === pair)) return null;   // playing the board's pair
-    return pair === Math.max(...bv) ? "V" : null;              // top pair = value, rest unclear
-  }
-  const suits = {};
-  for (const c of hole.concat(board)) suits[c[1]] = (suits[c[1]] || 0) + 1;
-  if (Object.values(suits).some((n) => n >= 4)) return null;   // flush draw — semi-bluff
-  let vs = [...new Set(hole.concat(board).map((c) => RVAL[c[0]]))].sort((x, y) => x - y);
-  if (vs.includes(14)) vs = [1].concat(vs);
-  for (let i = 0; i + 3 < vs.length; i++) if (vs[i + 3] - vs[i] === 3) return null;  // open-ender
-  return "B";
+  const all = hole.concat(board);
+  if (best7(all)[0] >= 3) return "V";                   // trips or better
+  const cnt = {};
+  for (const c of all) cnt[RVAL[c[0]]] = (cnt[RVAL[c[0]]] || 0) + 1;
+  /* Only pairs he made with his own cards count. The board's pair is everyone's
+     and says nothing about what he holds, so a hand that is "two pair" solely
+     because the board paired is graded on his own card. */
+  const mine = hole.map((c) => RVAL[c[0]]).filter((v) => cnt[v] >= 2);
+  if (!mine.length) return "B";                         // no pair of his own
+  if (new Set(mine).size > 1) return "V";               // two pair using both cards
+  const best = mine[0];
+  const above = new Set(board.map((c) => RVAL[c[0]]).filter((v) => v > best)).size;
+  return above <= 1 ? "V" : "B";                        // top or second pair is value
 }
 /* Phil's ladder is B33/B50/B66/B100/B150. Bucket to the nearest rung so a 62%
    bet reads as the 66% he was going for, not as its own category. */

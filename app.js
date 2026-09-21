@@ -632,6 +632,7 @@ function route() {
      v144). So they only drop when a different opponent comes up. */
   if (v === "opp" && arg && arg !== handFiltersFor) {
     resetHandFilters(); noCardsOpen = true; handFiltersFor = arg;
+    rangeTab = "history";   // "default" means per player, not once per app launch
   }
   VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
   document.querySelectorAll("#tabbar button").forEach((b) =>
@@ -2456,10 +2457,11 @@ function renderOppSizing(o) {
   const sk = auto.skipped;
   const autoHTML = auto.n
     ? `<div class="sizehead autohead">From hand histories<span class="sizen">${auto.n}</span></div>
-       <div class="sizenote">Counted off his shown cards and the pot at the time. Bluffs
-         he never had to show don't appear here, so read the Bluff rows as a floor.
-         ${sk.unclear ? `${sk.unclear} bet${sk.unclear === 1 ? "" : "s"} left out as neither — a draw or a weak pair.` : ""}
-         ${sk.noCards ? ` ${sk.noCards} left out with no cards on record.` : ""}</div>` +
+       <div class="sizenote">Counted off his shown cards and the pot at the time.
+         Value is two pair or better, or top or second pair; everything under that
+         counts as a bluff, draws included. Bluffs he never had to show don't appear
+         here at all, so read the Bluff rows as a floor.
+         ${sk.noCards ? ` ${sk.noCards} bet${sk.noCards === 1 ? "" : "s"} left out with no cards on record.` : ""}</div>` +
       ["V", "B"].map((k) =>
         `<div class="sizesub">${k === "V" ? "Value" : "Bluff"}</div>` +
         SIZING_ROWS.filter((r) => r.kind === k).map(autoRow).join("")).join("")
