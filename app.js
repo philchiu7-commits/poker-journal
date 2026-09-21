@@ -97,6 +97,19 @@ const READ_GROUPS = [
 ];
 const GROUPED_IDS = new Set(READ_GROUPS.flatMap((g) => g.bubbles.map((b) => b[0])));
 
+/* The four position reads in a section are really a 2×2 — value vs bluff,
+   no squid vs with squid. Rendered as eight full-width rows they filled the
+   phone screen (seven of them normally reading "–") and pushed Limping and
+   Vs 3-bet off the bottom. Keyed by READ_SUBCATS label; ids stay untouched. */
+const POS_MATRIX = {
+  "First raise": { cols: ["nS", "wS"], rows: [
+    ["Value", ["first-raise-v-ns", "first-raise-v-ws"]],
+    ["Bluff", ["first-raise-b-ns", "first-raise-b-ws"]]] },
+  "LRR": { cols: ["nS", "wS"], rows: [
+    ["Value", ["lrr-v-ns", "lrr-v-ws"]],
+    ["Bluff", ["lrr-b-ns", "lrr-b-ws"]]] },
+};
+
 /* Felt villain-pill engine tag — one-word read summary shown on each seated
    villain's card. Compound rules win over singles (higher signal), and inside
    singles the PILL_READS priority list decides. Returns null → no pill row. */
@@ -2385,7 +2398,7 @@ async function createOpponent(name, group) {
 function renderOppReads(o) {
   $("od-card-preview").innerHTML = cardChipsHTML(o);
   const reads = oppReads(o);
-  const readBtn = (id, lbl, bubble) => {
+  const readBtn = (id, lbl, bubble, compact) => {
     const st = reads[id];
     if (isPositionRead(id)) {
       const active = readIsActive(id, st);
@@ -2401,7 +2414,7 @@ function renderOppReads(o) {
              title="Hands they turned up in this situation">▦${nRec || ""}</button>`
         : "";
       return `<label class="posread${active ? " on" : ""}" title="${esc(lbl)}">
-        <span class="prlbl">${esc(lbl)}</span>
+        ${compact ? "" : `<span class="prlbl">${esc(lbl)}</span>`}
         <select class="prselect" data-posselect="${id}">${opts}</select>${seenBtn}
       </label>`;
     }
@@ -2437,6 +2450,20 @@ function renderOppReads(o) {
     const isSingle = (t) => t.cat === cat && !GROUPED_IDS.has(t.id) && !isChoiceRead(t.id) && !RETIRED_TAG_IDS.has(t.id);
     const chipFor = (id) => { const t = TAG_BY_ID[id]; return t && isSingle(t) ? readBtn(t.id, t.label, false) : ""; };
     const subHTML = subgroups.map((sg) => {
+      const mx = POS_MATRIX[sg.label];
+      if (mx) {
+        const cell = (id) => {
+          const t = TAG_BY_ID[id];
+          // the full name stays in the label's title — the axes carry it here
+          return t && isSingle(t) ? readBtn(t.id, t.label, false, true) : `<span></span>`;
+        };
+        const body = mx.rows.map(([rl, ids]) =>
+          `<span class="pmr">${esc(rl)}</span>` + ids.map(cell).join("")).join("");
+        return `<div class="readsub"><span class="rslabel">${esc(sg.label)}</span>` +
+          `<div class="posmx"><span></span>` +
+          mx.cols.map((c) => `<span class="pmh">${esc(c)}</span>`).join("") +
+          `${body}</div></div>`;
+      }
       const chips = sg.ids.map(chipFor).filter(Boolean).join("");
       if (!chips) return "";
       // All read subgroups wrap so every read stays visible without horizontal
@@ -2761,11 +2788,6 @@ function actorLabel(h, actor) {
   const i = Number(actor.slice(1));
   return oppById(h.villains?.[i]?.opponentId)?.name || `V${i + 1}`;
 }
-function actionStr(h, a) {
-  const raw = isRawSize(h);
-  const sz = a.size ? (raw ? String(a.size).replace(/^\$/, "") : a.size) : "";
-  return `${actorLabel(h, a.actor)} ${a.act}${sz ? " " + sz : ""}`;
-}
 function handSummary(h) {
   if (h.note) return h.note;
   const raw = isRawSize(h);
@@ -2967,42 +2989,6 @@ function blindsStr(h, raw) {
 const stackStr = (n) =>
   n >= 1e6 ? (Math.round(n / 1e5) / 10) + "M" :
   n >= 1000 ? Math.round(n / 1000) + "K" : String(n);
-function handText(h) {
-  const raw = isRawSize(h);
-  const L = [];
-  const seat = (pos) => (pos ? ` (${pos})` : "");
-  const players = [
-    ...(h.hero === false ? [] : [`Hero${seat(h.heroPos)}${h.heroCards ? " " + cardsStr(h.heroCards) : ""}`]),
-    ...(h.villains || []).map((v, i) =>
-      `${actorLabel(h, "v" + i)}${seat(v.pos)}${v.chips ? " " + stackStr(v.chips) : ""}${v.cards ? " " + cardsStr(v.cards) : ""}`),
-  ];
-  L.push(players.join("  vs  "));
-
-  const ctx = [];
-  const bl = blindsStr(h, raw);
-  if (bl) ctx.push(bl);
-  if (h.effStack) ctx.push(`${kAmt(h.effStack, raw)} eff`);
-  if (h.squid) {
-    const s = [];
-    if (h.squid.have != null) s.push(`${h.squid.have} have`);
-    if (h.squid.left != null) s.push(`${h.squid.left} left`);
-    if (s.length) ctx.push(`squid ${s.join(", ")}`);
-  }
-  if (ctx.length) L.push(ctx.join("   ·   "));
-
-  const streetLines = [];
-  for (const st of STREETS) {
-    const acts = (h.actions || []).filter((a) => a.street === st);
-    const board = boardFor(h, st);
-    if (!acts.length && !board) continue;
-    streetLines.push(`${st.toUpperCase().padEnd(5)}${board ? "[" + board + "] " : ""} ` +
-      (acts.map((a) => actionStr(h, a)).join(",  ") || "—"));
-  }
-  if (streetLines.length) L.push("", ...streetLines);
-  if (h.note) L.push("", h.note);
-  return L.join("\n");
-}
-
 /* Rich hand-view render — classic hand-history layout: a matchup header,
    then one block per street (board so far, new cards bright), then one
    line per action: position · name · (hole cards on first preflop line)

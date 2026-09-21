@@ -501,6 +501,12 @@ textarea.noteedit { margin-bottom: 0; }
   cursor: pointer; font-weight: 700;
 }
 .prseen.on { background: #e0b23e; color: #1a1408; border-color: #e0b23e; }
+/* First raise / LRR laid out as the 2×2 they are: value vs bluff down the
+   side, no-squid vs with-squid across the top. Eight full-width rows before. */
+.posmx { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 6px; align-items: center; }
+.posmx .pmh { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--muted); text-align: center; }
+.posmx .pmr { font-size: 11px; font-weight: 700; color: var(--muted); }
+.posmx .posread { margin: 0; justify-content: center; }
 .posread .prselect {
   appearance: menulist; background: rgba(0,0,0,.25); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 3px 6px; font-size: 13px; font-weight: 700;
@@ -825,7 +831,13 @@ textarea.noteedit { margin-bottom: 0; }
 }
 .sheethead { display: flex; align-items: center; margin-bottom: 10px; }
 .sheethead .t { font-weight: 700; flex: 1; }
-.sheethead button { background: none; border: 0; color: var(--accent); font-size: 15px; cursor: pointer; padding: 4px; }
+/* 44px tap target (was 26). The negative margins let it grow into the sheet's
+   own padding instead of pushing every one of the 17 sheets 19px taller. */
+.sheethead button {
+  background: none; border: 0; color: var(--accent); font-size: 15px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: flex-end;
+  min-height: 44px; min-width: 44px; padding: 4px; margin-block: -9px; margin-right: -4px;
+}
 .sheetnote { color: var(--muted); font-size: 13px; line-height: 1.4; margin-bottom: 12px; }
 .mergelist { display: flex; flex-direction: column; gap: 8px; }
 .mergeitem {

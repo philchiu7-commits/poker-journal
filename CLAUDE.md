@@ -262,10 +262,12 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   seen sit in their own "No cards seen" group below the reviewable ones. The
   group is **open by default** (`noCardsOpen`): four villain-rows in five have
   no cards, so collapsing it hid most of what Phil had imported.
-- The **structured `actions[]` token stream** feeds `handText()` (LLM
-  summaries), the shown-hands range grid, per-opponent *read suggestions*
-  (`READ_SIGNALS`; Phil accepts or dismisses each) and — since v124 — the
-  **HUD** (`stats.js`). Don't collapse the stream into a string.
+- The **structured `actions[]` token stream** feeds the shown-hands range
+  grid, per-opponent *read suggestions* (`READ_SIGNALS`; Phil accepts or
+  dismisses each) and — since v124 — the **HUD** (`stats.js`). Don't collapse
+  the stream into a string. (`handText()`, a plain-text dump for pasting into
+  an LLM, was removed in v156 — nothing called it and Phil never ran it from
+  the console.)
 - **The HUD counts imported hands only.** `imported` hands come from the
   bookmarklet, which records every seat and every preflop action (measured:
   100% of 1437 villain seats). Hand-typed hands are the ones Phil thought worth
