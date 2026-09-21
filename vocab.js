@@ -46,7 +46,7 @@ const SUITS = [
 /* Curated tendency reads — three-state (Yes=green / No=red / off) toggles in
    the opponent view; ids are stable, labels display-only. Some postflop reads
    are shown as grouped bubbles (Station/Lead/Raise nuts/Bluff till) — see
-   READ_GROUPS in app.js; their labels here are the full names used in row chips. */
+   READ_LAYOUT in app.js; their labels here are the names shown on chips. */
 /* Yes/No axis pairs — one read holds both directions. Legacy separate tags
    (over-folds-cbet, fit-or-fold, gives-up-turn, never-bluffs, limps-monsters)
    auto-migrate onto these survivors in app.js. Limps monsters is now a grouped
@@ -176,40 +176,12 @@ const RETIRED_PLAYER_TYPES = [
 ];
 const PLAYER_TYPE_BY_ID = Object.fromEntries(
   PLAYER_TYPES.concat(RETIRED_PLAYER_TYPES).map((t) => [t.id, t]));
-const TAG_CATS = ["preflop", "postflop", "sizing", "live"];
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
 const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak",
   "first-raise-ns", "first-raise-ws", "lrr-latest-ns", "lrr-latest-ws",
   "limps-monster-ws", "limps-monster-ns"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
-
-/* Sub-cluster single-read chips within each category so related reads live
-   in one row instead of a flat wall of chips. Any tag not listed drops into
-   an "Other" row at the end of its category. Grouped bubbles (READ_GROUPS)
-   and scale reads render separately and are not covered here. */
-const READ_SUBCATS = {
-  preflop: [
-    { label: "Opening",       ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
-    { label: "First raise",   ids: ["first-raise-v-ns", "first-raise-v-ws", "first-raise-b-ns", "first-raise-b-ws"] },
-    { label: "LRR",           ids: ["lrr-v-ns", "lrr-v-ws", "lrr-b-ns", "lrr-b-ws"] },
-    { label: "Limping",       ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
-    { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
-  ],
-  postflop: [
-    { label: "Cbet & Float",  ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off", "cb-light-mwp", "pfc-b-light-mwp"] },
-    { label: "Leads",         ids: ["lead-limped", "check-oop-limped"] },
-    { label: "Range shape",   ids: ["sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers", "bad-polar"] },
-  ],
-  sizing: [
-    { label: "Preflop sizing",  ids: ["preflop-sizing", "3bet-sizing"] },
-    { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
-  ],
-  live: [
-    { label: "Physical / timing", ids: ["timing-tells", "snap-call-weak", "talks-when-strong"] },
-    { label: "Mental state",      ids: ["tilts", "bluffcatch-losing", "force-squid"] },
-  ],
-};
 
 /* Auto-suggested exploits: map a set read to a concrete counter-strategy line.
    Keyed by tag id → { yes, no }. "yes" (green) = tendency confirmed present;
