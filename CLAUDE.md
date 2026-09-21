@@ -121,7 +121,11 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   filtering down to four hands is usually the prelude to reading them one by
   one (v144). The **3BP chip is opponent-relative**: `in3betPot` requires he
   3-bet or called the 3-bet, so a hand he folded to a 3-bet in drops out. The
-  other pot buckets stay table-shaped.
+  other pot buckets stay table-shaped. The **Post row** (`postRoles`) reads
+  position-in-street rather than the token: an aggressive action on a street
+  that already has money in it is a raise (`R`), and one he'd checked earlier on
+  that street is a check-raise (`xR`, which also answers to `R`). 49 raises / 23
+  check-raises across the export as of v145.
 - Suggested reads (`derivedReads`) carry the hand ids they were counted off, and
   `openReadProof` lists them in the same sheet the HUD drill uses. Looking
   commits nothing — **Add read still needs Phil's tap.**

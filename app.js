@@ -648,9 +648,9 @@ function route() {
    trip into a hand and back; only a different opponent clears them, and the
    Clear-filters button is showing the whole time any are on. */
 let handFiltersFor = null;                 // whose filters these are
-let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false };
-const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), sd: false }; };
-const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.sd;
+let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), post: new Set(), sd: false };
+const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), post: new Set(), sd: false }; };
+const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.post.size || handFilters.sd;
 /* Hands where we never saw this player's cards sit in their own group, below
    the ones you can review. Open by default: four hands in five are imported
    with no cards on this villain, so collapsing the group hides most of what
@@ -720,6 +720,30 @@ function villainRoles(h, oppId) {
   else if (pre.includes("call")) out.push("PFC");
   return out;
 }
+/* This villain's postflop aggression, as a list. A raise is an aggressive
+   action on a street that already has money in it — the token itself doesn't
+   say (`bet`, `raise` and `3bet` all turn up on the same board), so read where
+   it sits in the street rather than what it's called. A check-raise answers to
+   both xR and R, the same way a limp-reraise answers to Limp. */
+const POST_AGG = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
+function postRoles(h, oppId) {
+  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  if (idx < 0) return [];
+  const me = "v" + idx;
+  const out = new Set();
+  for (const st of ["flop", "turn", "river"]) {
+    let open = false, checked = false;                   // per street, both of them
+    for (const a of (h.actions || []).filter((x) => x.street === st)) {
+      const agg = POST_AGG.includes(a.act);
+      if (a.actor === me) {
+        if (a.act === "check") checked = true;
+        else if (agg && open) { out.add("R"); if (checked) out.add("xR"); }
+      }
+      if (agg) open = true;
+    }
+  }
+  return [...out];
+}
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
   if (f.sd && !h.showdown) return false;
@@ -731,6 +755,9 @@ function handMatchesFilters(h, oppId) {
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
     if (!villainRoles(h, oppId).some((r) => f.role.has(r))) return false;
+  }
+  if (f.post.size) {
+    if (!postRoles(h, oppId).some((r) => f.post.has(r))) return false;
   }
   if (f.pos.size) {
     const v = (h.villains || []).find((x) => x.opponentId === oppId);
@@ -745,12 +772,13 @@ const posBuckets = (allHands) => POS_BUCKETS_ALL.filter((b) =>
 const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
 const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
 const ROLE_BUCKETS = ["PFR", "PFC", "Limp", "LRR"];
+const POST_BUCKETS = ["R", "xR"];
 function renderHandFilters(oppId, allHands) {
   const f = handFilters;
   /* Live counts for each chip — reflect *what would remain* if this chip flipped,
      with every OTHER dimension's current filter still applied. */
   const countIf = (dim, val) => {
-    const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role) };
+    const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role), post: new Set(f.post) };
     if (dim === "sd") trial.sd = val;
     else { const s = new Set(trial[dim]); s.add(val); trial[dim] = s; }
     const save = handFilters; handFilters = trial;
@@ -758,7 +786,8 @@ function renderHandFilters(oppId, allHands) {
     handFilters = save;
     return n;
   };
-  const HF_TIP = { "3BP": "Hands where he 3-bet or called a 3-bet" };
+  const HF_TIP = { "3BP": "Hands where he 3-bet or called a 3-bet",
+    R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
   const chip = (dim, val, label) => {
     const on = dim === "sd" ? f.sd : f[dim].has(val);
     const n = countIf(dim, val);
@@ -772,6 +801,7 @@ function renderHandFilters(oppId, allHands) {
     row("Pot", "pot", POT_BUCKETS) +
     row("Squid", "squid", SQUID_BUCKETS) +
     row("Role", "role", ROLE_BUCKETS) +
+    row("Post", "post", POST_BUCKETS) +
     `<div class="hfrow"><span class="hflbl">Show</span><div class="chiprow tight">
       <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1">Showdown<i>${allHands.filter((h) => h.showdown).length}</i></button>
     </div></div>`;
