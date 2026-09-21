@@ -6,6 +6,17 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
 
 /* ---------- in-memory caches (source of truth is IndexedDB) ---------- */
 let OPP = [], HANDS = [];
+/* A new build is installed and waiting. Reload to pick it up — but never while
+   a hand is half-typed on the entry screen; that reload would throw the hand
+   away. Deferred to the next time Phil leaves that view. */
+let swPending = false, swReloading = false;
+function applySwUpdate() {
+  if (!swPending || swReloading) return;
+  const hv = document.getElementById("view-hand");
+  if (hv && !hv.classList.contains("hidden")) return;   // mid-entry — wait
+  swReloading = true;
+  location.reload();
+}
 let curOppId = null, curHandId = null;
 let editNoteId = null, editExploitId = null;
 let storageDurable = false;
@@ -196,15 +207,46 @@ const READ_SIGNALS = [
   { id: "station-t",        state: "yes", th: 5 },
   { id: "station-r",        state: "yes", th: 5 },
 ];
+/* Did anyone put in a bet or a raise on this street before he acted? That is
+   what gives him the chance to 3-bet, to raise, or to call — without it a hand
+   is silent on the read rather than evidence against it. */
+const READ_AGG = ["bet", "raise", "3bet", "4bet", "5bet", "jam"];
+function facedBet(h, me, st) {
+  let open = false;
+  for (const a of (h.actions || []).filter((x) => x.street === st)) {
+    if (a.actor === me) { if (open) return true; }
+    else if (READ_AGG.includes(a.act)) open = true;
+  }
+  return false;
+}
+/* The two halves of every suggestion, side by side. "Did this" and "had the
+   chance and did something else" — because 6 hands is a claim and 6 of 14 is
+   the number that decides whether the read is true (Phil, v147). */
+const READ_DRILL_LABEL = {
+  "3bets-light:yes":   ["3-bet", "Faced a raise, didn't 3-bet"],
+  "barrels-off:no":    ["Bet the flop, then gave up", "Bet the flop, kept firing"],
+  "barrels-off:yes":   ["Fired all three streets", "Got to the river without firing it"],
+  "over-cbet:yes":     ["Raised pre, then bet the flop", "Raised pre, didn't bet the flop"],
+  "bluff-raise-f:yes": ["Raised a flop bet", "Faced a flop bet, didn't raise"],
+  "station-f:yes":     ["Called the flop", "Faced a flop bet, didn't call"],
+  "station-t:yes":     ["Called the turn", "Faced a turn bet, didn't call"],
+  "station-r:yes":     ["Called the river", "Faced a river bet, didn't call"],
+};
 function derivedReads(o) {
   const hands = HANDS.filter((h) => (h.villainIds || []).includes(o.id));
   const cnt = {};
-  /* A suggestion keeps the hands it was counted off. "Seen in 4 hands" is a
-     claim; the four hands are the evidence, and a read Phil is about to commit
-     to his card should be checkable before he commits it (Phil, v144). */
-  const why = {};
+  /* A suggestion keeps the hands it was counted off AND the hands it had a
+     chance in. "Seen in 4 hands" is a claim; the hands on both sides are the
+     evidence, and a read Phil is about to commit to his card should be
+     checkable before he commits it (Phil, v144, widened v147). */
+  const why = {}, chance = {};
   let cur = null;
-  const bump = (k) => {
+  /* k: signal key · had: did the hand offer him the chance · did: did he take it.
+     A hand with no chance is recorded on neither side — it is not a miss. */
+  const sig = (k, had, did) => {
+    if (!had) return;
+    (chance[k] = chance[k] || []).push(cur);
+    if (!did) return;
     cnt[k] = (cnt[k] || 0) + 1;
     (why[k] = why[k] || []).push(cur);
   };
@@ -213,16 +255,19 @@ function derivedReads(o) {
     const idx = (h.villains || []).findIndex((v) => v.opponentId === o.id);
     if (idx < 0) continue;
     cur = h.id;
-    const s = villainStreetActs(h, "v" + idx);
+    const me = "v" + idx;
+    const s = villainStreetActs(h, me);
     const raisedPre = s.pre.some((a) => ["raise", "3bet", "4bet", "5bet"].includes(a));
-    if (s.pre.includes("3bet")) bump("3bets-light:yes");
-    if (s.flop.includes("bet") && (s.turn.includes("check") || s.turn.includes("fold"))) bump("barrels-off:no");
-    if (aggr(s.flop) && aggr(s.turn) && aggr(s.river)) bump("barrels-off:yes");
-    if (raisedPre && s.flop.includes("bet")) bump("over-cbet:yes");
-    if (s.flop.includes("raise")) bump("bluff-raise-f:yes");
-    if (s.flop.includes("call")) bump("station-f:yes");
-    if (s.turn.includes("call")) bump("station-t:yes");
-    if (s.river.includes("call")) bump("station-r:yes");
+    sig("3bets-light:yes", facedBet(h, me, "pre"), s.pre.includes("3bet"));
+    sig("barrels-off:no", s.flop.includes("bet") && s.turn.length > 0,
+        s.turn.includes("check") || s.turn.includes("fold"));
+    sig("barrels-off:yes", aggr(s.flop) && s.river.length > 0,
+        aggr(s.flop) && aggr(s.turn) && aggr(s.river));
+    sig("over-cbet:yes", raisedPre && s.flop.length > 0, s.flop.includes("bet"));
+    sig("bluff-raise-f:yes", facedBet(h, me, "flop"), s.flop.includes("raise"));
+    sig("station-f:yes", facedBet(h, me, "flop"), s.flop.includes("call"));
+    sig("station-t:yes", facedBet(h, me, "turn"), s.turn.includes("call"));
+    sig("station-r:yes", facedBet(h, me, "river"), s.river.includes("call"));
   }
   const reads = oppReads(o);
   const dismissed = new Set(o.readDismissed || []);
@@ -231,7 +276,10 @@ function derivedReads(o) {
     const c = cnt[key] || 0;
     if (c < sig.th || reads[sig.id] || dismissed.has(key) || !TAG_BY_ID[sig.id]) return null;
     const suffix = sig.state === "no" ? " (NO)" : "";
-    return { tagId: sig.id, state: sig.state, key, count: c, hands: why[key] || [],
+    const hit = why[key] || [], all = chance[key] || [];
+    const hitSet = new Set(hit);
+    return { tagId: sig.id, state: sig.state, key, count: c, hands: hit,
+             miss: all.filter((id) => !hitSet.has(id)), chances: all.length,
              label: TAG_BY_ID[sig.id].label + suffix };
   }).filter(Boolean).sort((a, b) => b.count - a.count);
 }
@@ -642,6 +690,7 @@ function route() {
      table: renderTableTab, handview: () => renderHandView(arg), ranges: renderRangeLib,
      data: renderData })[v]();
   window.scrollTo(0, 0);
+  if (swPending) applySwUpdate();      // left the entry screen — safe to take the new build
 }
 
 /* ================= Hands-panel filters (per opponent detail) =================
@@ -686,15 +735,21 @@ function potBucket(h) {
    3-bet or called one; a hand where he folded to it is a 3-bet pot that he
    never actually played, and it isn't what you asked for when you tapped 3BP
    (Phil, v144). */
-function in3betPot(h, oppId) {
-  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
-  if (idx < 0) return false;
+function made3bet(h, me) {
+  return (h.actions || []).some((a) => a.street === "pre" && a.act === "3bet" && a.actor === me);
+}
+/* Called a 3-bet: a preflop call of his that lands after somebody's 3-bet. */
+function called3bet(h, me) {
   const pre = (h.actions || []).filter((a) => a.street === "pre");
   const three = pre.findIndex((a) => a.act === "3bet");
   if (three < 0) return false;
+  return pre.slice(three + 1).some((a) => a.actor === me && a.act === "call");
+}
+function in3betPot(h, oppId) {
+  const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  if (idx < 0) return false;
   const me = "v" + idx;
-  if (pre[three].actor === me) return true;                       // he 3-bet
-  return pre.slice(three + 1).some((a) => a.actor === me && a.act === "call");  // he called it
+  return made3bet(h, me) || called3bet(h, me);
 }
 /* Squid state bucket from h.squid.have. */
 function squidBucket(h) {
@@ -719,6 +774,12 @@ function villainRoles(h, oppId) {
   if (pre.includes("limp")) out.push("Limp");
   else if (pre.some((a) => ["raise", "3bet", "4bet", "5bet", "jam"].includes(a))) out.push("PFR");
   else if (pre.includes("call")) out.push("PFC");
+  /* 3b and c3b sit outside the exclusive chain on purpose: a 3-bet is also a
+     raise and a called 3-bet is also a call, so these narrow what is already
+     there rather than replacing it — the same way LRR sits over Limp. */
+  const me = "v" + idx;
+  if (made3bet(h, me)) out.push("3b");
+  if (called3bet(h, me)) out.push("c3b");
   return out;
 }
 /* This villain's postflop aggression, as a list. A raise is an aggressive
@@ -772,7 +833,7 @@ const posBuckets = (allHands) => POS_BUCKETS_ALL.filter((b) =>
   b !== "STD" || allHands.some((h) => (h.villains || []).some((v) => v.pos === "STD")));
 const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
 const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
-const ROLE_BUCKETS = ["PFR", "PFC", "Limp", "LRR"];
+const ROLE_BUCKETS = ["PFR", "PFC", "Limp", "LRR", "3b", "c3b"];
 const POST_BUCKETS = ["R", "xR"];
 function renderHandFilters(oppId, allHands) {
   const f = handFilters;
@@ -788,6 +849,7 @@ function renderHandFilters(oppId, allHands) {
     return n;
   };
   const HF_TIP = { "3BP": "Hands where he 3-bet or called a 3-bet",
+    "3b": "He 3-bet preflop", c3b: "He called somebody's 3-bet preflop",
     R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
   const chip = (dim, val, label) => {
     const on = dim === "sd" ? f.sd : f[dim].has(val);
@@ -1244,17 +1306,29 @@ function openRangeDrill(o) {
 /* The hands behind one suggested read. Same sheet as the HUD drill — the
    question is the same one ("show me") and so is the answer. Nothing is
    committed by looking: Add read still needs Phil's tap. */
-function openReadProof(o, label, ids, sub) {
+function openReadProof(o, label, ids, sub, other) {
   const byId = new Map(HANDS.map((h) => [h.id, h]));
-  const hands = [...new Set(ids)].map((id) => byId.get(id)).filter(Boolean)
+  const pick = (list) => [...new Set(list || [])].map((id) => byId.get(id)).filter(Boolean)
     .sort((a, b) => b.ts - a.ts);
-  if (!hands.length) return;
+  const hands = pick(ids), miss = pick(other && other.ids);
+  if (!hands.length && !miss.length) return;
+  /* Both sides when there are two. The hands he did it in are the claim; the
+     hands he had the same chance and did something else are what tells you
+     whether the claim is a read or a coincidence. */
+  const block = (ttl, list) => list.length
+    ? `<div class="rdhead"><b>${esc(ttl)}</b><span class="spacer"></span><span class="rdact muted">${list.length}</span></div>`
+      + list.map((h) => handRowHTML(h, o.id)).join("")
+    : "";
   sheetGroup = "__rdrill__";
   showSheet(
     `<div class="sheethead"><span class="t">${esc(label)} · ${esc(o.name)}</span>
        <button data-sheetclose>Close</button></div>
-     <div class="rdsub">${hands.length} hand${hands.length === 1 ? "" : "s"} ${sub || "behind this suggestion"}</div>
-     <div class="list rgcell-hands">${hands.map((h) => handRowHTML(h, o.id)).join("")}</div>`);
+     <div class="rdsub">${other
+        ? `${hands.length} of ${hands.length + miss.length} chance${hands.length + miss.length === 1 ? "" : "s"}`
+        : `${hands.length} hand${hands.length === 1 ? "" : "s"} ${sub || "behind this suggestion"}`}</div>
+     <div class="list rgcell-hands">${other
+        ? block(other.yes || "Did this", hands) + block(other.no || "Had the chance, didn't", miss)
+        : hands.map((h) => handRowHTML(h, o.id)).join("")}</div>`);
 }
 
 /* The hands behind one HUD number: every hand it had a chance in, split into
@@ -2374,7 +2448,9 @@ function renderOppReads(o) {
         <span class="toggle-arrow">${showD ? "▼" : "▶"}</span>
       </div>` + (showD ? dReads.map((s) =>
         `<div class="suggitem" data-dtag="${esc(s.tagId)}" data-dstate="${esc(s.state || "yes")}" data-dkey="${esc(s.key)}">
-           <div class="notetext">📊 <b>${esc(s.label)}</b> — seen in ${s.count} hand${s.count > 1 ? "s" : ""}</div>
+           <div class="notetext">📊 <b>${esc(s.label)}</b> — ${s.chances
+             ? `${s.count} of ${s.chances} chance${s.chances === 1 ? "" : "s"} · ${Math.round((100 * s.count) / s.chances)}%`
+             : `seen in ${s.count} hand${s.count > 1 ? "s" : ""}`}</div>
            <div class="noterowbtns">
              <button class="chip mini" data-dwhy>Show the hands</button>
              <button class="chip mini on sgreen" data-dacc>＋ Add read</button>
@@ -5348,7 +5424,10 @@ function bindStatic() {
     const dkey = item.dataset.dkey || tag;                   // per-direction dismiss key
     if (e.target.closest("[data-dwhy]")) {
       const s = derivedReads(o).find((x) => x.key === dkey);
-      if (s) openReadProof(o, s.label, s.hands);
+      if (s) {
+        const [yes, no] = READ_DRILL_LABEL[s.key] || ["Did this", "Had the chance, didn't"];
+        openReadProof(o, s.label, s.hands, null, { ids: s.miss, yes, no });
+      }
       return;
     }
     if (e.target.closest("[data-dacc]")) {
@@ -5540,7 +5619,24 @@ async function boot() {
   // ensure an auto-backup exists on first boot (or if it's stale)
   const snap = await metaGet("autoSnapshot");
   if (!snap || Date.now() - snap.ts > 60000) scheduleAutoSnapshot();
-  if ("serviceWorker" in navigator)
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+  /* The app is cache-first, so a shipped change only reaches the phone once a
+     new service worker takes over — and until v147 nothing ever asked for one.
+     A PWA that lives in the app switcher can go days without a navigation,
+     which is how three separate features shipped and Phil saw none of them. So
+     ask for an update on boot and every time the app comes back to the front,
+     and reload once when a new worker actually takes control. */
+  if ("serviceWorker" in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;   // false on a first-ever load
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      const check = () => reg.update().catch(() => {});
+      check();
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController) return;            // nothing was showing, so nothing is stale
+      swPending = true;
+      applySwUpdate();
+    });
+  }
 }
 boot();

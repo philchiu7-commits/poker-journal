@@ -18,6 +18,15 @@ curl -s https://philchiu7-commits.github.io/poker-journal/sw.js | sed -n 2p
 **Never skip the cache bump.** The SW is cache-first — installed phones will
 keep serving the old assets otherwise. Current cache: see `sw.js` line 2.
 
+**Since v147 the app updates itself.** `app.js` calls `reg.update()` on boot and
+on every `visibilitychange` back to the front, and reloads once when a new
+worker takes control — guarded by `hadController` so a first-ever load never
+reloads, and deferred by `applySwUpdate()` while the hand-entry view is open so
+a reload can never throw away a half-typed hand. Before this, a PWA sitting in
+the iOS app switcher could go days without a navigation, which is how three
+shipped features reached Phil's phone as "I still don't see it". The two-reload
+dance below still applies to v147 itself and to any browser tab.
+
 **A cache bump needs two reloads.** The first reload is still served by the old
 worker while the new one installs, activates and claims the page; the second
 reload gets the new assets. Only the second one proves a deploy landed — don't
@@ -116,9 +125,17 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   everything under that — third pair, bottom pair, a naked draw, air — is a
   bluff. Nothing goes uncounted, so `skipped.unclear` is now always 0. Only
   pairs he made with his *own* cards count, so a hand that is "two pair" solely
-  because the board paired is graded on his own card. `betsVsPot`
-  **ignores `ante`** (188 hands carry one), which understates the preflop pot
-  and so overstates flop bet-% slightly for those hands — a known approximation.
+  because the board paired is graded on his own card.
+  **`betsVsPot` normalises two things Phil's data gets wrong (v147).** His two
+  sources disagree on units: the DX imports write blinds in thousands (`bb: 0.2`
+  for a 200 big blind) while every action `size` is in chips, so 148 of 347
+  hands were reading their pot ~1000x too small and filing a 59%-pot turn bet
+  under B100. A chip denomination is a whole number, so `b.bb < 1` is the tell
+  and the blinds are scaled by 1000. The `ante` is now counted too — **once for
+  the table, not once per seat**: these are big-blind-ante games, and Phil's own
+  known 66% turn bet comes out B50 under a per-seat reading and B66 under this
+  one. Any new import source must land in chips or in sub-1 k-units, nothing in
+  between.
 - **Hands-panel filters belong to an opponent, not to a screen.** The route
   guard in `go()` only calls `resetHandFilters()` when a *different* opponent
   comes up (`handFiltersFor`), so opening a hand and coming back keeps them —
@@ -130,10 +147,20 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   position-in-street rather than the token: an aggressive action on a street
   that already has money in it is a raise (`R`), and one he'd checked earlier on
   that street is a check-raise (`xR`, which also answers to `R`). 49 raises / 23
-  check-raises across the export as of v145.
+  check-raises across the export as of v145. The **Role row** also carries `3b`
+  and `c3b` (v147), and both sit *outside* the PFR/PFC/Limp exclusive chain on
+  purpose — a 3-bet is also a raise and a called 3-bet is also a call, so they
+  narrow what is already there rather than replacing it, the way `LRR` sits over
+  `Limp`. `made3bet` / `called3bet` back both these chips and the 3BP pot chip,
+  so the three can never drift apart.
 - Suggested reads (`derivedReads`) carry the hand ids they were counted off, and
   `openReadProof` lists them in the same sheet the HUD drill uses. Looking
-  commits nothing — **Add read still needs Phil's tap.**
+  commits nothing — **Add read still needs Phil's tap.** Since v147 it tracks
+  the *denominator* as well: `sig(key, had, did)` records a hand only when
+  `facedBet` says the villain actually had the chance, so a suggestion reads
+  "6 of 14 chances · 43%" and the proof sheet shows two blocks — the hands he
+  did it in, and the hands he had the same chance and did something else. The
+  second block is what separates a read from a coincidence, so don't drop it.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
   **`U<n>` numbers the UTG seats down from the table size** — an 8-handed ring
   is `SB BB STD U8 U7 HJ CO BN`, a 9-handed one adds U9. `ringFor` (app.js)

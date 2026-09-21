@@ -236,6 +236,15 @@ const SZ_BOARD_N = { flop: 3, turn: 4, river: 5 };
 function betsVsPot(h) {
   const b = h.blinds || {};
   if (b.bb === null || b.bb === undefined) return [];
+  /* Blinds and bet sizes have to be in the same unit before any of this means
+     anything, and Phil's two sources disagree: the DX imports write blinds in
+     thousands (0.2 for a 200 big blind) while every action size is in chips.
+     A chip denomination is a whole number, so a fractional big blind is the
+     tell. 148 of 347 hands are in that shape, and every one was reading its
+     pot ~1000x too small — which is how a 59%-pot turn bet came out B100
+     (Phil, v147). */
+  const u = b.bb > 0 && b.bb < 1 ? 1000 : 1;
+  const SB = (b.sb || 0) * u, BB = b.bb * u, STD = (b.std || 0) * u, ANTE = (b.ante || 0) * u;
   /* Post the blinds to the seats that actually posted them. Keying them to a
      placeholder instead would double-count the moment a blind raises — his
      post is part of what he has in, not money sitting beside it. */
@@ -248,15 +257,19 @@ function betsVsPot(h) {
     post[actorAt[posName] || "_" + posName] = amt;
     return amt;
   };
-  put("SB", b.sb);
-  put("BB", b.bb);
-  const straddle = actorAt.STD && b.std ? put("STD", b.std) : 0;
-  let pot = 0;
+  put("SB", SB);
+  put("BB", BB);
+  const straddle = actorAt.STD && STD ? put("STD", STD) : 0;
+  /* One ante for the table, not one each — these are big-blind-ante games.
+     Dropping it shrank every preflop pot and pushed the sizes that followed a
+     bucket too high; counting one per seat instead overshoots the other way
+     and reads Phil's known 66% turn bet as a half-pot. */
+  let pot = ANTE;
   const out = [];
   for (const st of SZ_STREETS) {
     const A = (h.actions || []).filter((a) => a.street === st);
     if (!A.length) continue;
-    let level = st === "pre" ? (straddle || b.bb) : 0;
+    let level = st === "pre" ? (straddle || BB) : 0;
     const inv = st === "pre" ? { ...post } : {};      // what each actor has in *this* street
     const base = pot;
     const street = () => Object.values(inv).reduce((s, v) => s + v, 0);
