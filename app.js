@@ -3897,6 +3897,10 @@ function best7(cs) {                        // best 5 of up to 7
       }
   return best;
 }
+/* Squid cards are real cards but carry no rank the 52-card evaluator knows, so
+   score5 silently scores the hand as if that slot were empty — a four-card hand
+   dressed up as five. Same treatment as handClass gives them: off the grid. */
+const EVALUABLE_CARD = /^[2-9TJQKA][shdc]$/;
 /* Who won this hand, if it's determinable. → { winners:[actors], how } | null */
 function handWinner(h) {
   const parts = (h.villains || []).map((_, i) => "v" + i);
@@ -3908,6 +3912,8 @@ function handWinner(h) {
   const board = (h.board || []).filter(Boolean);
   const cardsOf = (p) => p === "hero" ? h.heroCards : h.villains?.[Number(p.slice(1))]?.cards;
   if (board.length !== 5 || !live.every((p) => (cardsOf(p) || []).filter(Boolean).length === 2)) return null;
+  if (!board.every((c) => EVALUABLE_CARD.test(c))
+      || !live.every((p) => cardsOf(p).filter(Boolean).every((c) => EVALUABLE_CARD.test(c)))) return null;
   let best = null, winners = [];
   for (const p of live) {
     const s = best7(board.concat(cardsOf(p)));
