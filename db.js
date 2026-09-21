@@ -72,7 +72,17 @@ const metaGet = async (key) => {
   if (mirror != null) { dbPut("meta", { key, value: mirror }).catch(() => {}); return mirror; }
   return null;
 };
-const metaSet = (key, value) => { _mirrorSet(key, value); return dbPut("meta", { key, value }); };
+/* autoSnapshot is a full dump of everything else, so measuring it against the
+   8KB cap means JSON.stringify-ing the whole database on every change burst
+   just to throw the string away — ~1ms per tap on desktop, several on a phone,
+   and it can never fit anyway. Skip the mirror, and clear any tiny one left
+   from when the database was near-empty so metaGet can't resurrect it. */
+const NO_MIRROR = new Set(["autoSnapshot", "preImportSnapshot"]);
+const metaSet = (key, value) => {
+  if (NO_MIRROR.has(key)) { try { localStorage.removeItem(_mirrorKey(key)); } catch {} }
+  else _mirrorSet(key, value);
+  return dbPut("meta", { key, value });
+};
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID()
   : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -101,6 +111,9 @@ async function exportData() {
    write a file (iOS Safari can't without a tap) — that's what "Save auto-
    backup" does. */
 let _snapPending = null;
+/* Why the snapshot last failed, or null. The auto-backup is the only in-app
+   undo, so a silent failure is the worst kind — renderData reads this. */
+let lastSnapError = null;
 async function autoSnapshot() {
   const data = await exportData();
   const meta = { ts: Date.now(), counts: { opponents: data.opponents.length, hands: data.hands.length, sessions: data.sessions.length } };
@@ -108,7 +121,11 @@ async function autoSnapshot() {
 }
 function scheduleAutoSnapshot() {
   clearTimeout(_snapPending);
-  _snapPending = setTimeout(() => { _snapPending = null; autoSnapshot().catch(() => {}); }, 400);
+  _snapPending = setTimeout(() => {
+    _snapPending = null;
+    autoSnapshot().then(() => { lastSnapError = null; },
+      (e) => { lastSnapError = e?.message || String(e); });
+  }, 400);
 }
 /* Share/download an already-prepared export blob. Returns false on user cancel.
    Tries Web Share (iOS/Android native sheet) first, falls back to an <a download>

@@ -846,7 +846,11 @@ function renderHandFilters(oppId, allHands) {
   const countIf = (dim, val) => {
     const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role), post: new Set(f.post) };
     if (dim === "sd") trial.sd = val;
-    else { const s = new Set(trial[dim]); s.add(val); trial[dim] = s; }
+    /* Flip, don't add — on an already-lit chip `add` was a no-op, so every lit
+       chip in a row showed the same union count instead of what's left without
+       it. The last lit chip in a row now reads as that whole dimension
+       unfiltered, which is what "if this flipped" means. */
+    else { const s = new Set(trial[dim]); s.has(val) ? s.delete(val) : s.add(val); trial[dim] = s; }
     const save = handFilters; handFilters = trial;
     const n = allHands.filter((h) => handMatchesFilters(h, oppId)).length;
     handFilters = save;
@@ -1924,7 +1928,10 @@ function renderOpponents() {
     return `${head}<div class="groupsec${collapsed ? " hidden" : ""}" data-group="${esc(g)}">${rows}</div>`;
   }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`);
   updateGroupsDatalist();
-  if (oppEditMode) bindOppDrag();
+  /* No dragging while a search is filtering the list: the section then holds
+     only the survivors, so committing their order would renumber them 0..n-1
+     and leave everyone hidden behind the query on a stale index. */
+  if (oppEditMode && !nq) bindOppDrag();
 }
 
 async function toggleGroupCollapse(g) {
@@ -1938,6 +1945,8 @@ async function toggleGroupCollapse(g) {
 
 /* Persist the current visual order of a group section as explicit o.order values. */
 async function commitGroupOrder(sec) {
+  // Belt and braces for the same reason bindOppDrag is skipped under a search.
+  if ($("opp-search").value.trim()) return;
   const ids = [...sec.querySelectorAll("[data-opp]")].map((r) => r.dataset.opp);
   await Promise.all(ids.map((id, i) => {
     const o = oppById(id);
@@ -2895,7 +2904,8 @@ function handHistoryLineHTML(h, focusActor) {
    lead with THAT villain's position + hole cards; on the general feed, lead
    with the villain lineup. Bottom line: compressed street-by-street action. */
 function handRowHTML(h, oppId) {
-  const res = heroResult(h);
+  const win = handWinner(h);              // scored once; both readings below reuse it
+  const res = heroResultFrom(h, win);
   const dot = res ? `<span class="dot ${res}"></span>` : "";
   // Table-state squid count (how many are up) — used on the general feed.
   const squid = h.squid?.have != null ? `<span class="hr-squid">${h.squid.have}🦑</span>` : "";
@@ -2906,8 +2916,7 @@ function handRowHTML(h, oppId) {
       const v = h.villains[i];
       // On a player's own rows show THAT player's squid count, not the table state.
       const vsquid = v.squid != null ? `<span class="hr-squid">${v.squid}🦑</span>` : "";
-      const win = h.hero === false ? handWinner(h) : null;
-      const won = win && win.winners.includes("v" + i)
+      const won = h.hero === false && win && win.winners.includes("v" + i)
         ? `<span class="hh-won">won${win.how === "showdown" ? " @ showdown" : ""}</span>` : "";
       const bits = [
         v.pos ? `<span class="hv-pos">${esc(v.pos)}</span>` : "",
@@ -3114,6 +3123,12 @@ function renderData() {
   }
   $("data-stats").textContent = `${OPP.length} opponents · ${HANDS.length} hands`;
   metaGet("autoSnapshot").then((snap) => {
+    if (lastSnapError) {
+      $("data-autobackup").textContent = `⚠ Auto-backup failing: ${lastSnapError}. Export JSON by hand until it clears.`;
+      $("data-autobackup").className = "sub2 warn";
+      return;
+    }
+    $("data-autobackup").className = "muted sub2";
     if (!snap) { $("data-autobackup").textContent = "Auto-backup: not yet made — save a hand or open an opponent to create one."; return; }
     const secs = Math.floor((Date.now() - snap.ts) / 1000);
     const ago = secs < 60 ? `${secs}s` : secs < 3600 ? `${Math.floor(secs / 60)}m` : `${Math.floor(secs / 3600)}h`;
@@ -3121,6 +3136,30 @@ function renderData() {
     $("data-autobackup").textContent =
       `Auto-backup: updated ${ago} ago · ${c.opponents || 0} opps · ${c.hands || 0} hands. Refreshes on every change (stays inside the app; tap Save to write a file).`;
   });
+  /* The copy taken just before the last import, before the auto-backup rolled
+     forward over it. Only a file — importing it back can't undo a merge, since
+     importJSON only ever adds. */
+  metaGet("preImportSnapshot").then((snap) => {
+    $("data-preimport-row").classList.toggle("hidden", !snap?.data);
+    if (!snap?.data) return;
+    const c = snap.counts || {};
+    $("data-preimport").textContent =
+      `Save pre-import backup (${c.opponents || 0} opps · ${c.hands || 0} hands)`;
+  });
+}
+
+/* Import is a union merge with no in-app undo, so it gets at least the confirm
+   a single-hand delete gets. It also copies the live auto-backup aside first:
+   every write inside importJSON reschedules the snapshot, so ~400ms after the
+   last one the "auto-backup" is a picture of the *merged* database, not of what
+   was there before. Returns false if the user backs out. */
+async function confirmImport(data) {
+  const n = (a, w) => { const c = Array.isArray(a) ? a.length : 0; return `${c} ${w}${c === 1 ? "" : "s"}`; };
+  const bits = [n(data.opponents, "opponent"), n(data.hands, "hand"), n(data.sessions, "session")].join(" · ");
+  if (!confirm(`Import ${bits}?\n\nMerged into what you already have by id — newer wins. This can't be undone from inside the app.`)) return false;
+  const snap = await metaGet("autoSnapshot");
+  if (snap?.data) await metaSet("preImportSnapshot", snap);
+  return true;
 }
 
 /* ================= Hand entry ================= */
@@ -3925,7 +3964,11 @@ function handWinner(h) {
 }
 /* Hero-relative outcome for dots/records: "won" | "lost" | "chop" | null. */
 function heroResult(h) {
-  const win = handWinner(h);
+  return heroResultFrom(h, handWinner(h));
+}
+/* Same reading, from a winner already scored — handRowHTML needs both and
+   score5 over every live hand is the expensive half of a hands list. */
+function heroResultFrom(h, win) {
   if (!win) return h.result || null;        // legacy hands with manually set result
   if (h.hero === false) return null;
   if (!win.winners.includes("hero")) return "lost";
@@ -5140,9 +5183,17 @@ function bindStatic() {
     await dbPut("opponents", o);
     renderOppDetail(curOppId);
   };
+  const handCount = (id) => HANDS.filter((h) => (h.villainIds || []).includes(id)).length;
   $("od-e-del").onclick = async () => {
     const o = oppById(curOppId);
-    if (!confirm(`Delete ${o.name}? Their hands stay but lose the name.`)) return;
+    /* Delete sits a thumb-width from Save. Name what actually dies — the reads,
+       exploits and notes are the journal; the hands merely lose their label. */
+    const dead = [
+      [Object.keys(oppReads(o)).length, "read"],
+      [(o.exploits || []).length, "exploit"],
+      [(o.notes || []).length, "note"],
+    ].filter(([n]) => n).map(([n, w]) => `${n} ${w}${n === 1 ? "" : "s"}`).join(", ");
+    if (!confirm(`Delete ${o.name}?\n\n${dead || "Nothing"} gone for good.\n${handCount(o.id)} hands stay but lose the name.`)) return;
     await dbDel("opponents", o.id);
     OPP = OPP.filter((x) => x.id !== o.id);
     location.hash = "#opponents";
@@ -5151,7 +5202,6 @@ function bindStatic() {
     const cur = oppById(curOppId);
     const others = OPP.filter((o) => o.id !== curOppId).sort((a, b) => a.name.localeCompare(b.name));
     if (!others.length) { toast("No other opponent to merge into."); return; }
-    const handCount = (id) => HANDS.filter((h) => (h.villainIds || []).includes(id)).length;
     sheetGroup = null; // not a card sheet
     showSheet(`<div class="sheethead"><span class="t">Merge ${esc(cur.name)} into…</span>
         <button data-sheetclose>Close</button></div>
@@ -5506,6 +5556,14 @@ function bindStatic() {
       renderData();
     } catch (e) { if (e?.name !== "AbortError") toast("Save failed: " + e.message); }
   };
+  $("data-preimport").onclick = async () => {
+    try {
+      const snap = await metaGet("preImportSnapshot");
+      if (!snap?.data) { toast("No pre-import backup"); return; }
+      await shareBackupData(snap.data);
+      toast("Saved pre-import backup");
+    } catch (e) { if (e?.name !== "AbortError") toast("Save failed: " + e.message); }
+  };
   $("data-copy").onclick = async () => {
     try {
       const json = JSON.stringify(await exportData());
@@ -5546,7 +5604,9 @@ function bindStatic() {
       const raw = document.getElementById("paste-json-text").value.trim();
       if (!raw) { toast("Nothing to import"); return; }
       try {
-        const counts = await importJSON(JSON.parse(raw));
+        const data = JSON.parse(raw);
+        if (!await confirmImport(data)) return;
+        const counts = await importJSON(data);
         await refreshCache();
         await normaliseHandTokens();
         hideSheet();
@@ -5560,7 +5620,9 @@ function bindStatic() {
     const f = e.target.files[0];
     if (!f) return;
     try {
-      const counts = await importJSON(JSON.parse(await f.text()));
+      const data = JSON.parse(await f.text());
+      if (!await confirmImport(data)) { e.target.value = ""; return; }
+      const counts = await importJSON(data);
       await refreshCache();
       await normaliseHandTokens();
       toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
