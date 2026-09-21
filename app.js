@@ -2487,6 +2487,18 @@ function renderOppReads(o) {
    miscount can be taken back and the tally stays datable. Counts are shown raw
    over their own total — the same rule as the HUD, because three observations
    read as a tendency if you print them as a percentage and they aren't one. */
+/* The five ways a bet of his fails to reach the auto grid, in the order Phil
+   can do something about them: the first two are a data fix, the last three
+   are a note he never wrote. */
+const SZ_SKIPS = [
+  ["noCards", "his cards aren't on record"],
+  ["badCards", "the cards on record don't read as cards"],
+  ["noAmount", "no amount was written down"],
+  ["noPot", "the pot can't be rebuilt — no blinds, or an earlier amount missing"],
+  ["badAmount", "the amount can't be true — over 3× the pot"],
+];
+const SZ_SKIP_BY_ID = Object.fromEntries(SZ_SKIPS.map((x) => [x[0], x[1]]));
+
 function sizingCounts(o, rowId) {
   const row = (o.sizing || {})[rowId] || {};
   const counts = {}; let total = 0;
@@ -2530,20 +2542,26 @@ function renderOppSizing(o) {
     return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
       <div class="sizechips">${chips}</div></div>`;
   };
-  const sk = auto.skipped;
-  const autoHTML = auto.n
+  /* Every bet of his that didn't make it, and the one thing that was missing.
+     A grid that quietly drops a third of his bets reads as a grid that has seen
+     them, so the shortfall is printed and each reason opens its hands. */
+  const sk = auto.skipped, why = auto.why || {};
+  const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
+    `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
+  const skipHTML = skips
+    ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
+  const autoHTML = (auto.n
     ? `<div class="sizehead autohead">From hand histories<span class="sizen">${auto.n}</span></div>
        <div class="sizenote">Counted off his shown cards and the pot at the time.
          Value is two pair or better, or top or second pair; everything under that
          counts as a bluff, draws included. Bluffs he never had to show don't appear
-         here at all, so read the Bluff rows as a floor.
-         ${sk.noCards ? ` ${sk.noCards} bet${sk.noCards === 1 ? "" : "s"} left out with no cards on record.` : ""}</div>` +
+         here at all, so read the Bluff rows as a floor.</div>` +
       ["V", "B"].map((k) =>
         `<div class="sizesub">${k === "V" ? "Value" : "Bluff"}</div>` +
         SIZING_ROWS.filter((r) => r.kind === k).map(autoRow).join("")).join("")
     : `<div class="sizehead autohead">From hand histories</div>
        <div class="sizenote">Nothing yet — this needs imported hands where his cards
-         and the bet amounts are both on record.</div>`;
+         and the bet amounts are both on record.</div>`) + skipHTML;
   $("od-sizing").innerHTML =
     `<div class="sizenote">${sizingUndo
       ? "Tapping a size now takes one off — tap Done when the count is right."
@@ -5161,6 +5179,16 @@ function bindStatic() {
     if (o) renderOppSizing(o);
   };
   $("od-sizing").onclick = async (e) => {
+    const sk = e.target.closest("[data-szskip]");
+    if (sk) {
+      const o = oppById(curOppId);
+      if (!o) return;
+      const k = sk.dataset.szskip;
+      const ids = (sizingAuto(o.id, HANDS).why || {})[k] || [];
+      if (ids.length) openReadProof(o, "Left out — " + SZ_SKIP_BY_ID[k], ids,
+        "these hands have a bet of his the grid couldn't price");
+      return;
+    }
     const az = e.target.closest("[data-szauto]");
     if (az) {
       const o = oppById(curOppId);

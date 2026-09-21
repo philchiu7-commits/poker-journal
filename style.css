@@ -980,6 +980,14 @@ textarea.noteedit { margin-bottom: 0; }
 .sizehead.autohead { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px;
   display: flex; align-items: center; gap: 6px; }
 .sizesub { font-size: 10.5px; font-weight: 600; color: var(--muted); margin: 7px 0 3px; }
+/* What the auto grid had to leave out. Quiet by default — it is a footnote,
+   not a warning — but each line opens the hands behind it. */
+.sizeskips { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.sizeskips b { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .5px; margin-bottom: 1px; }
+.szskip { background: none; border: 0; padding: 1px 0; text-align: left; font: inherit; font-size: 11.5px;
+  color: var(--muted); cursor: pointer; border-bottom: 1px dotted var(--line); }
+.szskip:active { color: var(--text); }
 .sizechip.auto { border-style: dashed; }
 .sizechip.auto.has { color: var(--text); border-color: #3c5a45; border-style: solid; cursor: pointer; }
 .sizechip.auto.top { background: #1b3326; border-color: #3f8a5d; color: #c8ecd6; }

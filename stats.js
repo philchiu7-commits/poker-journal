@@ -225,19 +225,54 @@ function sizeAmount(s) {
   const v = parseFloat(m[1]);
   return isFinite(v) ? (m[2] ? v * 1000 : v) : null;
 }
+/* "60%" → 0.6. Phil's shorthand often records a bet as the share of the pot it
+   was, which is already the number this grid wants: it needs no pot
+   reconstruction at all, so it survives a hand with no blinds and no chip
+   amounts on record. Past the impossible-bet line below it is a typo, not a
+   size. */
+function sizePct(s) {
+  if (s === null || s === undefined) return null;
+  const m = /^([\d.]+)\s*%$/.exec(String(s).trim());
+  if (!m) return null;
+  const v = parseFloat(m[1]);
+  return isFinite(v) && v > 0 && v <= SZ_MAX_POT * 100 ? v / 100 : null;
+}
+const SZ_MULT = /^([\d.]+)\s*[xX]$/;
+/* "4x" — a size quoted as a multiple of the bet in front of him. One rule covers
+   both places Phil writes it: an open is 3x the blind, a 3bet is 4x the open,
+   a turn raise is 2x the lead. The other reading (multiples of the big blind
+   throughout) rules itself out in both hands that use the notation — 4x a $4
+   blind is less than the $60 raise it came over, which is not a raise. Nothing
+   to multiply means no answer, so a size like this opening a street is refused
+   rather than assumed. */
+function sizeMult(s, level) {
+  if (!level || s === null || s === undefined) return null;
+  const m = SZ_MULT.exec(String(s).trim());
+  if (!m) return null;
+  const v = parseFloat(m[1]);
+  return isFinite(v) && v > 1 ? v * level : null;
+}
 const SZ_AGG = new Set(["bet", "raise", "3bet", "4bet", "5bet", "jam"]);
 /* Past this multiple of the pot, a non-jam bet is a data error rather than a
    read. Real overbets run to about 2x; nothing Phil has logged sits between
    3x and the 8x where the corrupted ones start. */
 const SZ_MAX_POT = 3;
+/* Preflop the same check has to be far looser, and it still has to exist. An
+   open into a three-chip pot is 17x it and a jam into a limped pot is 93x, so
+   3x would throw away half the hands — but one hand in the export has a 3bet
+   of 51,197.86k, a misread stack rather than a bet, which inflated the pot on
+   every street after it and made a real 13.57k turn bet read as 0%. Nothing
+   Phil has logged sits between 17x and that, and jams are exempt here too. */
+const SZ_MAX_POT_PRE = 50;
 const SZ_STREETS = ["pre", "flop", "turn", "river"];
+const SZ_CARD = /^[2-9TJQKA][cdhs]$/;
 const SZ_BOARD_N = { flop: 3, turn: 4, river: 5 };
 /* Walk the money. Returns one entry per postflop bet/raise whose amount is
    known, with the pot as it stood *before* that bet went in — the denominator
    everyone actually quotes a size against. Bails out of a hand the moment an
    amount is missing rather than guessing, because one guessed number poisons
    every later street in that hand. */
-function betsVsPot(h) {
+function potWalk(h) {
   const b = h.blinds || {};
   if (b.bb === null || b.bb === undefined) return [];
   /* Blinds and bet sizes have to be in the same unit before any of this means
@@ -279,24 +314,39 @@ function betsVsPot(h) {
     const street = () => Object.values(inv).reduce((s, v) => s + v, 0);
     for (const a of A) {
       if (SZ_AGG.has(a.act)) {
-        const v = sizeAmount(a.size);
+        const v = sizeAmount(a.size) ?? sizeMult(a.size, level);
         if (v === null) return out;                   // unknown amount — stop here
-        if (st !== "pre") {
-          const p = base + street(), bet = v - (inv[a.actor] || 0);
-          /* An amount that can't be true is worse than a missing one, so it gets
-             the same treatment. The DX screen-reader loses the decimal point now
-             and then — 19.72K comes back as 1972K — and the tell is a bet many
-             times the pot it was made into. A shove is exempt: a jam really can
-             dwarf the pot when the stacks are deep. Six hands in the export trip
-             this, and each one used to poison every street that followed it. */
-          if (a.act !== "jam" && p > 0 && bet > p * SZ_MAX_POT) return out;
-          out.push({ a, street: st, pot: p, bet });
+        const p = base + street(), bet = v - (inv[a.actor] || 0);
+        /* An amount that can't be true is worse than a missing one, so it gets
+           the same treatment. The DX screen-reader loses the decimal point now
+           and then — 19.72K comes back as 1972K — and the tell is a bet many
+           times the pot it was made into. A shove is exempt: a jam really can
+           dwarf the pot when the stacks are deep. Six hands in the export trip
+           this, and each one used to poison every street that followed it. */
+        if (a.act !== "jam" && p > 0 && bet > p * (st === "pre" ? SZ_MAX_POT_PRE : SZ_MAX_POT)) {
+          if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
+          return out;
         }
+        if (st !== "pre") out.push({ a, street: st, pot: p, bet });
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
     }
     pot = base + street();
+  }
+  return out;
+}
+/* Every postflop bet of his this hand can price, from both sources: the chip
+   walk above, plus the ones already written down as a share of the pot. The
+   second pass runs whatever the first one did — a hand with no blinds, or one
+   the walk bailed out of, can still have a "bets 60%" on a later street, and
+   that number was never in doubt. */
+function betsVsPot(h) {
+  const out = potWalk(h);
+  for (const a of h.actions || []) {
+    if (!a || !SZ_BOARD_N[a.street] || !SZ_AGG.has(a.act)) continue;
+    const r = sizePct(a.size);
+    if (r !== null) out.push({ a, street: a.street, pot: null, bet: null, ratio: r });
   }
   return out;
 }
@@ -306,6 +356,11 @@ function betsVsPot(h) {
    naked draw, air — is a bluff, so nothing goes uncounted any more. */
 function madeClass(hole, board) {
   if (!hole || hole.length !== 2 || board.length < 3) return null;
+  /* An unreadable card has to stop the grade, not slide through it. Phil's
+     shorthand writes a pocket pair as "Qs" — queens — and an early import read
+     that as the queen of spades plus a card called "Sh", which the evaluator
+     was happy to score as a pair. A hand nobody can read is not a bluff. */
+  if (!hole.concat(board).every((c) => SZ_CARD.test(String(c)))) return null;
   const all = hole.concat(board);
   if (best7(all)[0] >= 3) return "V";                   // trips or better
   const cnt = {};
@@ -324,35 +379,58 @@ function madeClass(hole, board) {
    bet reads as the 66% he was going for, not as its own category. */
 const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.83, "66"], [1.25, "100"], [Infinity, "150"]];
 const sizeStepFor = (r) => (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[4])[1];
-/* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, n, skipped:{…} } */
+/* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, n, skipped:{…}, why:{…} }
+   Walks *his* postflop bets rather than the entries the money-walk managed to
+   produce, so every bet that doesn't reach the grid can say which thing was
+   missing and name the hand. "Some of my hands aren't in here" should be a
+   question the panel answers, not one Phil has to bring to me. */
 function sizingAuto(oppId, hands) {
-  const rows = {}, skipped = { noCards: 0, unclear: 0, noAmount: 0 };
+  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount"];
+  const rows = {}, skipped = {}, why = {};
+  for (const k of K) { skipped[k] = 0; why[k] = []; }
   let n = 0;
   for (const h of hands) {
     const V = h.villains || [];
     const board = (h.board || []).filter(Boolean);
-    const got = betsVsPot(h);
-    const agg = (h.actions || []).filter((a) => a.street !== "pre" && SZ_AGG.has(a.act));
-    skipped.noAmount += Math.max(0, agg.length - got.length);
-    for (const e of got) {
-      const m = /^v(\d+)$/.exec(String(e.a.actor || ""));
-      if (!m || e.pot <= 0 || e.bet <= 0) continue;
-      const v = V[Number(m[1])];
-      if (!v || v.opponentId !== oppId) continue;
+    /* Keyed by the action object itself, so an entry is matched to the bet it
+       came from and not to another bet of the same size on the same street. */
+    const priced = new Map(betsVsPot(h).map((e) => [e.a, e]));
+    const miss = (k) => { skipped[k]++; if (!why[k].includes(h.id)) why[k].push(h.id); };
+    for (const a of h.actions || []) {
+      const need = SZ_BOARD_N[a && a.street];
+      if (!need || !SZ_AGG.has(a.act)) continue;                // preflop, or not a bet
+      const m = /^v(\d+)$/.exec(String(a.actor || ""));
+      const v = m && V[Number(m[1])];
+      if (!v || v.opponentId !== oppId) continue;               // not him
       const hole = (v.cards || []).filter(Boolean);
-      if (hole.length !== 2) { skipped.noCards++; continue; }
-      const vis = board.slice(0, SZ_BOARD_N[e.street]);
-      if (vis.length < SZ_BOARD_N[e.street]) { skipped.noCards++; continue; }
+      const vis = board.slice(0, need);
+      if (hole.length !== 2 || vis.length < need) { miss("noCards"); continue; }
       const k = madeClass(hole, vis);
-      if (!k) { skipped.unclear++; continue; }
-      const rid = e.street + "-" + k.toLowerCase();
+      if (!k) { miss("badCards"); continue; }
+      const e = priced.get(a);
+      if (!e || e.bad) {
+        /* Three different silences, and they want three different answers:
+           nothing written down, something written down that can't be true, and
+           an amount that is fine but sits in a hand whose pot can't be rebuilt
+           (no blinds on record, or an earlier amount missing). */
+        if (e && e.bad) miss("badAmount");
+        else if (sizeAmount(a.size) === null && sizePct(a.size) === null
+          && !SZ_MULT.test(String(a.size || ""))) miss("noAmount");
+        else miss("noPot");
+        continue;
+      }
+      const ratio = e.ratio !== null && e.ratio !== undefined
+        ? e.ratio
+        : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
+      if (ratio === null) { miss("noPot"); continue; }
+      const rid = a.street + "-" + k.toLowerCase();
       const cell = (rows[rid] = rows[rid] || {});
-      const step = sizeStepFor(e.bet / e.pot);
+      const step = sizeStepFor(ratio);
       (cell[step] = cell[step] || { n: 0, ids: [] });
       cell[step].n++;
-      cell[step].ids.push(h.id);
+      if (!cell[step].ids.includes(h.id)) cell[step].ids.push(h.id);
       n++;
     }
   }
-  return { rows, n, skipped };
+  return { rows, n, skipped, why };
 }
