@@ -2331,16 +2331,21 @@ function renderOppHud(o) {
   // Limping is the read Phil actually plays against, so it gets its own row
   // broken out by seat rather than one blended number.
   const seats = POSITIONS.filter((p) => (c.byPos[p] || {}).seats);
-  const row = (label, key, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
-    const b = c.byPos[p], d = key === "limp" ? b.seats : b.limp;
+  /* Each row carries its own denominator — how often he limped is out of the
+     seats he was dealt, what he did next is out of the limps themselves, and
+     whether he folded is out of the limps somebody actually raised. The count
+     rides under every cell so two rows are never read off one base. */
+  const row = (label, key, den, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
+    const b = c.byPos[p], d = b[den] || 0;
     const v = d ? Math.round((100 * b[key]) / d) + "%" : "—";
     return `<td class="${d && d < 8 ? "thin" : ""}" title="${tip} from ${p}: ${b[key]}/${d}">${v}<i>${d}</i></td>`;
   }).join("") + "</tr>";
   const posTable = seats.length
     ? `<div class="hudpos"><table>
          <tr><th></th>${seats.map((p) => `<td>${p}</td>`).join("")}</tr>
-         ${row("Limp", "limp", "Limped")}
-         ${row("Limp-RR", "lrr", "Limped then raised")}
+         ${row("Limp", "limp", "seats", "Limped")}
+         ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
+         ${row("Limp-fold", "lfold", "faced", "Limped, got raised, folded")}
        </table></div>`
     : "";
   box.innerHTML = `<div class="hudgrid">${cells}${afCell}</div>${posTable}`;

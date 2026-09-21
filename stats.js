@@ -17,9 +17,9 @@ function hudCount(oppId, hands) {
     seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
-    agg: 0, calls: 0, limps: 0, lrr: 0, byPos: {},
+    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {},
   };
-  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0 });
+  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
 
   for (const h of hands) {
     if (!h.imported) continue;
@@ -36,7 +36,7 @@ function hudCount(oppId, hands) {
     // ---- preflop walk. Flags flip *after* an action so a player never counts
     // as having faced their own raise.
     let sawRaise = false, sawThree = false, opener = null, lastAgg = null;
-    let limped = false, limpThenRaise = false;
+    let limped = false, limpThenRaise = false, limpFaced = false, limpFold = false;
     for (const a of pre) {
       const mine = a.actor === me;
       if (mine) {
@@ -44,16 +44,26 @@ function hudCount(oppId, hands) {
         if (HUD_AGG.has(a.act)) c.pfr++;
         if (a.act === "limp") limped = true;
         else if (limped && HUD_AGG.has(a.act)) limpThenRaise = true;
+        /* Folding a limp only counts once someone actually raised it — a limp
+           that walks to the flop was never a chance to fold, and folding those
+           into the denominator would read as a player who defends far more
+           than he does. */
+        else if (limpFaced && a.act === "fold") limpFold = true;
         if (sawRaise && !sawThree) { c.opp3b++; if (a.act === "3bet") c.n3b++; }
         if (opener === me && sawThree) { c.oppF3b++; if (a.act === "fold") c.f3b++; }
       }
       if (HUD_AGG.has(a.act)) {
+        if (limped && !mine) limpFaced = true;
         lastAgg = a.actor;
         if (a.act === "3bet" || a.act === "4bet" || a.act === "5bet") sawThree = true;
         else if (!sawRaise) { sawRaise = true; opener = a.actor; }
       }
     }
-    if (limped) { c.limps++; pos(myPos).limp++; if (limpThenRaise) { c.lrr++; pos(myPos).lrr++; } }
+    if (limped) {
+      c.limps++; pos(myPos).limp++;
+      if (limpThenRaise) { c.lrr++; pos(myPos).lrr++; }
+      if (limpFaced) { c.limpFaced++; pos(myPos).faced++; if (limpFold) { c.limpFold++; pos(myPos).lfold++; } }
+    }
 
     // ---- postflop
     const flop = A.filter((a) => a.street === "flop");

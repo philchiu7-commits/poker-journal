@@ -86,7 +86,13 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   order, not a seat map** — the straddle acts third postflop and any seat
   ordering gets that wrong. Every stat is a count over its own
   *opportunity* count, never a bare percentage — `renderOppHud` (app.js) prints
-  n beside each and dims anything under `HUD_MIN`.
+  n beside each and dims anything under `HUD_MIN`. Below the grid sits a
+  **per-seat table** off `byPos`: Limp (of seats dealt), Limp-RR (of limps) and
+  Limp-fold (of limps somebody actually raised — a limp that walks to the flop
+  was never a chance to fold, and folding those into the denominator reads as a
+  player who defends far more than he does). **The three rows deliberately do
+  not share a denominator**, so each cell prints its own n underneath; don't
+  read one row as the complement of another.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
   **`U<n>` numbers the UTG seats down from the table size** — an 8-handed ring
   is `SB BB STD U8 U7 HJ CO BN`, a 9-handed one adds U9. `ringFor` (app.js)
