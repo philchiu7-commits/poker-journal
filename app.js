@@ -4095,8 +4095,12 @@ function renderHandEntry() {
 
   // hand line
   const lt = lineText(d);
-  $("he-line").textContent = lt || (table ? "New hand — tap a seat" : "New hand — tap a villain");
-  $("he-line").classList.toggle("muted", !lt);
+  /* Nothing used to say you were editing rather than starting fresh, and the
+     Save button read "Save" either way. */
+  $("he-save").textContent = d.id ? "Update" : "Save";
+  $("he-line").textContent = (d.id ? "Editing · " : "") +
+    (lt || (table ? "New hand — tap a seat" : "New hand — tap a villain"));
+  $("he-line").classList.toggle("muted", !lt && !d.id);
   $("he-notehint").classList.toggle("hidden", !d.note);
   $("he-notehint-text").textContent = d.note || "";
 
@@ -4987,6 +4991,9 @@ function loadHandIntoDraft(h) {
     squidLeft: h.squid?.left != null ? String(h.squid.left) : "",
   };
   undoStack = [];
+  /* Storage kept the *old* draft until the next mutation, so closing the app
+     mid-edit reopened on something other than what the form was showing. */
+  persistDraft();
 }
 
 /* ================= static bindings + boot ================= */
@@ -5682,10 +5689,19 @@ async function boot() {
   await openDB();
   await requestDurableStorage();
   await refreshCache();
-  await migrateLegacyReads();
-  await migrateNoteConvertedSquid();
-  await migrateDupBoardCards();
-  await normaliseHandTokens();
+  /* One bad record must not cost the whole app. The migrations walk arbitrary
+     imported values, and everything below — bindStatic, route — is what makes
+     the tab bar work at all; a throw up here left nothing bound and nothing
+     routed, on every launch from then on. Toast and carry on instead. */
+  try {
+    await migrateLegacyReads();
+    await migrateNoteConvertedSquid();
+    await migrateDupBoardCards();
+    await normaliseHandTokens();
+  } catch (e) {
+    console.error("migration failed", e);
+    setTimeout(() => toast("A data migration failed — the app still works. Export a backup."), 1200);
+  }
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
@@ -5741,4 +5757,14 @@ async function boot() {
     });
   }
 }
-boot();
+/* Last resort: if boot dies before route() there is no tab bar and no view, so
+   a bare throw reads as a blank app with no way to ask what happened. #view-
+   opponents is the one section without `hidden`, so writing into it shows
+   without routing. */
+boot().catch((e) => {
+  console.error("boot failed", e);
+  const el = document.getElementById("view-opponents");
+  if (el) el.innerHTML = `<div class="panel"><div class="ptitle">Couldn't start</div>
+    <div class="muted sub2">${String(e && e.message || e).replace(/[<&]/g, (c) => c === "<" ? "&lt;" : "&amp;")}</div>
+    <div class="muted sub2">Your data is still in the database. Close and reopen the app; if it keeps failing, screenshot this.</div></div>`;
+});
