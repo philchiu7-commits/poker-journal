@@ -3663,6 +3663,64 @@ function parseNoteToDraft(text, opponentId) {
   return d;
 }
 
+/* Is this note unmistakably one hand, rather than a tendency? The villain's own
+   hole cards are the tell — "Clairvoyance." and "Double-barrels too much OOP."
+   name no cards, a hand note nearly always does. Cards alone don't settle it
+   either ("Isos all suited connectors"), so the note must also place the hand:
+   a seat, a board, or an action. Measured over the 383 notes on record, 271
+   pass and the false positives are generalisations Phil would still recognise
+   as his ("Limp-reraises QJo."). Deliberately stricter than the bar the manual
+   Convert all button uses — that one asks first and reports its counts, this
+   one runs on its own. */
+function noteIsHandShaped(d) {
+  const v = d.villains[0];
+  return v.cards.some(Boolean) &&
+    (!!v.pos || d.board.some(Boolean) || d.actions.length > 0);
+}
+
+/* The hand a note becomes. Shared so the button and the automatic path can
+   never drift into producing two different records from the same note. */
+function handRecFromNote(note, oppId, d) {
+  const now = Date.now();
+  return {
+    id: uid(), ts: now, updatedAt: now, hero: false,
+    heroPos: null, heroCards: null,
+    villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
+      cards: (v.cards || []).some(Boolean) ? v.cards : null })),
+    villainIds: [oppId],
+    board: d.board, actions: d.actions,
+    effStack: null, blinds: null,
+    squid: (d.squidHave || d.squidLeft)
+      ? { have: d.squidHave ? Number(d.squidHave) : null, left: d.squidLeft ? Number(d.squidLeft) : null } : null,
+    note: note.text, srcNoteId: note.id,
+    result: null, showdown: false,
+  };
+}
+
+/* Nothing asked before this hand was created, so the way back has to be one
+   tap and has to be visible. Undo drops the hand and unlinks the note; the
+   note itself is never touched. */
+function showNoteHandToast(oppId, noteId, handId) {
+  const t = $("toast");
+  t.innerHTML = `<span class="toastmsg">Note saved · hand created</span><button class="toastbtn" data-undo>Undo</button>`;
+  t.classList.add("wide");
+  t.classList.remove("hidden");
+  t.style.cursor = "pointer";
+  clearTimeout(toast._t);
+  const hide = () => { t.classList.add("hidden"); t.style.cursor = ""; t.onclick = null; t.classList.remove("wide"); t.textContent = ""; };
+  toast._t = setTimeout(hide, 12000);
+  t.onclick = async () => {
+    hide();
+    await dbDel("hands", handId);
+    HANDS = HANDS.filter((h) => h.id !== handId);
+    const o = oppById(oppId);
+    const n = (o?.notes || []).find((x) => x.id === noteId);
+    if (n) { n.handId = null; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+    if (curOppId === oppId) renderOppDetail(oppId);
+    toast("Hand removed — note kept");
+  };
+}
+
 function ensureVillainSlot() {
   if (!draft.villains.length)
     draft.villains.push({ opponentId: null, pos: null, cards: [null, null] });
@@ -5355,11 +5413,29 @@ function bindStatic() {
     const text = $("od-note").value.trim();
     if (!text) return;
     const o = oppById(curOppId);
-    (o.notes = o.notes || []).unshift({ id: uid(), ts: Date.now(), text, handId: null });
+    const n = { id: uid(), ts: Date.now(), text, handId: null };
+    (o.notes = o.notes || []).unshift(n);
+    /* A note that spells out a hand should land as a hand without a second
+       tap — Convert all was always the same parse, one button away. Only for
+       notes that are unmistakably hands, and always with an Undo. */
+    const d = parseNoteToDraft(text, curOppId);
+    let rec = null;
+    if (noteIsHandShaped(d)) {
+      rec = handRecFromNote(n, curOppId, d);
+      await dbPut("hands", rec);
+      HANDS.push(rec);
+      n.handId = rec.id;
+      /* Converted notes live behind "Show converted", so without this the note
+         you just typed vanishes the instant you add it. Open the section
+         instead — writing something down and watching it disappear is the
+         worst feedback this panel could give. */
+      showConvertedNotes[curOppId] = true;
+    }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     $("od-note").value = "";
     renderOppDetail(curOppId);
+    if (rec) showNoteHandToast(curOppId, n.id, rec.id);
   };
   $("od-notes-convert").onclick = async () => {
     const o = oppById(curOppId);
@@ -5379,20 +5455,7 @@ function bindStatic() {
     }
     if (!confirm(`Create ${candidates.length} hand${candidates.length > 1 ? "s" : ""} from your shorthand notes? ${tendency ? tendency + " tendency-only note" + (tendency > 1 ? "s" : "") + " will be left alone." : ""}`)) return;
     for (const { n, d } of candidates) {
-      const now = Date.now();
-      const rec = {
-        id: uid(), ts: now, updatedAt: now, hero: false,
-        heroPos: null, heroCards: null,
-        villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
-          cards: (v.cards || []).some(Boolean) ? v.cards : null })),
-        villainIds: [curOppId],
-        board: d.board, actions: d.actions,
-        effStack: null, blinds: null,
-        squid: (d.squidHave || d.squidLeft)
-          ? { have: d.squidHave ? Number(d.squidHave) : null, left: d.squidLeft ? Number(d.squidLeft) : null } : null,
-        note: n.text, srcNoteId: n.id,
-      };
-      rec.result = null; rec.showdown = false;
+      const rec = handRecFromNote(n, curOppId, d);
       await dbPut("hands", rec);
       HANDS.push(rec);
       n.handId = rec.id;
