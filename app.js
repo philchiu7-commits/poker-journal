@@ -723,13 +723,17 @@ function posBucket(pos) {
   return null;
 }
 /* Pot type by count of preflop raises across everyone. */
+/* Rank the preflop stream, don't count it: an imported hand whose record starts
+   at "3bet" is a 3-bet pot even though only one raise was ever written down. */
 function potBucket(h) {
-  const pre = (h.actions || []).filter((a) => a.street === "pre");
-  const raises = pre.filter((a) => a.act === "raise" || a.act === "3bet" || a.act === "4bet" || a.act === "5bet" || a.act === "jam").length;
-  if (raises === 0) return "Limped";
-  if (raises === 1) return "SRP";
-  if (raises === 2) return "3BP";
-  return "4BP+";
+  const LEVEL = { raise: 1, "3bet": 2, "4bet": 3, "5bet": 4 };
+  let lv = 0;
+  for (const a of h.actions || []) {
+    if (a.street !== "pre") continue;
+    if (a.act === "jam") lv = Math.max(lv + 1, 1);
+    else if (LEVEL[a.act]) lv = Math.max(lv, LEVEL[a.act]);
+  }
+  return ["Limped", "SRP", "3BP", "4BP+"][Math.min(lv, 3)];
 }
 /* "3-bet pot" from this player's side, not the table's. He either made the
    3-bet or called one; a hand where he folded to it is a 3-bet pot that he
@@ -5148,7 +5152,7 @@ function bindStatic() {
       <div class="sheetnote">Pick the profile to keep — ${esc(cur.name)}'s hands, reads, notes &amp; exploits move there, then ${esc(cur.name)} is deleted.</div>
       <div class="mergelist">${others.map((o) =>
         `<button class="mergeitem" data-mergeinto="${o.id}"><span class="mnm">${esc(o.name)}</span>` +
-        `<span class="msub muted">${[o.group, handCount(o.id) + "h"].filter(Boolean).join(" · ")}</span></button>`).join("")}</div>`);
+        `<span class="msub muted">${[esc(o.group), handCount(o.id) + "h"].filter(Boolean).join(" · ")}</span></button>`).join("")}</div>`);
   };
   $("sheet").addEventListener("click", async (e) => {
     if (e.target.closest("[data-sheetclose]")) { hideSheet(); return; }
@@ -5538,6 +5542,7 @@ function bindStatic() {
       try {
         const counts = await importJSON(JSON.parse(raw));
         await refreshCache();
+        await normaliseHandTokens();
         hideSheet();
         toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
         renderData();
@@ -5551,6 +5556,7 @@ function bindStatic() {
     try {
       const counts = await importJSON(JSON.parse(await f.text()));
       await refreshCache();
+      await normaliseHandTokens();
       toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
       renderData();
     } catch (err) { toast("Import failed: " + err.message); }
