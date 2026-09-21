@@ -605,7 +605,10 @@ textarea.noteedit { margin-bottom: 0; }
 .rgnotch {
   position: absolute; top: 0; right: 0; width: 11px; height: 11px; pointer-events: none;
   clip-path: polygon(100% 0, 0 0, 100% 100%);
-  background: linear-gradient(225deg, var(--nc) 0 8px, #1a1d23 8px);
+  /* Two layers: the fence on top (transparent over the triangle, dark beyond),
+     the hue underneath — so --ncbg can be a multi-band gradient when the class
+     was played more than one way. */
+  background: linear-gradient(225deg, transparent 0 8px, #1a1d23 8px), var(--ncbg, var(--nc));
 }
 .rglegend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
 .rglegitem { display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize; }
@@ -1012,3 +1015,11 @@ textarea.noteedit { margin-bottom: 0; }
 /* The limp-reraise rate rides in the range footer: a frequency off every
    logged hand, next to counts that are shown-cards only. */
 .rlrate { color: var(--text); font-weight: 600; }
+
+/* Build stamp on the Data tab — small, quiet, and the first thing to check
+   when a shipped feature seems to be missing. */
+.vhead .buildtag {
+  margin-left: auto; align-self: center;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  color: var(--muted); font-variant-numeric: tabular-nums;
+}

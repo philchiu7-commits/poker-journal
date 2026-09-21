@@ -995,12 +995,13 @@ function rangeCells(rows) {
   }
   return cells;
 }
-/* One swatch per action HUE FAMILY. The three reds of the old palette were
-   separated only by lightness, which is unreadable at notch size — the exact
-   level (raise vs 3bet vs 4bet+) lives in the drill-down instead. An action
-   with no colour of its own gets neutral grey; never borrow another's. */
+/* One HUE per action. Raise, 3-bet and 4-bet+ shared a single red until v157 —
+   a red cell could be any of the three, so the grid couldn't answer "does he
+   raise this or reraise it?", the one question the ladder exists for (Phil).
+   They are now the furthest-apart hues the palette has: red / teal / rose.
+   An action with no colour of its own gets neutral grey; never borrow another's. */
 const NOTCH_COLORS = {
-  raise: "#d64848", "3bet": "#d64848", "4bet+": "#d64848", Lrr: "#b048c0",
+  raise: "#d64848", "3bet": "#3fbfb0", "4bet+": "#e0569b", Lrr: "#b048c0",
   call: "#6bbf6b", limp: "#e5c04a", check: "#7a95b0", bet: "#e08a3c", fold: "#7c8794",
 };
 const NOTCH_UNKNOWN = "#9aa1ac";
@@ -1009,6 +1010,21 @@ const strongestAct = (acts) => {
   for (const a of Object.keys(acts || {})) { const r = RANK_ACT[a] ?? 0; if (r > bestR) { bestR = r; best = a; } }
   return best;
 };
+/* Every distinct action a cell's hands took, weakest first. A class he played
+   two ways is two facts; painting only the strongest hid the split (Phil,
+   v157). No action logged at all is its own (grey) band, not an empty list. */
+const mixActs = (acts) => {
+  const ks = Object.keys(acts || {});
+  return ks.length ? ks.sort((a, b) => (RANK_ACT[a] ?? 0) - (RANK_ACT[b] ?? 0)) : [null];
+};
+/* Equal bands, not bands weighted by count — a line he took once in nine hands
+   is the read, and a 4% sliver would not survive a 20px cell. */
+const mixFill = (arr) => arr.length < 2 ? notchColor(arr[0])
+  : `linear-gradient(90deg,${arr.map((a, i) =>
+      `${notchColor(a)} ${((i * 100) / arr.length).toFixed(3)}% ${(((i + 1) * 100) / arr.length).toFixed(3)}%`).join(",")})`;
+const mixLabel = (acts) => Object.entries(acts || {})
+  .sort((x, y) => (RANK_ACT[y[0]] ?? 0) - (RANK_ACT[x[0]] ?? 0))
+  .map(([a, n]) => a + (n > 1 ? ` ×${n}` : "")).join(" / ");
 const notchColor = (act) => (act && NOTCH_COLORS[act]) || NOTCH_UNKNOWN;
 const POS_ORDER = (a, b) => {
   const ia = POSITIONS.indexOf(a), ib = POSITIONS.indexOf(b);
@@ -1506,8 +1522,9 @@ function renderOppRanges(o) {
     const e = rec[c];
     const on = hist ? !!e : inr.has(c);
     const top = e ? strongestAct(e.acts) : null;
+    const mix = e ? mixActs(e.acts) : null;
     let cls = "rgcell rng", notch = "", style = "", title = c;
-    if (e) title += ` · shown ${e.n}×${top ? ` · ${top}` : ""}`;
+    if (e) title += ` · shown ${e.n}×${mixLabel(e.acts) ? ` · ${mixLabel(e.acts)}` : ""}`;
     if (on) cls += " inr";
     if (hist) cls += " ro";                         // History is a record, not a canvas
     /* History paints the whole cell in the action's own colour (Phil, v141) —
@@ -1519,17 +1536,19 @@ function renderOppRanges(o) {
        the fact riding on top — inked dark when it would vanish into a matching
        fill. */
     if (hist) {
-      if (on) style = ` style="--fill:${notchColor(top)}"`;
+      if (on) style = ` style="--fill:${mixFill(mix)}"`;
     } else if (e) {
       notches++;
-      notch = `<i class="rgnotch" style="--nc:${sitFill && on && top === sitAct ? "#0a0d12" : notchColor(top)}"></i>`;
+      const ink = sitFill && on && mix.length === 1 && top === sitAct;
+      notch = `<i class="rgnotch" style="--ncbg:${ink ? "#0a0d12" : mixFill(mix)}"></i>`;
     }
     return `<div class="${cls}"${style} data-rcell="${c}"${hist ? "" : ' role="button"'} title="${esc(title)}">${c}${notch}</div>`;
   }).join("");
 
+  /* Every action on the grid gets a swatch, not just each cell's strongest —
+     the cells now show the whole mix, so the legend has to name all of it. */
   const byHue = {};
-  for (const c of recKeys) {
-    const a = strongestAct(rec[c].acts);
+  for (const c of recKeys) for (const a of mixActs(rec[c].acts)) {
     (byHue[notchColor(a)] = byHue[notchColor(a)] || new Set()).add(a);
   }
   const legend = recKeys.length
@@ -3100,7 +3119,21 @@ function renderHandView(id) {
 
 /* ================= Data / backup ================= */
 
+/* Which build is actually running. Three separate reports of "the feature is
+   gone" turned out to be one stale install each, and there was no way to tell
+   from inside the app — so the running cache name is now on the Data tab.
+   Read off Cache Storage rather than a constant: a constant would say what the
+   file claims, this says what the worker is really serving. */
+function renderBuild() {
+  const el = $("data-build");
+  if (!el || !window.caches) return;
+  caches.keys().then((ks) => {
+    const mine = ks.filter((k) => k.startsWith("journal-"));
+    el.textContent = mine.length === 1 ? mine[0] : mine.length ? mine.join(" + ") : "not installed";
+  }).catch(() => {});
+}
 function renderData() {
+  renderBuild();
   metaGet("lastExportAt").then((ts) => {
     const days = ts ? Math.floor((Date.now() - ts) / 86400000) : null;
     $("data-backupnag").textContent = ts
