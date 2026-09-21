@@ -674,16 +674,22 @@ function squidBucket(h) {
   if (n === 1) return "w1S";
   return "w2S+";
 }
-/* This villain's preflop role. Priority: jam > raise > call > limp > check/fold → null. */
-function villainRole(h, oppId) {
+/* This villain's preflop roles — a list, because a limp-reraise is two of them.
+   It answers to LRR and to Limp both, the same way the range grid counts it
+   (Phil, v138): he limped first, and the trap is the subset you then ask about.
+   Everything else is exclusive — a raise that became a 4-bet is still one
+   raiser. */
+function villainRoles(h, oppId) {
   const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
-  if (idx < 0) return null;
+  if (idx < 0) return [];
   const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
-  if (!pre.length) return null;
-  if (pre.some((a) => ["raise", "3bet", "4bet", "5bet", "jam"].includes(a))) return "PFR";
-  if (pre.includes("limp")) return "Limp";
-  if (pre.includes("call")) return "PFC";
-  return null;
+  if (!pre.length) return [];
+  const out = [];
+  if (limpReraiseClass(pre)) out.push("LRR");
+  if (pre.includes("limp")) out.push("Limp");
+  else if (pre.some((a) => ["raise", "3bet", "4bet", "5bet", "jam"].includes(a))) out.push("PFR");
+  else if (pre.includes("call")) out.push("PFC");
+  return out;
 }
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
@@ -691,8 +697,7 @@ function handMatchesFilters(h, oppId) {
   if (f.pot.size && !f.pot.has(potBucket(h))) return false;
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
-    const r = villainRole(h, oppId);
-    if (!r || !f.role.has(r)) return false;
+    if (!villainRoles(h, oppId).some((r) => f.role.has(r))) return false;
   }
   if (f.pos.size) {
     const v = (h.villains || []).find((x) => x.opponentId === oppId);
@@ -706,7 +711,7 @@ const posBuckets = (allHands) => POS_BUCKETS_ALL.filter((b) =>
   b !== "STD" || allHands.some((h) => (h.villains || []).some((v) => v.pos === "STD")));
 const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
 const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
-const ROLE_BUCKETS = ["PFR", "PFC", "Limp"];
+const ROLE_BUCKETS = ["PFR", "PFC", "Limp", "LRR"];
 function renderHandFilters(oppId, allHands) {
   const f = handFilters;
   /* Live counts for each chip — reflect *what would remain* if this chip flipped,
@@ -1168,6 +1173,51 @@ function openRangeDrill(o) {
        <button data-sheetclose>Close</button></div>
      <div class="rdsub">${classes.length} class${classes.length === 1 ? "" : "es"} · ${nHands} hand${nHands === 1 ? "" : "s"}</div>
      <div class="list rgcell-hands">${blocks || `<div class="empty">Nothing here.</div>`}</div>`);
+}
+
+/* The hands behind one HUD number: every hand it had a chance in, split into
+   the ones that counted and the ones that did not. The split is the point — a
+   fold-to-cbet of 60% is four hands you want to read and six you want to read
+   for why he did not. */
+const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lfold: "Limp-fold", af: "Agg factor" };
+const HUD_DRILL_LABEL = {
+  vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
+  three: ["3-bet", "Did not 3-bet"], f3b: ["Folded", "Did not fold"],
+  bar: ["Barrelled", "Gave up"], ftb: ["Folded", "Did not fold"],
+  af: ["Bet or raised more", "Called more"],
+  limp: ["Limped", "Did not limp"], lrr: ["Limp-reraised", "Just limped"],
+  lfold: ["Folded the limp", "Defended the limp"],
+};
+function openHudDrill(o, key) {
+  const c = hudFor(o.id, HANDS);
+  const evs = (c.ev || {})[key] || [];
+  if (!evs.length) return;
+  const [stat, seat] = key.split("|");
+  // The heading says the same thing the cell did, so the sheet is obviously
+  // the number you just tapped and not some other slice.
+  const label = (HUD_ROW_LABEL[stat] || (hudStats(c).find((r) => r.key === stat) || {}).label || stat)
+    + (seat ? " · " + seat : "");
+  const byId = new Map(HANDS.map((h) => [h.id, h]));
+  const seen = new Set();
+  const hands = [];
+  for (const e of evs) {                        // one hand can only speak once
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    const h = byId.get(e.id);
+    if (h) hands.push({ h, ok: e.ok });
+  }
+  const [yes, no] = HUD_DRILL_LABEL[key.split("|")[0]] || ["Counted", "Did not"];
+  const block = (ttl, list) => list.length
+    ? `<div class="rdhead"><b>${esc(ttl)}</b><span class="spacer"></span><span class="rdact muted">${list.length}</span></div>`
+      + list.slice().sort((a, b) => b.h.ts - a.h.ts).map((x) => handRowHTML(x.h, o.id)).join("")
+    : "";
+  const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
+  sheetGroup = "__rdrill__";                    // same row → #handview handler
+  showSheet(
+    `<div class="sheethead"><span class="t">${esc(label)} · ${esc(o.name)}</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="rdsub">${hit.length} of ${hands.length} hand${hands.length === 1 ? "" : "s"}</div>
+     <div class="list rgcell-hands">${block(yes, hit)}${block(no, miss)}</div>`);
 }
 
 /* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
@@ -2319,14 +2369,20 @@ function renderOppHud(o) {
     return;
   }
   nEl.textContent = `${c.seats} hand${c.seats === 1 ? "" : "s"}`;
-  const cell = (label, pct, d, thin, tip) =>
-    `<div class="hudcell${thin ? " thin" : ""}" title="${esc(tip)} — ${d} chance${d === 1 ? "" : "s"}">
+  /* Every number opens the hands it was counted off. A tooltip is the desktop
+     half of that and the tap is the phone half — the HUD lives on a phone, so
+     the cell is a button first. A cell with nothing behind it stays inert. */
+  const cell = (key, label, pct, d, thin, tip) =>
+    `<button class="hudcell${thin ? " thin" : ""}${d ? "" : " dead"}"${d ? ` data-hud="${key}"` : ""}
+       title="${esc(tip)} — ${d} chance${d === 1 ? "" : "s"}${d ? ". Tap for the hands." : ""}">
        <b>${pct === null ? "—" : Math.round(pct) + "%"}</b>
-       <span>${esc(label)}</span><i>${d}</i></div>`;
-  const cells = hudStats(c).map((r) => cell(r.label, r.pct, r.d, r.thin, r.tip)).join("");
+       <span>${esc(label)}</span><i>${d}</i></button>`;
+  const cells = hudStats(c).map((r) => cell(r.key, r.label, r.pct, r.d, r.thin, r.tip)).join("");
   const af = hudAF(c);
-  const afCell = `<div class="hudcell${!af || af.n < HUD_MIN ? " thin" : ""}" title="Postflop bets and raises per call — ${af ? af.n : 0} actions">
-      <b>${!af ? "—" : af.inf ? "∞" : af.v.toFixed(1)}</b><span>Agg factor</span><i>${af ? af.n : 0}</i></div>`;
+  const afN = af ? af.n : 0;
+  const afCell = `<button class="hudcell${!af || af.n < HUD_MIN ? " thin" : ""}${afN ? "" : " dead"}"${afN ? ` data-hud="af"` : ""}
+      title="Postflop bets and raises per call — ${afN} action${afN === 1 ? "" : "s"}${afN ? ". Tap for the hands." : ""}">
+      <b>${!af ? "—" : af.inf ? "∞" : af.v.toFixed(1)}</b><span>Agg factor</span><i>${afN}</i></button>`;
 
   // Limping is the read Phil actually plays against, so it gets its own row
   // broken out by seat rather than one blended number.
@@ -2338,7 +2394,8 @@ function renderOppHud(o) {
   const row = (label, key, den, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
     const b = c.byPos[p], d = b[den] || 0;
     const v = d ? Math.round((100 * b[key]) / d) + "%" : "—";
-    return `<td class="${d && d < 8 ? "thin" : ""}" title="${tip} from ${p}: ${b[key]}/${d}">${v}<i>${d}</i></td>`;
+    return `<td class="${d && d < 8 ? "thin" : ""}${d ? " hudtap" : ""}"${d ? ` data-hud="${key}|${p}"` : ""}
+      title="${tip} from ${p}: ${b[key]}/${d}${d ? ". Tap for the hands." : ""}">${v}<i>${d}</i></td>`;
   }).join("") + "</tr>";
   const posTable = seats.length
     ? `<div class="hudpos"><table>
@@ -4894,6 +4951,12 @@ function bindStatic() {
   $("od-name").onclick = (e) => {
     const b = e.target.closest("[data-ptype-open]");
     if (b) openPlayerTypeSheet(b.dataset.ptypeOpen);
+  };
+  $("od-hud").onclick = (e) => {
+    const b = e.target.closest("[data-hud]");
+    if (!b) return;
+    const o = oppById(curOppId);
+    if (o) openHudDrill(o, b.dataset.hud);
   };
   $("od-size-edit").onclick = () => {
     sizingUndo = !sizingUndo;

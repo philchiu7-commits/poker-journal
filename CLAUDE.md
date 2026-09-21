@@ -92,7 +92,17 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   was never a chance to fold, and folding those into the denominator reads as a
   player who defends far more than he does). **The three rows deliberately do
   not share a denominator**, so each cell prints its own n underneath; don't
-  read one row as the complement of another.
+  read one row as the complement of another. Beside every counter `hudCount`
+  also records `c.ev[key]` — one `{id, ok}` per hand the stat had a chance in —
+  and `openHudDrill` (app.js) turns each HUD cell into a button that lists those
+  hands split into counted / not-counted. Because of it **the preflop counters
+  are per-hand, not per-action**: the walk sets flags (`vol`, `aggPre`, …) and
+  the counter moves once, which is what stopped VPIP reading over 100% when a
+  villain limped and then called a raise. Keep it that way — a per-action
+  increment puts the drill-down at odds with the number above it.
+  Hand-filter roles come from `villainRoles` (app.js), which returns a **list**:
+  a limp-reraise answers to both `LRR` and `Limp`, the same way the range grid
+  counts it. Everything else is exclusive.
 - `vocab.js` — positions, tendency-tag ids, action tokens, sizes, card list.
   **`U<n>` numbers the UTG seats down from the table size** — an 8-handed ring
   is `SB BB STD U8 U7 HJ CO BN`, a 9-handed one adds U9. `ringFor` (app.js)

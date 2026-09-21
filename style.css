@@ -906,7 +906,11 @@ textarea.noteedit { margin-bottom: 0; }
 /* ===== HUD ===== */
 .hudgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
 .hudcell { background:#161a22; border:1px solid #232a36; border-radius:10px;
-  padding:7px 4px; text-align:center; }
+  padding:7px 4px; text-align:center; width:100%; font:inherit; cursor:pointer;
+  -webkit-appearance:none; appearance:none; }
+/* A cell with no hands behind it is still a number, just not a door. */
+.hudcell.dead { cursor:default; }
+.hudcell:not(.dead):active { background:#1d2230; }
 .hudcell b { display:block; font-size:19px; font-weight:700; color:#e8ecf3; line-height:1.1; }
 .hudcell span { display:block; font-size:10.5px; color:#8b94a5; margin-top:2px; }
 .hudcell i { display:block; font-size:9.5px; color:#5a6374; font-style:normal; margin-top:1px; }
@@ -920,6 +924,8 @@ textarea.noteedit { margin-bottom: 0; }
 .hudpos td { text-align:center; color:#d6dbe4; padding:3px 2px; min-width:34px; }
 .hudpos td i { display:block; font-size:9px; color:#5a6374; font-style:normal; }
 .hudpos td.thin { color:#6d7686; }
+.hudpos td.hudtap { cursor:pointer; }
+.hudpos td.hudtap:active { background:#1d2230; }
 .hudempty { color:#8b94a5; font-size:12px; line-height:1.5; }
 /* Row HUD: VPIP/PFR/3-bet on the name line, pushed to the right edge. */
 .lrow .t .oppname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -17,9 +17,15 @@ function hudCount(oppId, hands) {
     seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
-    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {},
+    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
+  /* Every stat also keeps the hands it was counted off — one entry per hand it
+     had a chance in, flagged with whether that chance was taken — so tapping a
+     number can show you the hands behind it instead of asking you to trust it.
+     Recorded beside the counter, never derived after the fact: the walk is the
+     only place that knows why a hand counted. */
+  const mark = (key, ok, id) => { (c.ev[key] = c.ev[key] || []).push({ id, ok: !!ok }); };
 
   for (const h of hands) {
     if (!h.imported) continue;
@@ -37,11 +43,16 @@ function hudCount(oppId, hands) {
     // as having faced their own raise.
     let sawRaise = false, sawThree = false, opener = null, lastAgg = null;
     let limped = false, limpThenRaise = false, limpFaced = false, limpFold = false;
+    /* Preflop counts are per HAND, not per action. A villain who limps and then
+       calls a raise took two voluntary actions in one seat — incrementing on
+       each pushed VPIP over 100% and made the drill-down disagree with the
+       number above it, so the walk sets flags and the counters move once. */
+    let vol = false, aggPre = false, opp3 = false, did3 = false, oppF3 = false, didF3 = false;
     for (const a of pre) {
       const mine = a.actor === me;
       if (mine) {
-        if (HUD_VOL.has(a.act)) c.vpip++;
-        if (HUD_AGG.has(a.act)) c.pfr++;
+        if (HUD_VOL.has(a.act)) vol = true;
+        if (HUD_AGG.has(a.act)) aggPre = true;
         if (a.act === "limp") limped = true;
         else if (limped && HUD_AGG.has(a.act)) limpThenRaise = true;
         /* Folding a limp only counts once someone actually raised it — a limp
@@ -49,8 +60,8 @@ function hudCount(oppId, hands) {
            into the denominator would read as a player who defends far more
            than he does. */
         else if (limpFaced && a.act === "fold") limpFold = true;
-        if (sawRaise && !sawThree) { c.opp3b++; if (a.act === "3bet") c.n3b++; }
-        if (opener === me && sawThree) { c.oppF3b++; if (a.act === "fold") c.f3b++; }
+        if (sawRaise && !sawThree) { opp3 = true; if (a.act === "3bet") did3 = true; }
+        if (opener === me && sawThree) { oppF3 = true; if (a.act === "fold") didF3 = true; }
       }
       if (HUD_AGG.has(a.act)) {
         if (limped && !mine) limpFaced = true;
@@ -59,6 +70,17 @@ function hudCount(oppId, hands) {
         else if (!sawRaise) { sawRaise = true; opener = a.actor; }
       }
     }
+    if (vol) c.vpip++;
+    if (aggPre) c.pfr++;
+    if (opp3) { c.opp3b++; if (did3) c.n3b++; }
+    if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
+    mark("vpip", vol, h.id);
+    mark("pfr", aggPre, h.id);
+    if (opp3) mark("three", did3, h.id);
+    if (oppF3) mark("f3b", didF3, h.id);
+    mark("limp|" + myPos, limped, h.id);
+    if (limped) mark("lrr|" + myPos, limpThenRaise, h.id);
+    if (limpFaced) mark("lfold|" + myPos, limpFold, h.id);
     if (limped) {
       c.limps++; pos(myPos).limp++;
       if (limpThenRaise) { c.lrr++; pos(myPos).lrr++; }
@@ -72,11 +94,13 @@ function hudCount(oppId, hands) {
     const sawFlop = flop.some((a) => a.actor === me);
     if (!sawFlop) continue;
 
+    let hAgg = 0, hCall = 0;
     for (const a of A) {
       if (a.actor !== me || a.street === "pre") continue;
-      if (HUD_BET.has(a.act)) c.agg++;
-      else if (a.act === "call") c.calls++;
+      if (HUD_BET.has(a.act)) { c.agg++; hAgg++; }
+      else if (a.act === "call") { c.calls++; hCall++; }
     }
+    if (hAgg || hCall) mark("af", hAgg > hCall, h.id);
 
     // Betting and folding into a cbet are three separate decisions each, so
     // both families are bucketed the same way. Out of position = first to act
@@ -92,9 +116,10 @@ function hudCount(oppId, hands) {
       const first = flop.find((a) => a.actor === me);
       const didCb = !!first && first.act === "bet";
       if (didCb) c["cb" + k]++;
+      mark("cb" + k, didCb, h.id);
       if (didCb && turn.length) {
         const t = turn.find((a) => a.actor === me);
-        if (t) { c.oppBar++; if (t.act === "bet") c.bar++; }
+        if (t) { c.oppBar++; if (t.act === "bet") c.bar++; mark("bar", t.act === "bet", h.id); }
       }
       continue;                             // can't fold to your own cbet
     }
@@ -105,6 +130,7 @@ function hudCount(oppId, hands) {
     const resp = flop.slice(cbIdx + 1).find((a) => a.actor === me);
     if (!resp) continue;
     c["oppFcb" + k]++;
+    mark("fcb" + k, resp.act === "fold", h.id);
     if (resp.act === "fold") { c["fcb" + k]++; continue; }
     if (resp.act !== "call") continue;
     // called the flop cbet — did they fold to the turn barrel?
@@ -113,6 +139,7 @@ function hudCount(oppId, hands) {
     const tResp = turn.slice(tBet + 1).find((a) => a.actor === me);
     if (!tResp) continue;
     c.oppFtb++;
+    mark("ftb", tResp.act === "fold", h.id);
     if (tResp.act === "fold") c.ftb++;
   }
   return c;
@@ -120,20 +147,20 @@ function hudCount(oppId, hands) {
 
 /* One row per stat: value as a percentage of its own opportunity count. */
 function hudStats(c) {
-  const r = (label, n, d, tip) => ({ label, n, d, tip, pct: d ? (100 * n) / d : null, thin: d < HUD_MIN });
+  const r = (key, label, n, d, tip) => ({ key, label, n, d, tip, pct: d ? (100 * n) / d : null, thin: d < HUD_MIN });
   return [
-    r("VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
-    r("PFR", c.pfr, c.seats, "Raised preflop"),
-    r("3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
-    r("Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
-    r("Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
-    r("Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
-    r("Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
-    r("Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
-    r("Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
-    r("Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
-    r("Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
-    r("Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
+    r("vpip", "VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
+    r("pfr", "PFR", c.pfr, c.seats, "Raised preflop"),
+    r("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
+    r("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
+    r("cbIp", "Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
+    r("cbOop", "Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
+    r("cbMw", "Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
+    r("fcbIp", "Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
+    r("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
+    r("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
+    r("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
+    r("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
   ];
 }
 
