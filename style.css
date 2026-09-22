@@ -1100,6 +1100,22 @@ textarea.noteedit { margin-bottom: 0; }
 .rpeek.szpk { width: min(360px, calc(100vw - 20px)); }
 .rpeek.szpk .sizechip { cursor: default; }
 
+/* A street heading that carries a checklist is a control: dotted underline so
+   it reads as one without turning the card header into a button bar. */
+/* font-family only, never the `font` shorthand: it lands after .rctitle and
+   would reset the size and weight the heading already sets. */
+.chktitle { background: none; border: 0; padding: 0; font-family: inherit; color: inherit;
+  line-height: inherit; cursor: pointer; border-bottom: 1px dotted var(--muted); }
+.chktag { background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+.chktag:hover, .chktitle:hover { color: var(--accent); }
+.chktag:hover { border-color: var(--accent); }
+/* The checklist is text, so it sizes to the words rather than to a chart. */
+.rpeek.chkpk { width: min(268px, calc(100vw - 20px)); }
+.chklist { margin: 0; padding: 0 0 0 19px; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.chklist li { margin: 2px 0; }
+.chklist ul { margin: 1px 0 3px; padding-left: 15px; color: var(--muted); list-style: disc; }
+
 /* Import receipt rows: the label takes the room, Remove stays a chip.
    .row > * is flex:1 and button.secondary is width:100%, which between them
    leave the label nothing — both children need their share named here, the

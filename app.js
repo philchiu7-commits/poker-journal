@@ -200,6 +200,50 @@ const LIVE_LAYOUT = [
   ] }] },
 ];
 
+/* Thinking checklists behind the street headings on the Online tab — what to
+   run through before acting, not reads about anyone. Phil's wording, kept
+   verbatim. Shown through the same floating panel as the range charts:
+   hovered on a desktop, tapped on a phone. Keyed by READ_LAYOUT title;
+   "Bluff catching" hangs off the River heading, where that decision lands. */
+const STREET_CHECKS = {
+  "Postflop general": { head: "Postflop", items: [
+    "What Accomplish?",
+    "# Street Hand - Good V Opp?",
+    "Range - Worst Offsuit",
+    "Squid Consideration",
+    "Sizings - Only size or made up",
+    "Opp Turn Tendency & F/T Bet Vol",
+  ] },
+  "Flop exploit": { head: "Flop", items: [
+    "Mini Coolers",
+    "Nut/Pair density",
+    "Need Safe Turn?",
+  ] },
+  "Turn exploit": { head: "Turn", items: [
+    ["Arriving turn Range", ["PP"]],
+    "Turn Interaction",
+    "Unblocking folds",
+    "Over/Under fold",
+  ] },
+  "River exploit": { head: "River", items: [
+    "Overfolded Turn?",
+    "V:B Ratio",
+    "Bluff Allowance",
+    "Blockers/Unblocker",
+    "Good Story?",
+    "Get to the correct pot size",
+  ] },
+  "Bluff catching": { head: "Bluff catching", items: [
+    "V:B Ratio",
+    "Arrive here with Bluffs?",
+    "Player Type",
+    "Motivation? - Squid",
+    "Likes to bluff draw complete?",
+    "Story and Sizing make sense?",
+    "Blockers",
+  ] },
+};
+
 /* Felt villain-pill engine tag — one-word read summary shown on each seated
    villain's card. Compound rules win over singles (higher signal), and inside
    singles the PILL_READS priority list decides. Returns null → no pill row. */
@@ -2670,7 +2714,13 @@ function renderOppReads(o) {
       }
       // the count on the card says where this player is already written down
       const n = subs.flatMap((sb) => sb.rows.flatMap(rowIds)).filter((id) => live(id) && isSet(id)).length;
-      return `<section class="readcat"><div class="rchead"><span class="rctitle">${esc(cat.title)}</span>` +
+      // a street heading with a checklist behind it is a control, not a label
+      const title = STREET_CHECKS[cat.title]
+        ? `<button class="rctitle chktitle" data-check="${esc(cat.title)}" title="Checklist">${esc(cat.title)}</button>`
+        : `<span class="rctitle">${esc(cat.title)}</span>`;
+      const bc = cat.title === "River exploit"
+        ? `<button class="chktag" data-check="Bluff catching" title="Bluff-catching checklist">Bluff catch</button>` : "";
+      return `<section class="readcat"><div class="rchead">${title}${bc}` +
         (n ? `<span class="rcn">${n}</span>` : "") + `</div>` +
         subs.map((sb) => `<div class="roleblk">` +
           (sb.label ? `<div class="rolehead">${esc(sb.label)}</div>` : "") +
@@ -2764,6 +2814,17 @@ function showSizeSplit(btn) {
   const o = oppById(curOppId);
   if (o) openPeek(btn, sizeSplitHTML(o, btn.dataset.szsplit), "szpk");
 }
+
+function checkHTML(key) {
+  const c = STREET_CHECKS[key];
+  if (!c) return "";
+  const li = (it) => {
+    const [t, subs] = Array.isArray(it) ? it : [it, null];
+    return `<li>${esc(t)}${subs ? `<ul>${subs.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</li>`;
+  };
+  return `<div class="rpkhead">${esc(c.head)}</div><ol class="chklist">${c.items.map(li).join("")}</ol>`;
+}
+function showCheck(btn) { openPeek(btn, checkHTML(btn.dataset.check), "chkpk"); }
 
 function renderOppSizing(o) {
   const auto = sizingAuto(o.id, HANDS);
@@ -5645,6 +5706,12 @@ function bindStatic() {
       renderOppReads(o);
       return;
     }
+    const ck = e.target.closest("[data-check]");
+    if (ck) {
+      e.preventDefault();
+      if (peekBtn === ck) hideRangePeek(); else showCheck(ck);
+      return;
+    }
     const rj = e.target.closest("[data-rjump]");
     if (rj) {
       e.preventDefault();
@@ -5676,17 +5743,17 @@ function bindStatic() {
   });
   $("od-tags").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump]");
-    if (b && b !== peekBtn) showRangePeek(b);
+    const b = e.target.closest("[data-rjump],[data-check]");
+    if (b && b !== peekBtn) (b.dataset.check ? showCheck : showRangePeek)(b);
   });
   $("od-tags").addEventListener("pointerout", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump]");
+    const b = e.target.closest("[data-rjump],[data-check]");
     if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
   });
   document.addEventListener("click", (e) => {
     if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")
-      && !e.target.closest("[data-szsplit]")) hideRangePeek();
+      && !e.target.closest("[data-check]") && !e.target.closest("[data-szsplit]")) hideRangePeek();
   }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
   window.addEventListener("scroll", () => hideRangePeek(), true);
