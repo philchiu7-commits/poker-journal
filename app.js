@@ -1880,8 +1880,9 @@ function oppOrderCmp(stats) {
 }
 
 /* The chips worth showing across the room, in one fixed order: exploits first
-   — what Phil does to him — then curated featured reads, falling back to the
-   strong (yes!/no!) reads so an uncurated opponent still carries signal.
+   — what Phil does to him — then the reads he featured himself. Nothing else:
+   a read only reaches the front page because he put it there (v161), so an
+   uncurated opponent shows his exploits and his name and no wall of chips.
    Shared by the list row, the Table tab and the detail front-page card. */
 function frontChipsHTML(o) {
   const exploitChips = (o.exploits || [])
@@ -1890,11 +1891,8 @@ function frontChipsHTML(o) {
       const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
       return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
     }).join("");
-  const featReadChips = featuredItems(o).filter((it) => it.type === "read")
+  const readChips = featuredItems(o).filter((it) => it.type === "read")
     .map((it) => featuredChip(o, it)).filter(Boolean).join("");
-  const readChips = featReadChips || Object.entries(oppReads(o))
-    .filter(([id, st]) => isStrongRead(st) && readIsShown(o, id) && !(o.hiddenReads || {})[id])
-    .map(([id, st]) => readChip(id, st)).join("");
   return exploitChips + readChips;
 }
 
@@ -2470,7 +2468,9 @@ async function createOpponent(name, group) {
 function renderOppReads(o) {
   $("od-card-preview").innerHTML = cardChipsHTML(o);
   const reads = oppReads(o);
-  const readBtn = (id, lbl, bubble, compact) => {
+  /* Controls only — the label is the row's job now, so every read in the tree
+     lines up in the same two columns. `compact` is the matrix cell. */
+  const readBtn = (id, lbl, compact) => {
     const st = reads[id];
     if (isPositionRead(id)) {
       const active = readIsActive(id, st);
@@ -2493,14 +2493,13 @@ function renderOppReads(o) {
     if (isChoiceRead(id)) {
       const opts = choiceOptions(id).map(([v, l]) =>
         `<button class="bubble${st === v ? " on schoice" : ""}" data-choice="${id}" data-val="${v}">${esc(l)}</button>`).join("");
-      return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">${opts}</div></div>`;
+      return `<div class="bubbles">${opts}</div>`;
     }
     if (isStatRead(id)) {
       const u = statUnit(id);
-      return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">` +
-        `<input class="statinput" type="number" inputmode="decimal" step="any" placeholder="–"` +
+      return `<div class="bubbles"><input class="statinput" type="number" inputmode="decimal" step="any" placeholder="–"` +
         ` value="${st == null ? "" : esc(String(st))}" data-statinput="${id}">` +
-        (u ? `<span class="statunit">${esc(u)}</span>` : "") + `</div></div>`;
+        (u ? `<span class="statunit">${esc(u)}</span>` : "") + `</div>`;
     }
     if (isTallyRead(id)) {
       const counts = st && typeof st === "object" ? st : {};
@@ -2510,10 +2509,9 @@ function renderOppReads(o) {
           `${esc(l)}${n ? `<span class="tallyn">${n}</span>` : ""}</button>`;
       }).join("");
       const clr = tallyLeader(counts) ? `<button class="bubble tallyclr" data-tallyclear="${id}" title="Clear">✕</button>` : "";
-      return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">${opts}${clr}</div></div>`;
+      return `<div class="bubbles">${opts}${clr}</div>`;
     }
-    const base = bubble ? "bubble" : "chip mini";
-    return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
+    return `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
   };
   const setReads = Object.entries(reads)
     .filter(([id, st]) => readIsShown(o, id))
@@ -2531,19 +2529,31 @@ function renderOppReads(o) {
     const live = (id) => { const t = TAG_BY_ID[id]; return t && !RETIRED_TAG_IDS.has(id) ? t : null; };
     const placed = new Set(READ_LAYOUT.flatMap((c) => c.subs.flatMap((sb) => sb.rows.flatMap((r) =>
       r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids))));
-    const cell = (id, compact) => { const t = live(id); return t ? readBtn(id, t.label, false, compact) : ""; };
+    /* Two shapes, never mixed inside a row: a read that carries its own
+       controls gets a label column and a control column, and a plain yes/no
+       read is a chip. One row holding both is what made the tree look ragged. */
+    const laid = (id) => isPositionRead(id) || isChoiceRead(id) || isStatRead(id) || isTallyRead(id);
+    const isSet = (id) => reads[id] !== undefined && readIsActive(id, reads[id]);
+    const rowIds = (r) => r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids;
     const rowHTML = (r) => {
       const mx = r.matrix && POS_MATRIX[r.matrix];
       if (mx) {
         const body = mx.rows.map(([rl, ids]) =>
-          `<span class="pmr">${esc(rl)}</span>` + ids.map((id) => cell(id, true) || `<span></span>`).join("")).join("");
+          `<span class="pmr">${esc(rl)}</span>` +
+          ids.map((id) => (live(id) ? readBtn(id, "", true) : "<span></span>")).join("")).join("");
         return `<div class="readsub"><span class="rslabel">${esc(r.matrix)}</span>` +
           `<div class="posmx"><span></span>` + mx.cols.map((c) => `<span class="pmh">${esc(c)}</span>`).join("") +
           `${body}</div></div>`;
       }
-      const chips = r.ids.map((id) => cell(id, false)).filter(Boolean).join("");
-      return `<div class="readsub">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}<div class="chiprow readwrap">` +
-        (chips || `<span class="chipnote">—</span>`) + `</div></div>`;
+      const ids = r.ids.filter(live);
+      const lines = ids.filter(laid).map((id) =>
+        `<span class="rllab${isSet(id) ? " on" : ""}">${esc(TAG_BY_ID[id].label)}</span>` +
+        `<div class="rlctl">${readBtn(id, TAG_BY_ID[id].label, true)}</div>`).join("");
+      const chips = ids.filter((id) => !laid(id)).map((id) => readBtn(id, TAG_BY_ID[id].label, false)).join("");
+      return `<div class="readsub">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
+        (lines ? `<div class="readlines">${lines}</div>` : "") +
+        (chips ? `<div class="chiprow readwrap">${chips}</div>` : "") +
+        (lines || chips ? "" : `<span class="chipnote">—</span>`) + `</div>`;
     };
     $("od-tags").innerHTML = READ_LAYOUT.map((cat) => {
       let subs = cat.subs;
@@ -2551,9 +2561,13 @@ function renderOppReads(o) {
         const extra = TENDENCY_TAGS.filter((t) => live(t.id) && !placed.has(t.id)).map((t) => t.id);
         if (extra.length) subs = [{ rows: subs[0].rows.concat([{ label: "Other", ids: extra }]) }];
       }
-      return `<div class="tagcat">${esc(cat.title)}</div>` + subs.map((sb) =>
-        (sb.label ? `<div class="tagrole">${esc(sb.label)}</div>` : "") +
-        `<div class="${sb.label ? "roleblock" : ""}">${sb.rows.map(rowHTML).join("")}</div>`).join("");
+      // the count on the card says where this player is already written down
+      const n = subs.flatMap((sb) => sb.rows.flatMap(rowIds)).filter((id) => live(id) && isSet(id)).length;
+      return `<section class="readcat"><div class="rchead"><span class="rctitle">${esc(cat.title)}</span>` +
+        (n ? `<span class="rcn">${n}</span>` : "") + `</div>` +
+        subs.map((sb) => `<div class="roleblk">` +
+          (sb.label ? `<div class="rolehead">${esc(sb.label)}</div>` : "") +
+          sb.rows.map(rowHTML).join("") + `</div>`).join("") + `</section>`;
     }).join("");
   }
 

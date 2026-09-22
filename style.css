@@ -182,8 +182,6 @@ button.danger {
 .chip.on.sred.sstrong,   .bubble.on.sred.sstrong   { background: var(--bad);  color: #170606; box-shadow: 0 0 0 2px #ff9a9a inset, 0 0 10px rgba(255,90,90,.5); }
 
 /* grouped reads: a label followed by F/T/R (etc.) bubble toggles */
-.readgroup { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
-.rglabel { font-size: 14px; color: var(--text); width: 96px; flex: none; }
 .bubbles { display: flex; flex-wrap: wrap; gap: 6px; }
 .bubble {
   min-width: 42px; padding: 7px 4px; text-align: center;
@@ -1029,8 +1027,35 @@ textarea.noteedit { margin-bottom: 0; }
 }
 
 /* reads picker: role heading (As PFR / As PFC) and its indented When Bet / When X rows */
-.tagrole { font-size: 12px; font-weight: 600; color: var(--text); margin: 8px 0 4px; }
-.roleblock { margin-left: 8px; padding-left: 8px; border-left: 2px solid var(--line); }
+/* ---- Reads picker ----
+   One card per street, the role inside it, then the reads: label in a shared
+   left column, controls in the right one, so a column of reads reads as a
+   column and not as a drift of chips. */
+.readcat { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(0, 0, 0, .16); overflow: hidden; }
+.rchead { display: flex; align-items: center; gap: 8px; padding: 7px 11px;
+  background: var(--panel2); border-bottom: 1px solid var(--line); }
+.rctitle { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; }
+.rcn { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--accent);
+  background: #1c2c47; border: 1px solid var(--accent); border-radius: 999px; padding: 0 7px; }
+/* The role block is the grid, and the pieces inside it fold into that grid
+   (display: contents) rather than each making a grid of its own — otherwise
+   every When-bet / When-x group picks its own label width and the column
+   wanders down the card. */
+.roleblk { display: grid; grid-template-columns: minmax(74px, max-content) 1fr;
+  column-gap: 10px; align-items: center; padding: 7px 11px 9px; }
+.roleblk + .roleblk { border-top: 1px solid var(--line); }
+.readcat .readsub, .readlines { display: contents; }
+.rolehead, .readcat .rslabel, .roleblk .chiprow, .roleblk .posmx, .roleblk .chipnote { grid-column: 1 / -1; }
+.rolehead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--accent); margin: 0; padding: 2px 0 4px; }
+.readcat .rslabel { margin: 0; padding: 8px 0 3px; }
+.roleblk .chiprow { padding: 5px 0; }
+.readlines > :nth-child(n+3) { border-top: 1px solid var(--line); }
+.rllab { font-size: 13px; line-height: 1.25; color: var(--muted); padding: 6px 0; }
+.rllab.on { color: var(--text); font-weight: 600; }
+.rlctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 0; }
+.rlctl .bubbles { gap: 6px; }
 
 /* HUD-stat reads: the number off his HUD, typed in. Tally reads: tap an option
    once per sighting; the count rides on the chip. */
