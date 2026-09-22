@@ -24,6 +24,9 @@ const SIZING_STEPS = [
   { id: "75",  label: "B75"  },
   { id: "100", label: "B100" },
   { id: "150", label: "B150" },
+  /* Not a rung: the top of the ladder is a shove. He is either all in or he is
+     bigger than any size worth naming, and both answer the same question. */
+  { id: "jam", label: "Jam" },
 ];
 /* Raises get their own rows rather than being folded in with the bets: a raise
    is a different decision from a bet, and the same rung means a different thing

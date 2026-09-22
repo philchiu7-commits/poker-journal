@@ -2753,6 +2753,7 @@ function renderOppSizing(o) {
          On the raise rows the rung is what he put in <i>on top of the call</i> as a share of the pot
          after it — against a pot-size bet, B33 is a min-raise, B50 a 2.5×, B66 a 3× and B100 a 4×.
          Those two rows hold all three streets; the label opens the split.
+         Jam counts every all-in whatever it cost, and anything over 150% of the pot lands there too.
          Tap a count for the hands.</div>` + head +
       [["bet", "V", "Bet · value"], ["bet", "B", "Bet · bluff"], ["raise", null, "Raise · flop, turn and river"]]
         .map(([m, k, t]) => `<div class="sizesub">${t}</div>` +
@@ -5481,8 +5482,14 @@ function bindStatic() {
     const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId];
     if (r && st && cell) {
       const what = r.mode === "raise" ? "Raise" : `${r.street} bet`;
+      /* The grid counts sizings and the list counts hands, so a hand he raised
+         twice on one street reads 2 over a single row. Say so rather than let
+         it look like a miscount. */
+      const many = cell.n > cell.ids.length
+        ? ` ${cell.n} times, off his shown cards — the grid counts each ${r.mode === "raise" ? "raise" : "bet"}, this list counts hands`
+        : ", off his shown cards";
       openReadProof(o, `${what} ${r.kind === "V" ? "value" : "bluff"} · ${st.label}`,
-        cell.ids, "he sized this way, off his shown cards");
+        cell.ids, "he sized this way" + many);
     }
   };
   $("od-reads-edit").onclick = () => {

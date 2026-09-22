@@ -390,7 +390,15 @@ function madeClass(hole, board) {
    62% bet reads as the 66% he was going for, not as its own category. Cuts are
    the midpoints between neighbouring rungs. */
 const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.71, "66"], [0.88, "75"], [1.25, "100"], [Infinity, "150"]];
-const sizeStepFor = (r) => (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[SZ_CUTS.length - 1])[1];
+/* Over the top rung there is no honest fraction left — a bet that big is a
+   shove in everything but name — so it lands in Jam rather than piling onto
+   B150. An actual jam takes that column whatever it cost: a min-jam is a B33
+   by the arithmetic, but that he had nothing behind is the fact worth
+   counting, and it changes what every later street can hold. */
+const SZ_JAM_OVER = 1.5;
+const sizeStepFor = (r, act) =>
+  act === "jam" || r > SZ_JAM_OVER ? "jam"
+    : (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[SZ_CUTS.length - 1])[1];
 /* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, split, n, skipped:{…}, why:{…} }
    Walks *his* postflop bets rather than the entries the money-walk managed to
    produce, so every bet that doesn't reach the grid can say which thing was
@@ -445,12 +453,13 @@ function sizingAuto(oppId, hands) {
         : isR
           ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
           : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
-      if (ratio === null) { miss(isR && e.potAfterCall > 0 ? "badRaise" : "noPot"); continue; }
+      // A jam needs no rung, so it is counted even when the fraction can't be.
+      if (ratio === null && a.act !== "jam") { miss(isR && e.potAfterCall > 0 ? "badRaise" : "noPot"); continue; }
       /* Raises land in one row per kind, the streets together. They are rare
          enough that three rows of them read as noise, so the street is kept
          alongside in `split` and shown on demand instead. */
       const rid = isR ? "raise-" + k.toLowerCase() : a.street + "-" + k.toLowerCase();
-      const step = sizeStepFor(ratio);
+      const step = sizeStepFor(ratio, a.act);
       bump(rows[rid] = rows[rid] || {}, step, h.id);
       if (isR) {
         const sp = (split[rid] = split[rid] || {});
