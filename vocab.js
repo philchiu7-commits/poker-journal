@@ -25,14 +25,26 @@ const SIZING_STEPS = [
   { id: "100", label: "B100" },
   { id: "150", label: "B150" },
 ];
+/* Raises get their own rows rather than being folded in with the bets: a raise
+   is a different decision from a bet, and the same rung means a different thing
+   on it. The three streets are combined into one value row and one bluff row —
+   a villain raises a fraction as often as he bets, and split three ways every
+   cell reads 0 or 1; the per-street split is still kept and sits behind the
+   row label. The ladder is shared on purpose — a raise is priced as the share
+   of the pot he added *on top of the call*, the convention that makes B33 a
+   min-raise, B50 a 2.5x, B66 a 3x and B100 a 4x against a pot-size bet.
+   Row ids are stable: the bet rows keep theirs. */
 const SIZING_ROWS = [
-  { id: "flop-v",  street: "Flop",  kind: "V" },
-  { id: "turn-v",  street: "Turn",  kind: "V" },
-  { id: "river-v", street: "River", kind: "V" },
-  { id: "flop-b",  street: "Flop",  kind: "B" },
-  { id: "turn-b",  street: "Turn",  kind: "B" },
-  { id: "river-b", street: "River", kind: "B" },
+  { id: "flop-v",  street: "Flop",  kind: "V", mode: "bet" },
+  { id: "turn-v",  street: "Turn",  kind: "V", mode: "bet" },
+  { id: "river-v", street: "River", kind: "V", mode: "bet" },
+  { id: "flop-b",  street: "Flop",  kind: "B", mode: "bet" },
+  { id: "turn-b",  street: "Turn",  kind: "B", mode: "bet" },
+  { id: "river-b", street: "River", kind: "B", mode: "bet" },
+  { id: "raise-v", label: "Value",  kind: "V", mode: "raise" },
+  { id: "raise-b", label: "Bluff",  kind: "B", mode: "raise" },
 ];
+const SIZING_RAISE_STREETS = ["flop", "turn", "river"];
 const SIZING_STEP_BY_ID = Object.fromEntries(SIZING_STEPS.map((x) => [x.id, x]));
 const SIZING_ROW_BY_ID = Object.fromEntries(SIZING_ROWS.map((r) => [r.id, r]));
 

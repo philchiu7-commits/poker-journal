@@ -253,6 +253,11 @@ function sizeMult(s, level) {
   return isFinite(v) && v > 1 ? v * level : null;
 }
 const SZ_AGG = new Set(["bet", "raise", "3bet", "4bet", "5bet", "jam"]);
+/* Which tokens are a raise when the money can't be walked — a size written down
+   as "60%" carries no pot to compare against, so the token is all there is. A
+   jam is not on the list: whether it was a bet or a raise depends on what it
+   faced, which is exactly what this path doesn't know. */
+const SZ_RAISE_TOK = new Set(["raise", "3bet", "4bet", "5bet"]);
 /* Past this multiple of the pot, a non-jam bet is a data error rather than a
    read. Real overbets run to about 2x; nothing Phil has logged sits between
    3x and the 8x where the corrupted ones start. */
@@ -316,7 +321,9 @@ function potWalk(h) {
       if (SZ_AGG.has(a.act)) {
         const v = sizeAmount(a.size) ?? sizeMult(a.size, level);
         if (v === null) return out;                   // unknown amount — stop here
-        const p = base + street(), bet = v - (inv[a.actor] || 0);
+        const had = inv[a.actor] || 0;
+        const p = base + street(), bet = v - had;
+        const toCall = Math.max(0, level - had);      // >0 means he is raising, not betting
         /* An amount that can't be true is worse than a missing one, so it gets
            the same treatment. The DX screen-reader loses the decimal point now
            and then — 19.72K comes back as 1972K — and the tell is a bet many
@@ -327,7 +334,11 @@ function potWalk(h) {
           if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
           return out;
         }
-        if (st !== "pre") out.push({ a, street: st, pot: p, bet });
+        /* A raise is priced against the pot as it would stand once he calls,
+           counting only what he put in on top of that call — the convention
+           that keeps B33/B50/B66/B100 meaning min-raise / 2.5x / 3x / 4x. A
+           bet is the same formula with nothing to call. */
+        if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0, potAfterCall: p + toCall, over: v - level });
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
@@ -346,7 +357,7 @@ function betsVsPot(h) {
   for (const a of h.actions || []) {
     if (!a || !SZ_BOARD_N[a.street] || !SZ_AGG.has(a.act)) continue;
     const r = sizePct(a.size);
-    if (r !== null) out.push({ a, street: a.street, pot: null, bet: null, ratio: r });
+    if (r !== null) out.push({ a, street: a.street, pot: null, bet: null, ratio: r, raise: SZ_RAISE_TOK.has(a.act) });
   }
   return out;
 }
@@ -380,14 +391,19 @@ function madeClass(hole, board) {
    the midpoints between neighbouring rungs. */
 const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.71, "66"], [0.88, "75"], [1.25, "100"], [Infinity, "150"]];
 const sizeStepFor = (r) => (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[SZ_CUTS.length - 1])[1];
-/* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, n, skipped:{…}, why:{…} }
+/* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, split, n, skipped:{…}, why:{…} }
    Walks *his* postflop bets rather than the entries the money-walk managed to
    produce, so every bet that doesn't reach the grid can say which thing was
    missing and name the hand. "Some of my hands aren't in here" should be a
    question the panel answers, not one Phil has to bring to me. */
 function sizingAuto(oppId, hands) {
-  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount"];
-  const rows = {}, skipped = {}, why = {};
+  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount", "badRaise"];
+  const rows = {}, split = {}, skipped = {}, why = {};
+  const bump = (cell, step, id) => {
+    const c = (cell[step] = cell[step] || { n: 0, ids: [] });
+    c.n++;
+    if (!c.ids.includes(id)) c.ids.push(id);
+  };
   for (const k of K) { skipped[k] = 0; why[k] = []; }
   let n = 0;
   for (const h of hands) {
@@ -420,18 +436,28 @@ function sizingAuto(oppId, hands) {
         else miss("noPot");
         continue;
       }
+      /* A raise on record for no more than the bet it faced is a mislabelled
+         call, not a sizing: the increment is zero or negative and there is no
+         honest rung for it. Say so rather than bucket it at the bottom. */
+      const isR = !!e.raise;
       const ratio = e.ratio !== null && e.ratio !== undefined
         ? e.ratio
-        : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
-      if (ratio === null) { miss("noPot"); continue; }
-      const rid = a.street + "-" + k.toLowerCase();
-      const cell = (rows[rid] = rows[rid] || {});
+        : isR
+          ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
+          : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
+      if (ratio === null) { miss(isR && e.potAfterCall > 0 ? "badRaise" : "noPot"); continue; }
+      /* Raises land in one row per kind, the streets together. They are rare
+         enough that three rows of them read as noise, so the street is kept
+         alongside in `split` and shown on demand instead. */
+      const rid = isR ? "raise-" + k.toLowerCase() : a.street + "-" + k.toLowerCase();
       const step = sizeStepFor(ratio);
-      (cell[step] = cell[step] || { n: 0, ids: [] });
-      cell[step].n++;
-      if (!cell[step].ids.includes(h.id)) cell[step].ids.push(h.id);
+      bump(rows[rid] = rows[rid] || {}, step, h.id);
+      if (isR) {
+        const sp = (split[rid] = split[rid] || {});
+        bump(sp[a.street] = sp[a.street] || {}, step, h.id);
+      }
       n++;
     }
   }
-  return { rows, n, skipped, why };
+  return { rows, split, n, skipped, why };
 }

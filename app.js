@@ -1546,6 +1546,11 @@ function showRangePeek(btn) {
   const o = oppById(curOppId);
   if (!o) return;
   const [sq, sit, pg] = btn.dataset.rjump.split("|");
+  openPeek(btn, rangePeekHTML(o, sq, sit, pg), "");
+}
+/* One floating panel, whatever is hovered: the preflop read's chart, or the
+   streets behind a combined raise row. Same shell, same dismissal. */
+function openPeek(btn, html, cls) {
   let p = $("rpeek");
   if (!p) {
     p = document.createElement("div");
@@ -1560,10 +1565,10 @@ function showRangePeek(btn) {
     });
     document.body.appendChild(p);
   }
-  p.innerHTML = rangePeekHTML(o, sq, sit, pg);
-  p.classList.add("on");
+  p.innerHTML = html;
+  p.className = "rpeek on" + (cls ? " " + cls : "");
   peekBtn = btn;
-  /* Fixed to the badge, clamped to the screen. The grid is square and nearly
+  /* Fixed to the thing hovered, clamped to the screen. The grid is square and nearly
      as wide as a phone, so "below the badge" is usually a lie — flip it above
      whenever the room underneath cannot hold it. */
   const r = btn.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
@@ -2678,8 +2683,36 @@ const SZ_SKIPS = [
   ["noAmount", "no amount was written down"],
   ["noPot", "the pot can't be rebuilt — no blinds, or an earlier amount missing"],
   ["badAmount", "the amount can't be true — over 3× the pot"],
+  ["badRaise", "a raise on record for no more than the bet it faced"],
 ];
 const SZ_SKIP_BY_ID = Object.fromEntries(SZ_SKIPS.map((x) => [x[0], x[1]]));
+
+/* The three streets behind a combined raise row, in the same ladder and the
+   same colours as the row it came from — a table rather than three more rows,
+   because on this data most of its cells are empty and emptiness reads better
+   in a panel you asked for than in the grid you always see. */
+function sizeSplitHTML(o, rowId) {
+  const r = SIZING_ROW_BY_ID[rowId];
+  const split = (sizingAuto(o.id, HANDS).split || {})[rowId] || {};
+  const row = (st) => {
+    const cell = split[st] || {};
+    const tot = SIZING_STEPS.reduce((n, x) => n + ((cell[x.id] || {}).n || 0), 0);
+    const top = tot ? Math.max(...SIZING_STEPS.map((x) => (cell[x.id] || {}).n || 0)) : 0;
+    return `<div class="sizerow"><div class="sizelab">${st[0].toUpperCase() + st.slice(1)}${tot ? `<span class="sizen">${tot}</span>` : ""}</div>
+      <div class="sizechips">${SIZING_STEPS.map((x) => {
+        const n = (cell[x.id] || {}).n || 0;
+        return `<span class="sizechip auto${n ? " has" : ""}${n && n === top ? " top" : ""}">${n || "·"}</span>`;
+      }).join("")}</div></div>`;
+  };
+  return `<div class="rpkhead">Raise ${r.kind === "V" ? "value" : "bluff"} · by street</div>
+    <div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
+    SIZING_STEPS.map((x) => `<span class="sizecol">${x.label}</span>`).join("") + `</div></div>` +
+    SIZING_RAISE_STREETS.map(row).join("");
+}
+function showSizeSplit(btn) {
+  const o = oppById(curOppId);
+  if (o) openPeek(btn, sizeSplitHTML(o, btn.dataset.szsplit), "szpk");
+}
 
 function renderOppSizing(o) {
   const auto = sizingAuto(o.id, HANDS);
@@ -2697,7 +2730,13 @@ function renderOppSizing(o) {
           : `${st.label} — nothing on record`}"
         >${n || "·"}</button>`;
     }).join("");
-    return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
+    /* A combined raise row hides three streets; the label is the way back to
+       them — hovered on a desktop, tapped on a phone, where the cells below it
+       are already spoken for by the hand list. */
+    const lab = r.mode === "raise"
+      ? `<button class="szsplit" data-szsplit="${r.id}" title="Flop, turn and river separately">${r.label}</button>`
+      : r.street;
+    return `<div class="sizerow"><div class="sizelab">${lab}${total ? `<span class="sizen">${total}</span>` : ""}</div>
       <div class="sizechips">${chips}</div></div>`;
   };
   /* Every bet of his that didn't make it, and the one thing that was missing.
@@ -2708,13 +2747,16 @@ function renderOppSizing(o) {
     `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
   const skipHTML = skips ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
   $("od-sizing").innerHTML = (auto.n
-    ? `<div class="sizenote">From ${auto.n} bet${auto.n === 1 ? "" : "s"} on record. Value is two pair or
-         better, or top or second pair; everything under that counts as a bluff, draws included.
-         Bluffs he never had to show don't appear, so read the Bluff rows as a floor.
+    ? `<div class="sizenote">From ${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record.
+         Value is two pair or better, or top or second pair; everything under that counts as a bluff,
+         draws included. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
+         On the raise rows the rung is what he put in <i>on top of the call</i> as a share of the pot
+         after it — against a pot-size bet, B33 is a min-raise, B50 a 2.5×, B66 a 3× and B100 a 4×.
+         Those two rows hold all three streets; the label opens the split.
          Tap a count for the hands.</div>` + head +
-      ["V", "B"].map((k) =>
-        `<div class="sizesub">${k === "V" ? "Value" : "Bluff"}</div>` +
-        SIZING_ROWS.filter((r) => r.kind === k).map(autoRow).join("")).join("")
+      [["bet", "V", "Bet · value"], ["bet", "B", "Bet · bluff"], ["raise", null, "Raise · flop, turn and river"]]
+        .map(([m, k, t]) => `<div class="sizesub">${t}</div>` +
+          SIZING_ROWS.filter((r) => r.mode === m && (!k || r.kind === k)).map(autoRow).join("")).join("")
     : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
          and the bet amounts are both on record.</div>`) + skipHTML;
 }
@@ -5424,6 +5466,12 @@ function bindStatic() {
         "these hands have a bet of his the grid couldn't price");
       return;
     }
+    const sp = e.target.closest("[data-szsplit]");
+    if (sp) {
+      // No hover on a phone, so the tap is the hover.
+      if (peekBtn === sp) hideRangePeek(); else showSizeSplit(sp);
+      return;
+    }
     const az = e.target.closest("[data-szauto]");
     if (!az) return;
     const o = oppById(curOppId);
@@ -5432,8 +5480,9 @@ function bindStatic() {
     const r = SIZING_ROW_BY_ID[rowId], st = SIZING_STEP_BY_ID[stepId];
     const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId];
     if (r && st && cell) {
-      openReadProof(o, `${r.street} ${r.kind === "V" ? "value" : "bluff"} · ${st.label}`, cell.ids,
-        "he sized this way, off his shown cards");
+      const what = r.mode === "raise" ? "Raise" : `${r.street} bet`;
+      openReadProof(o, `${what} ${r.kind === "V" ? "value" : "bluff"} · ${st.label}`,
+        cell.ids, "he sized this way, off his shown cards");
     }
   };
   $("od-reads-edit").onclick = () => {
@@ -5494,6 +5543,16 @@ function bindStatic() {
     await dbPut("opponents", o);
     renderOppReads(o);
   };
+  $("od-sizing").addEventListener("pointerover", (e) => {
+    if (!matchMedia("(hover: hover)").matches) return;
+    const b = e.target.closest("[data-szsplit]");
+    if (b && b !== peekBtn) showSizeSplit(b);
+  });
+  $("od-sizing").addEventListener("pointerout", (e) => {
+    if (!matchMedia("(hover: hover)").matches) return;
+    const b = e.target.closest("[data-szsplit]");
+    if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
+  });
   $("od-tags").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
     const b = e.target.closest("[data-rjump]");
@@ -5505,7 +5564,8 @@ function bindStatic() {
     if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
   });
   document.addEventListener("click", (e) => {
-    if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")) hideRangePeek();
+    if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")
+      && !e.target.closest("[data-szsplit]")) hideRangePeek();
   }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
   window.addEventListener("scroll", () => hideRangePeek(), true);
