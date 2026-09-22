@@ -55,6 +55,22 @@ const choiceLabel = (id, v) => (choiceOptions(id).find((o) => o[0] === v) || [v,
 const POSITION_READS = new Set(
   (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "position").map((t) => t.id));
 const isPositionRead = (id) => POSITION_READS.has(id);
+const TALLY_READS = new Set(
+  (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "tally").map((t) => t.id));
+const isTallyRead = (id) => TALLY_READS.has(id);
+/* A tally counts taps per option; the most-tapped option is the read. */
+const tallyLeader = (counts) => {
+  if (!counts || typeof counts !== "object") return null;
+  let best = null;
+  for (const [k, n] of Object.entries(counts)) if (n > 0 && (best === null || n > counts[best])) best = k;
+  return best;
+};
+/* `stat` reads hold the number off his HUD — a percentage, or a raw factor
+   where unit is "". 0 is a real reading, so it counts as set. */
+const STAT_READS = new Set(
+  (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "stat").map((t) => t.id));
+const isStatRead = (id) => STAT_READS.has(id);
+const statUnit = (id) => TAG_BY_ID[id]?.unit ?? "%";
 const STATE_CLASS = {
   yes: "sgreen", "yes!": "sgreen sstrong",
   no: "sred", "no!": "sred sstrong",
@@ -82,12 +98,22 @@ const readChip = (id, state) => {
   if (isPositionRead(id)) {
     return `<span class="chip mini on sgreen" title="${esc(lbl)}: ${esc(state)}">${esc(lbl)} · ${esc(state)}</span>`;
   }
+  if (isStatRead(id)) {
+    const v = `${esc(String(state))}${statUnit(id)}`;
+    return `<span class="chip mini on schoice" title="${esc(lbl)}: ${v}">${esc(lbl)} · ${v}</span>`;
+  }
+  if (isTallyRead(id)) {
+    const used = choiceOptions(id).filter(([v]) => (state && state[v]) > 0);
+    if (!used.length) return "";
+    const detail = used.map(([v, l]) => `${l} (${state[v]})`).join(", ");
+    return `<span class="chip mini on schoice" title="${esc(lbl)}: ${esc(detail)}">${esc(lbl)} · ${esc(used.map(([, l]) => l).join(" "))}</span>`;
+  }
   return `<span class="chip mini on ${STATE_CLASS[state] || ""}">${esc(lbl)}</span>`;
 };
 
 /* How the picker is organised: street -> role (As PFR / As PFC) -> When Bet / When X.
    Display only: ids, saved reads and the exploit rules never see this. A read
-   listed nowhere lands in Unsorted > Other, so nothing can go missing. Edit the
+   listed nowhere lands in Uncategorized > Other, so nothing can go missing. Edit the
    id lists freely to move a read; { matrix } rows use POS_MATRIX. */
 const wb = (bet, x) => [{ label: "When Bet", ids: bet }, { label: "When X", ids: x }];
 const READ_LAYOUT = [
@@ -99,19 +125,22 @@ const READ_LAYOUT = [
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
     { label: "Style", ids: ["preflop-style", "limp-scale-ws", "limp-scale-ns"] },
   ] }] },
-  { title: "Flop", subs: [
-    { label: "As PFR", rows: wb(["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "have-b3b-v-f", "have-b3b-b-f", "bluff-till-f"], ["bluff-xt-f"]) },
-    { label: "As PFC", rows: wb(["pfc-b-light-mwp", "lead-limped", "ld-draws", "ld-tp", "ld-2p", "bluff-raise-f", "raise-nuts-f"], ["station-f", "floats-wide", "check-oop-limped"]) },
+  { title: "Postflop general", subs: [
+    { label: "MWP limp", rows: [{ ids: ["mwl-oop-probe", "mwl-xr", "mwl-ip-stab"] }] },
   ] },
-  { title: "Turn", subs: [
-    { label: "As PFR", rows: wb(["barrels-off", "bluff-till-t"], ["bluff-xt-t"]) },
-    { label: "As PFC", rows: wb(["bluff-raise-t", "raise-nuts-t"], ["station-t"]) },
+  { title: "Flop exploit", subs: [
+    { label: "As PFR", rows: wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-freq-pfr"]) },
+    { label: "As PFC", rows: [{ ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] }] },
   ] },
-  { title: "River", subs: [
-    { label: "As PFR", rows: wb(["bluffs-rivers", "protected-block", "bluff-till-r"], ["bluff-xt-r"]) },
-    { label: "As PFC", rows: wb(["bluff-raise-r", "raise-nuts-r"], ["station-r"]) },
+  { title: "Turn exploit", subs: [
+    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr"]) },
+    { label: "As PFC", rows: [{ ids: ["floats-wide", "t-bet-vol", "t-call-style"] }] },
   ] },
-  { title: "Unsorted", subs: [{ rows: [
+  { title: "River exploit", subs: [
+    { label: "As PFR", rows: wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]) },
+    { label: "As PFC", rows: [{ ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands"] }] },
+  ] },
+  { title: "Uncategorized", subs: [{ rows: [
     { label: "Range shape", ids: ["merged", "polar", "bad-polar", "sp-dis-board", "oop-protect", "bet-merged-mwp"] },
     { label: "Preflop sizing", ids: ["preflop-sizing", "3bet-sizing"] },
     { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
@@ -1822,6 +1851,8 @@ function featuredItems(o) {
 const readIsActive = (id, state) => {
   if (state == null || state === "") return false;
   if (isPositionRead(id) || isChoiceRead(id)) return !!String(state).trim();
+  if (isStatRead(id)) return !Number.isNaN(Number(state));
+  if (isTallyRead(id)) return !!tallyLeader(state);
   return true;
 };
 /* Retired reads are gone from the app everywhere — panel, featured chips, card
@@ -2465,6 +2496,23 @@ function renderOppReads(o) {
         `<button class="bubble${st === v ? " on schoice" : ""}" data-choice="${id}" data-val="${v}">${esc(l)}</button>`).join("");
       return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">${opts}</div></div>`;
     }
+    if (isStatRead(id)) {
+      const u = statUnit(id);
+      return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">` +
+        `<input class="statinput" type="number" inputmode="decimal" step="any" placeholder="–"` +
+        ` value="${st == null ? "" : esc(String(st))}" data-statinput="${id}">` +
+        (u ? `<span class="statunit">${esc(u)}</span>` : "") + `</div></div>`;
+    }
+    if (isTallyRead(id)) {
+      const counts = st && typeof st === "object" ? st : {};
+      const opts = choiceOptions(id).map(([v, l]) => {
+        const n = counts[v] || 0;
+        return `<button class="bubble${n ? " on schoice" : ""}" data-tally="${id}" data-val="${v}">` +
+          `${esc(l)}${n ? `<span class="tallyn">${n}</span>` : ""}</button>`;
+      }).join("");
+      const clr = tallyLeader(counts) ? `<button class="bubble tallyclr" data-tallyclear="${id}" title="Clear">✕</button>` : "";
+      return `<div class="readgroup"><span class="rglabel">${esc(lbl)}</span><div class="bubbles">${opts}${clr}</div></div>`;
+    }
     const base = bubble ? "bubble" : "chip mini";
     return `<button class="${base}${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
   };
@@ -2495,12 +2543,12 @@ function renderOppReads(o) {
           `${body}</div></div>`;
       }
       const chips = r.ids.map((id) => cell(id, false)).filter(Boolean).join("");
-      return `<div class="readsub"><span class="rslabel">${esc(r.label)}</span><div class="chiprow readwrap">` +
+      return `<div class="readsub">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}<div class="chiprow readwrap">` +
         (chips || `<span class="chipnote">—</span>`) + `</div></div>`;
     };
     $("od-tags").innerHTML = READ_LAYOUT.map((cat) => {
       let subs = cat.subs;
-      if (cat.title === "Unsorted") {
+      if (cat.title === "Uncategorized") {
         const extra = TENDENCY_TAGS.filter((t) => live(t.id) && !placed.has(t.id)).map((t) => t.id);
         if (extra.length) subs = [{ rows: subs[0].rows.concat([{ label: "Other", ids: extra }]) }];
       }
@@ -5405,6 +5453,27 @@ function bindStatic() {
       renderOppReads(o);
       return;
     }
+    const tclr = e.target.closest("[data-tallyclear]");
+    if (tclr) {
+      const o = oppById(curOppId);
+      delete oppReads(o)[tclr.dataset.tallyclear];
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppReads(o);
+      return;
+    }
+    const tl = e.target.closest("[data-tally]");
+    if (tl) {                       // tally read: each tap is one more sighting
+      const o = oppById(curOppId);
+      const reads = oppReads(o);
+      const { tally: id, val } = tl.dataset;
+      const counts = reads[id] && typeof reads[id] === "object" ? reads[id] : (reads[id] = {});
+      counts[val] = (counts[val] || 0) + 1;
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppReads(o);
+      return;
+    }
     const rj = e.target.closest("[data-rjump]");
     if (rj) {
       e.preventDefault();
@@ -5429,6 +5498,17 @@ function bindStatic() {
     renderOppReads(o);
   };
   $("od-tags").addEventListener("change", async (e) => {
+    const si = e.target.closest("[data-statinput]");
+    if (si) {
+      const o = oppById(curOppId);
+      const id = si.dataset.statinput, raw = si.value.trim();
+      if (raw === "" || Number.isNaN(Number(raw))) delete oppReads(o)[id];
+      else oppReads(o)[id] = Number(raw);
+      o.updatedAt = Date.now();
+      await dbPut("opponents", o);
+      renderOppReads(o);
+      return;
+    }
     const ps = e.target.closest("[data-posselect]");
     if (!ps) return;
     const o = oppById(curOppId);

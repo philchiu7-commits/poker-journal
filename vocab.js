@@ -126,7 +126,7 @@ const TENDENCY_TAGS = [
   // postflop — cbet / float (merged: over-cbet no = overfolds; floats-wide no = fit-or-fold)
   { id: "pfr-oop-cbet",         cat: "postflop", label: "PFR OOP cbet" },
   { id: "over-cbet",            cat: "postflop", label: "Over cbet" },
-  { id: "floats-wide",          cat: "postflop", label: "Floats wide" },
+  { id: "floats-wide",          cat: "postflop", label: "Flop overfloat" },
   { id: "cb-light-mwp",         cat: "postflop", label: "Cb Light MWP" },
   { id: "pfc-b-light-mwp",      cat: "postflop", label: "PFC B Light MWP" },
   // postflop — barrel / lead / limped-pot behaviour
@@ -147,6 +147,41 @@ const TENDENCY_TAGS = [
   { id: "inelastic-sizing",     cat: "sizing",   label: "Inelastic sizing" },
   // live
   { id: "tilts",                cat: "live",     label: "Tilts after losses" },
+
+  /* Phil's postflop exploit tree, 2026-09-22 — one read per slot in the
+     Postflop general / Flop / Turn / River outline. Placement is READ_LAYOUT.
+     `stat` reads hold the number off his HUD, not a 0-100 feel. */
+  // postflop general — multiway limped pot
+  { id: "mwl-oop-probe",  cat: "postflop", label: "OOP probe" },
+  { id: "mwl-xr",         cat: "postflop", label: "xR",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
+  { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
+  // flop
+  { id: "f-cbet-freq",    cat: "postflop", label: "Cbet freq",       kind: "stat" },
+  { id: "f-fold-to-xr",   cat: "postflop", label: "Fold to xR",      kind: "stat" },
+  { id: "f-oop-x-range",  cat: "postflop", label: "OOP X range?" },
+  { id: "f-xr-freq-pfr",  cat: "postflop", label: "xR freq",         kind: "stat" },
+  { id: "f-xr-freq-pfc",  cat: "postflop", label: "xR freq",         kind: "choice", options: [["under", "Under"], ["over", "Over"]] },
+  { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
+  // turn
+  { id: "t-barrel2-freq", cat: "postflop", label: "2nd barrel freq", kind: "stat" },
+  { id: "t-bluff-hands",  cat: "postflop", label: "Bluffs",          kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"]] },
+  { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
+  { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
+  { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
+  { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["wide", "Wide"]] },
+  // river
+  { id: "r-bluff-lines",  cat: "postflop", label: "Bluff lines (can?)", kind: "tally", options: [["bbb", "BBB"], ["bxb", "BXB"], ["xbb", "XBB"], ["xxb", "XXB"]] },
+  { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands",     kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
+  { id: "r-af",           cat: "postflop", label: "River AF",        kind: "stat", unit: "" },
+  { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
+  { id: "r-traps",        cat: "postflop", label: "Have traps?" },
+  { id: "punchbag-r-pfr", cat: "postflop", label: "Punch bag" },
+  { id: "r-fold-bal",     cat: "postflop", label: "Fold balance",    kind: "choice", options: [["overfold", "Overfold"], ["underfold", "Underfold"]] },
+  { id: "r-to-sizing",    cat: "postflop", label: "To sizing",       kind: "choice", options: [["elastic", "Elastic"], ["inelastic", "Inelastic"]] },
+  { id: "r-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
+  { id: "r-can-raise",    cat: "postflop", label: "Can raise?",      kind: "tally",  options: [["bluff", "Bluff"], ["thin", "Thin"]] },
+  { id: "r-call-range",   cat: "postflop", label: "Call range",      kind: "choice", options: [["wide", "Wide"], ["tight", "Tight"]] },
+  { id: "r-call-hands",   cat: "postflop", label: "Bluff catch",     kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "timing-tells",         cat: "live",     label: "Timing tells" },
   { id: "snap-call-weak",       cat: "live",     label: "Snap-call = weak" },
   { id: "talks-when-strong",    cat: "live",     label: "Chatty = strong" },

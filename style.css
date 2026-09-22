@@ -184,7 +184,7 @@ button.danger {
 /* grouped reads: a label followed by F/T/R (etc.) bubble toggles */
 .readgroup { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
 .rglabel { font-size: 14px; color: var(--text); width: 96px; flex: none; }
-.bubbles { display: flex; gap: 6px; }
+.bubbles { display: flex; flex-wrap: wrap; gap: 6px; }
 .bubble {
   min-width: 42px; padding: 7px 4px; text-align: center;
   background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
@@ -1027,3 +1027,16 @@ textarea.noteedit { margin-bottom: 0; }
 /* reads picker: role heading (As PFR / As PFC) and its indented When Bet / When X rows */
 .tagrole { font-size: 12px; font-weight: 600; color: var(--text); margin: 8px 0 4px; }
 .roleblock { margin-left: 8px; padding-left: 8px; border-left: 2px solid var(--line); }
+
+/* HUD-stat reads: the number off his HUD, typed in. Tally reads: tap an option
+   once per sighting; the count rides on the chip. */
+.statinput {
+  width: 74px; padding: 7px 9px; font: inherit; font-size: 14px; font-weight: 700;
+  color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 9px; text-align: center; -moz-appearance: textfield;
+}
+.statinput::-webkit-outer-spin-button, .statinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.statinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.statunit { font-size: 13px; color: var(--muted); }
+.tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
+.bubble.tallyclr { padding-left: 9px; padding-right: 9px; color: var(--muted); }
