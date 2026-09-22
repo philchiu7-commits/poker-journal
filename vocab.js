@@ -150,6 +150,7 @@ const TENDENCY_TAGS = [
   { id: "lead-limped",          cat: "postflop", label: "Lead limped" },
   { id: "sp-dis-board",         cat: "postflop", label: "SP dis board" },
   { id: "oop-protect",          cat: "postflop", label: "OOP protect" },
+  { id: "protect-disadv-board", cat: "postflop", label: "Protect DisAdv. Board" },
   { id: "check-oop-limped",     cat: "postflop", label: "Check OOP limped" },
   { id: "bet-merged-mwp",       cat: "postflop", label: "Bet merged mwp" },
   { id: "protected-block",      cat: "postflop", label: "Protected block" }, // yes = medium/protection, no = polar (nuts or bluff)
@@ -168,7 +169,7 @@ const TENDENCY_TAGS = [
      Postflop general / Flop / Turn / River outline. Placement is READ_LAYOUT.
      `stat` reads hold the number off his HUD, not a 0-100 feel. */
   // postflop general — multiway limped pot
-  { id: "mwl-oop-probe",  cat: "postflop", label: "OOP probe" },
+  { id: "mwl-oop-probe",  cat: "postflop", label: "Probe OOP",       kind: "tally",  options: [["rangex", "RangeX"], ["draw", "Draw"], ["merge", "Merge"], ["topp", "TopP+"]] },
   { id: "mwl-xr",         cat: "postflop", label: "xR",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
   { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
   // flop

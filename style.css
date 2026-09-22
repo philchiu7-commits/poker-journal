@@ -187,7 +187,7 @@ button.danger {
 /* grouped reads: a label followed by F/T/R (etc.) bubble toggles */
 .bubbles { display: flex; flex-wrap: wrap; gap: 6px; }
 .bubble {
-  min-width: 42px; padding: 7px 4px; text-align: center;
+  min-width: 42px; padding: 7px 4px; text-align: center; line-height: 16px;
   background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
   border-radius: 9px; font-size: 13px; font-weight: 600;
 }
@@ -502,13 +502,25 @@ textarea.noteedit { margin-bottom: 0; }
 .prseen.on { background: #e0b23e; color: #1a1408; border-color: #e0b23e; }
 /* First raise / LRR laid out as the 2×2 they are: value vs bluff down the
    side, no-squid vs with-squid across the top. Eight full-width rows before. */
-.posmx { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 6px; align-items: center; }
+/* The cells hold a two- or three-letter position, so they size to that and sit
+   left rather than stretching a 280px dropdown across the card. */
+.posmx { display: grid; grid-template-columns: auto auto auto; gap: 4px 6px;
+  align-items: center; justify-content: start; }
 .posmx .pmh { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--muted); text-align: center; }
 .posmx .pmr { font-size: 11px; font-weight: 700; color: var(--muted); }
 .posmx .posread { margin: 0; justify-content: center; }
 .posread .prselect {
   appearance: menulist; background: rgba(0,0,0,.25); color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 3px 6px; font-size: 13px; font-weight: 700;
+}
+.posmx .posread { padding: 4px 6px; gap: 4px; }
+.posmx .prselect { width: 4.6em; }
+
+/* A plain read on a line sits beside bubbles and stat boxes, so it wears the
+   same box they do rather than the pill it wears in a chip strip. */
+.chip.mini.pline {
+  min-width: 52px; padding: 7px 4px; text-align: center; border-radius: 9px;
+  font-size: 13px; font-weight: 600; line-height: 16px;
 }
 
 /* Range grid — 13×13 preflop hand matrix */
@@ -1032,7 +1044,7 @@ textarea.noteedit { margin-bottom: 0; }
   color: var(--muted); font-variant-numeric: tabular-nums;
 }
 
-/* reads picker: role heading (As PFR / As PFC) and its indented When Bet / When X rows */
+/* reads picker: role heading (As PFR / As PFC) and its indented When Bet / When Check rows */
 /* ---- Reads picker ----
    One card per street, the role inside it, then the reads: label in a shared
    left column, controls in the right one, so a column of reads reads as a
@@ -1065,10 +1077,12 @@ textarea.noteedit { margin-bottom: 0; }
 
 /* HUD-stat reads: the number off his HUD, typed in. Tally reads: tap an option
    once per sighting; the count rides on the chip. */
+/* Same box as a .bubble — these sit in the same rows, so a different size and
+   weight just read as a mistake. */
 .statinput {
-  width: 74px; padding: 7px 9px; font: inherit; font-size: 14px; font-weight: 700;
+  width: 56px; padding: 7px 4px; font-family: inherit; font-size: 13px; font-weight: 600;
   color: var(--text); background: var(--panel2); border: 1px solid var(--line);
-  border-radius: 9px; text-align: center; -moz-appearance: textfield;
+  border-radius: 9px; line-height: 16px; text-align: center; -moz-appearance: textfield;
 }
 .statinput::-webkit-outer-spin-button, .statinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .statinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
