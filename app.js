@@ -5898,20 +5898,42 @@ function bindStatic() {
   };
   $("data-showjson").onclick = async () => {
     try {
-      const json = JSON.stringify(await exportData(), null, 2);
+      const data = await exportData();
+      const json = JSON.stringify(data);
+      const kb = (n) => (n / 1024).toFixed(0) + "KB";
+      /* The whole export only goes on screen while that is cheap. Phil's is
+         ~2MB, and indenting it and running it through esc() built a 5MB HTML
+         string that innerHTML then had to parse, with a multi-megabyte
+         textarea to lay out after it — seconds of locked-up app. Past the cap
+         the box shows a head slice instead: nobody reads 2MB in a textarea,
+         and Copy, which is what the button is actually for, still takes all of
+         it from the string in hand. */
+      const SHOW_MAX = 200000;
+      const cut = json.length > SHOW_MAX;
+      const body = cut ? json.slice(0, SHOW_MAX) : JSON.stringify(data, null, 2);
       sheetGroup = "__showjson__";
       showSheet(
-        `<div class="sheethead"><span class="t">Backup JSON — ${(json.length / 1024).toFixed(0)}KB</span>
+        `<div class="sheethead"><span class="t">Backup JSON — ${kb(json.length)}</span>
            <button data-sheetclose>Close</button></div>
-         <div class="sheetnote">Long-press to select all, then copy. Or tap Select all + Copy.</div>
-         <div class="row"><button class="secondary" id="showjson-selectall">Select all</button>
+         <div class="sheetnote">${cut
+           ? `Too big to show whole — this is the first ${kb(SHOW_MAX)} of ${kb(json.length)}. Don't copy out of the box, it would cut off mid-file. Tap Copy: that copies all of it.`
+           : "Long-press to select all, then copy. Or tap Select all + Copy."}</div>
+         <div class="row">${cut ? "" : `<button class="secondary" id="showjson-selectall">Select all</button>`}
            <button class="secondary" id="showjson-copy">Copy</button></div>
-         <textarea id="showjson-text" rows="14" readonly style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:11px;">${esc(json)}</textarea>`);
+         <textarea id="showjson-text" rows="14" readonly style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:11px;"></textarea>`);
       const ta = document.getElementById("showjson-text");
-      document.getElementById("showjson-selectall").onclick = () => { ta.focus(); ta.select(); };
+      ta.value = body;   // .value, never innerHTML: no esc pass and no HTML parse
+      const sel = document.getElementById("showjson-selectall");
+      if (sel) sel.onclick = () => { ta.focus(); ta.select(); };
       document.getElementById("showjson-copy").onclick = async () => {
-        try { await navigator.clipboard.writeText(json); toast("Copied"); }
-        catch { ta.focus(); ta.select(); document.execCommand("copy"); toast("Copied"); }
+        try { await navigator.clipboard.writeText(json); toast(`Copied ${kb(json.length)}`); }
+        catch (e) {
+          /* The old select-the-box fallback is only safe while the box holds
+             the whole file — past the cap it would quietly copy a backup that
+             stops mid-record. */
+          if (cut) { toast("Copy failed: " + e.message); return; }
+          ta.focus(); ta.select(); document.execCommand("copy"); toast("Copied");
+        }
       };
     } catch (e) { toast("Show failed: " + e.message); }
   };
