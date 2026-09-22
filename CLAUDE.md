@@ -88,6 +88,23 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   newer record wins conflicts) via `mergeOppRecords`. **v30+ also merges
   opponents by exact name match** so bulk imports don't dupe existing
   profiles. Hands/sessions stay plain newer-wins by id.
+  **Short-deck files are refused (v168).** `shortDeckReason` rejects anything
+  carrying `app: "shortdeck-journal"`, and — for hand files built by hand, which
+  carry no app id — anything whose stakes are an ante with no blinds and whose
+  cards hold nothing under a six. One deuce or one big blind anywhere and it is
+  hold'em, so the heuristic can't fire on a real NLHE file; on cards alone the
+  bar is 40, because Phil's own correction files carry no blinds either and
+  shown cards skew big. `confirmImport` catches it first so he gets a dialog
+  naming the other journal; the throw in `importJSON` is the backstop.
+  **Every import leaves a receipt (v169).** `meta.importLog` keeps the last four:
+  the ids it added, a copy of every record it wrote over, and — written by
+  `stampImport` *after* `normaliseHandTokens` has run, or the tidy-up reads as an
+  edit — each touched record's post-import `updatedAt`. `undoImport` deletes the
+  added and restores the overwritten, but **only where the mark still matches**;
+  anything edited since is left alone and counted in `kept`. This is the only
+  real undo — the pre-import file can't revert a merge, since `importJSON` only
+  ever adds. The log is device-local: not in `EXPORT_META_KEYS`, and in
+  `NO_MIRROR`.
 - `stats.js` — the HUD engine. `hudCount(oppId, hands)` walks the action
   stream once per hand and returns raw numerator/denominator counters;
   `hudStats`/`hudAF` shape them for display. Flop cbet and fold-to-flop-cbet are each split three ways
