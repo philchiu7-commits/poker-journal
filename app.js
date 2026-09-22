@@ -3312,6 +3312,13 @@ function renderData() {
    last one the "auto-backup" is a picture of the *merged* database, not of what
    was there before. Returns false if the user backs out. */
 async function confirmImport(data) {
+  /* Caught here rather than only in importJSON so it reads as a dialog and
+     names the journal it belongs in, instead of a toast about a bad file. */
+  const sd = shortDeckReason(data);
+  if (sd) {
+    alert(`These look like short-deck hands — ${sd}.\n\nThis journal is no-limit hold'em: its pots, sizing rungs and HUD all assume blinds and a 52-card deck. Import them in the short-deck journal instead.`);
+    return false;
+  }
   const n = (a, w) => { const c = Array.isArray(a) ? a.length : 0; return `${c} ${w}${c === 1 ? "" : "s"}`; };
   const bits = [n(data.opponents, "opponent"), n(data.hands, "hand"), n(data.sessions, "session")].join(" · ");
   if (!confirm(`Import ${bits}?\n\nMerged into what you already have by id — newer wins. This can't be undone from inside the app.`)) return false;

@@ -220,11 +220,45 @@ function mergeOppRecords(into, from) {
   into.updatedAt = Date.now();
 }
 
+/* This journal is no-limit hold'em, and a short-deck file does not belong in
+   it: every pot here is rebuilt from blinds, every sizing rung is a share of
+   that pot and every HUD denominator assumes a 52-card deck. A short-deck
+   backup says so in its app id, but a hand file built by hand carries no id, so
+   the cards have to answer — a 36-card deck has nothing under a six and its
+   stakes are an ante with no blinds. Either tell settles it the other way on
+   its own: one deuce, or one big blind, and it is hold'em. On cards alone the
+   bar is high on purpose, because Phil's own correction files carry no blinds
+   either and shown cards skew big; 40 of them with nothing under a six is not
+   something a hold'em file does. */
+const SD_LOW = /^[2-5]/;
+function shortDeckReason(data) {
+  if (!data || typeof data !== "object") return null;
+  if (data.app === "shortdeck-journal") return "it's a short-deck backup";
+  const hands = Array.isArray(data.hands) ? data.hands : [];
+  let cards = 0, low = 0, ante = 0, blinded = 0;
+  for (const h of hands) {
+    const cs = [...(h.board || []), ...(h.heroCards || []),
+      ...(h.villains || []).flatMap((v) => v.cards || [])].filter(Boolean);
+    cards += cs.length;
+    for (const c of cs) if (SD_LOW.test(String(c))) low++;
+    const b = h.blinds || {};
+    if (b.bb || b.sb) blinded++;
+    else if (b.ante) ante++;
+  }
+  if (low || blinded) return null;
+  if (ante * 2 >= hands.length && cards >= 8)
+    return `ante-only stakes and no card under a six in ${cards}`;
+  if (cards >= 40) return `no card under a six in ${cards} on record`;
+  return null;
+}
+
 /* Merge by id (newer wins); when an incoming opponent's id is new but its NAME
    uniquely matches an existing profile, fold it in and remap its hands' villain
    refs — so re-logging hands for an existing opponent never spawns a duplicate.
    Never wipes existing data. */
 async function importJSON(data) {
+  const sd = shortDeckReason(data);
+  if (sd) throw new Error(`Short-deck hands — ${sd}. They belong in the short-deck journal.`);
   if (!data || data.app !== "poker-journal" || !Array.isArray(data.opponents))
     throw new Error("Not a poker-journal export file");
   const counts = { opponents: 0, merged: 0, hands: 0, sessions: 0, ranges: 0 };
