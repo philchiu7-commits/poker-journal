@@ -1500,6 +1500,88 @@ const rangeSpotData = (o, key) => { const s = oppRanges(o)[key] || {}; return { 
    every seat at once — otherwise a hand turned up from CO would vanish off a
    read pointing at BN. */
 const recordAcross = (oppId, sq, sit) => rangeRowsIn(rangeRows(oppId, sq), sit, null).length;
+
+/* The chart behind a preflop read. Hovering (or tapping) the ▦ draws the same
+   13x13 History grid the Ranges panel draws, in the same colours, over the
+   picker — the question "what does he raise from here?" is a shape, and the old
+   behaviour answered it by scrolling two panels away and losing the read you
+   were setting. Counted across every seat, the way the badge beside it counts:
+   a read names one seat but the situation is the question. */
+function rangePeekHTML(o, sq, sit, pg) {
+  const rec = rangeCells(rangeRowsIn(rangeRows(o.id, sq), sit, null));
+  const keys = Object.keys(rec);
+  const nH = keys.reduce((n, c) => n + rec[c].n, 0);
+  const cells = HAND_CLASSES.map((c) => {
+    const e = rec[c];
+    const title = c + (e ? ` · shown ${e.n}×${mixLabel(e.acts) ? ` · ${mixLabel(e.acts)}` : ""}` : "");
+    return `<div class="rgcell rng ro${e ? " inr" : ""}"${e ? ` style="--fill:${mixFill(mixActs(e.acts))}"` : ""}
+      title="${esc(title)}">${c}</div>`;
+  }).join("");
+  const byHue = {};
+  for (const c of keys) for (const a of mixActs(rec[c].acts))
+    (byHue[notchColor(a)] = byHue[notchColor(a)] || new Set()).add(a);
+  const legend = keys.length
+    ? `<div class="rglegend">${Object.entries(byHue)
+         .map(([col, set]) => [col, [...set].sort((a, b) => (RANK_ACT[a] ?? -1) - (RANK_ACT[b] ?? -1))])
+         .sort((a, b) => (RANK_ACT[b[1].at(-1)] ?? -1) - (RANK_ACT[a[1].at(-1)] ?? -1))
+         .map(([col, acts]) => `<span class="rglegitem"><span class="rgswatch" style="background:${col}"></span>${esc(acts.map((a) => a || "no action").join(" / "))}</span>`).join("")}</div>`
+    : "";
+  return `<div class="rpkhead">${esc(rangeSpotTitle(sq, sit, "any"))}</div>
+    <div class="rggrid">${cells}</div>
+    ${legend}
+    <div class="rpkfoot">
+      <span>${keys.length ? `${keys.length} shown · ${nH} hand${nH === 1 ? "" : "s"} · any seat` : "no hands on record yet"}</span>
+      <span class="spacer"></span>
+      <button class="chip mini" data-rjumpopen="${esc(sq)}|${esc(sit)}|${esc(pg || "")}">Open in Ranges</button>
+    </div>`;
+}
+
+let peekBtn = null;
+function hideRangePeek() {
+  const p = $("rpeek");
+  if (p) p.classList.remove("on");
+  peekBtn = null;
+}
+function showRangePeek(btn) {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const [sq, sit, pg] = btn.dataset.rjump.split("|");
+  let p = $("rpeek");
+  if (!p) {
+    p = document.createElement("div");
+    p.id = "rpeek"; p.className = "rpeek";
+    p.addEventListener("pointerleave", () => { if (matchMedia("(hover: hover)").matches) hideRangePeek(); });
+    p.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-rjumpopen]");
+      if (!b) return;
+      const [sq2, sit2, pg2] = b.dataset.rjumpopen.split("|");
+      hideRangePeek();
+      openRangeSpot(sq2, sit2, pg2);
+    });
+    document.body.appendChild(p);
+  }
+  p.innerHTML = rangePeekHTML(o, sq, sit, pg);
+  p.classList.add("on");
+  peekBtn = btn;
+  /* Fixed to the badge, clamped to the screen. The grid is square and nearly
+     as wide as a phone, so "below the badge" is usually a lie — flip it above
+     whenever the room underneath cannot hold it. */
+  const r = btn.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+  const below = r.bottom + 8, above = r.top - 8 - h;
+  const top = below + h <= window.innerHeight - 8 ? below : above >= 8 ? above : below;
+  p.style.left = left + "px";
+  // Neither side always has room for a square grid on a phone; the chart being
+  // whole beats it clearing the badge, so clamp rather than let it run off.
+  p.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, top)) + "px";
+}
+/* The old behaviour of the badge, now reachable from inside the chart. */
+function openRangeSpot(sq, sit, pg) {
+  rangeSquid = sq; rangeSitSel = sit; rangeTab = "history";
+  rangeSitPos = pg || "any";             // land on the seat the read names, not wherever the grid was left
+  renderOppDetail(curOppId);
+  $("od-ranges").scrollIntoView({ behavior: "smooth", block: "start" });
+}
 const byGridOrder = (a, b) => (HAND_CLASS_ORDER[a] ?? 999) - (HAND_CLASS_ORDER[b] ?? 999);
 /* Write a spot back; an empty spot is dropped so records stay clean. */
 function setRangeSpot(o, key, hands, seen) {
@@ -2452,7 +2534,7 @@ function renderOppReads(o) {
       const nRec = rs ? recordAcross(o.id, rs.sq, rs.sit) : 0;
       const seenBtn = rs
         ? `<button class="prseen${nRec ? " on" : ""}" data-rjump="${rs.sq}|${rs.sit}|${esc(posGroupOf(st) || "")}"
-             title="Hands they turned up in this situation">▦${nRec || ""}</button>`
+             title="Chart of the hands they turned up in this situation">▦${nRec || ""}</button>`
         : "";
       return `<label class="posread${active ? " on" : ""}" title="${esc(lbl)}">
         ${compact ? "" : `<span class="prlbl">${esc(lbl)}</span>`}
@@ -5396,12 +5478,8 @@ function bindStatic() {
     const rj = e.target.closest("[data-rjump]");
     if (rj) {
       e.preventDefault();
-      const [sq, sit, pg] = rj.dataset.rjump.split("|");
-      rangeSquid = sq; rangeSitSel = sit; rangeTab = "history";
-      rangeSitPos = pg || "any";             // land on the seat the read names, not wherever the grid was left
-
-      renderOppDetail(curOppId);
-      $("od-ranges").scrollIntoView({ behavior: "smooth", block: "start" });
+      // No hover on a phone, so the tap is the hover: it toggles the same chart.
+      if (peekBtn === rj) hideRangePeek(); else showRangePeek(rj);
       return;
     }
     const b = e.target.closest("[data-tag]");
@@ -5416,6 +5494,22 @@ function bindStatic() {
     await dbPut("opponents", o);
     renderOppReads(o);
   };
+  $("od-tags").addEventListener("pointerover", (e) => {
+    if (!matchMedia("(hover: hover)").matches) return;
+    const b = e.target.closest("[data-rjump]");
+    if (b && b !== peekBtn) showRangePeek(b);
+  });
+  $("od-tags").addEventListener("pointerout", (e) => {
+    if (!matchMedia("(hover: hover)").matches) return;
+    const b = e.target.closest("[data-rjump]");
+    if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
+  });
+  document.addEventListener("click", (e) => {
+    if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")) hideRangePeek();
+  }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
+  window.addEventListener("scroll", () => hideRangePeek(), true);
+  window.addEventListener("hashchange", () => hideRangePeek());
   $("od-tags").addEventListener("change", async (e) => {
     const si = e.target.closest("[data-statinput]");
     if (si) {

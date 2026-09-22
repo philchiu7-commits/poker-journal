@@ -1075,3 +1075,17 @@ textarea.noteedit { margin-bottom: 0; }
 .statunit { font-size: 13px; color: var(--muted); }
 .tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
 .bubble.tallyclr { padding-left: 9px; padding-right: 9px; color: var(--muted); }
+
+/* Range peek: the preflop read's chart, floated over the picker. Sized so the
+   square grid still fits a phone with margins; the Ranges panel's own cell
+   rules do the colouring, so the two can never drift apart. */
+.rpeek {
+  position: fixed; z-index: 90; display: none;
+  width: min(312px, calc(100vw - 20px), calc(100vh - 110px));
+  padding: 9px 10px 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0,0,0,.55);
+}
+.rpeek.on { display: block; }
+.rpkhead { font-size: 12px; font-weight: 700; color: var(--text); padding-bottom: 6px; }
+.rpkfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
