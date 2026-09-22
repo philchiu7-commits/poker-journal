@@ -213,6 +213,15 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   scope, and the sibling PWAs (shortdeck-journal, range-lab, squid-web) share
   `philchiu7-commits.github.io`, so an unfiltered sweep would delete their
   offline caches. Keep `CACHE` starting with `PREFIX`.
+  **Fetch is cache-first with no background revalidate (v171).** It used to be
+  stale-while-revalidate, which refreshed each file into the current cache on
+  its own schedule and so built versions that never shipped — a new `app.js`
+  beside a `vocab.js` from several builds back, which throws mid-render and
+  leaves a panel empty with dead buttons. Only `install` may change the cache,
+  and it replaces the shell all at once. Freshness is `reg.update()` in
+  `app.js` on boot and on `visibilitychange`, not the cache. A miss while
+  offline returns the cached shell on a navigation, else `Response.error()` —
+  never `undefined`, which fails the request and shows a blank app.
 - `pinyin.js` — Chinese-name search helper for the opponents list.
   **Not usable for duplicate detection** — the table is roster-sparse, so
   阿威少哥 and 大力哥 both collapse to "ge". `findDupes` (app.js) matches
