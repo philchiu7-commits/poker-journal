@@ -928,14 +928,14 @@ textarea.noteedit { margin-bottom: 0; }
 /* ===== HUD ===== */
 .hudgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
 .hudcell { background:#161a22; border:1px solid #232a36; border-radius:10px;
-  padding:7px 4px; text-align:center; width:100%; font:inherit; cursor:pointer;
+  padding:6px 4px; text-align:center; width:100%; font:inherit; cursor:pointer;
   -webkit-appearance:none; appearance:none; }
 /* A cell with no hands behind it is still a number, just not a door. */
 .hudcell.dead { cursor:default; }
 .hudcell:not(.dead):active { background:#1d2230; }
-.hudcell b { display:block; font-size:19px; font-weight:700; color:#e8ecf3; line-height:1.1; }
-.hudcell span { display:block; font-size:10.5px; color:#8b94a5; margin-top:2px; }
-.hudcell i { display:block; font-size:9.5px; color:#5a6374; font-style:normal; margin-top:1px; }
+.hudcell b { display:block; font-size:16px; font-weight:700; color:#e8ecf3; line-height:1.1; }
+.hudcell span { display:block; font-size:9.5px; color:#8b94a5; margin-top:2px; }
+.hudcell i { display:block; font-size:9px; color:#5a6374; font-style:normal; margin-top:1px; }
 /* Dimmed, not hidden — a number off three hands should look unreliable. */
 .hudcell.thin b { color:#6d7686; }
 .hudcell.thin i { color:#4d5666; }
