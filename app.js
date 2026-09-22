@@ -29,7 +29,6 @@ let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
 let pinnedGroup = null;           // opponents list: group name that always sorts first (null = auto by recency)
 let dupeDismissed = new Set();    // opponents list: duplicate pairs Phil has said are different people
-let sizingUndo = false;           // Sizings panel: a tap takes one off instead of adding
 let tableLineup = [];             // today's seat ring, ordered: ("hero" | oppId)[] — anchors positions
 let lineupSeats = 9;              // table size (6–9); picks which subset of the seat ring is in play
 let openSizeStats = {};           // adaptive open-raise sizes: { [bb]: { [bbSize]: count } }
@@ -2601,12 +2600,11 @@ function renderOppReads(o) {
    carries its own opportunity count, and anything under HUD_MIN is dimmed
    rather than hidden: a 100% that happened once should look like what it is. */
 /* ---- Sizings ----
-   How often this player picks each size, by street and by value/bluff. Tap the
-   size when you see it; one tap is one observation, stored as a timestamp so a
-   miscount can be taken back and the tally stays datable. Counts are shown raw
-   over their own total — the same rule as the HUD, because three observations
-   read as a tendency if you print them as a percentage and they aren't one. */
-/* The five ways a bet of his fails to reach the auto grid, in the order Phil
+   Which size he picks, by street and by whether the hand was value or a bluff,
+   counted off his shown cards and the pot as it stood. The ladder is printed
+   once across the top so every row below it is nothing but its counts. Bets he
+   never had to show don't appear, so the Bluff rows are a floor, not a rate. */
+/* The five ways a bet of his fails to reach the grid, in the order Phil
    can do something about them: the first two are a data fix, the last three
    are a note he never wrote. */
 const SZ_SKIPS = [
@@ -2618,35 +2616,10 @@ const SZ_SKIPS = [
 ];
 const SZ_SKIP_BY_ID = Object.fromEntries(SZ_SKIPS.map((x) => [x[0], x[1]]));
 
-function sizingCounts(o, rowId) {
-  const row = (o.sizing || {})[rowId] || {};
-  const counts = {}; let total = 0;
-  for (const st of SIZING_STEPS) { const n = (row[st.id] || []).length; counts[st.id] = n; total += n; }
-  return { counts, total };
-}
-
 function renderOppSizing(o) {
-  $("od-size-edit").textContent = sizingUndo ? "Done" : "Undo";
-  $("od-size-edit").classList.toggle("on", sizingUndo);
-  const rowHTML = (r) => {
-    const { counts, total } = sizingCounts(o, r.id);
-    const top = total ? Math.max(...SIZING_STEPS.map((st) => counts[st.id])) : 0;
-    const chips = SIZING_STEPS.map((st) => {
-      const n = counts[st.id];
-      const cls = [n ? "has" : "", n && n === top ? "top" : "", sizingUndo && n ? "undo" : ""].filter(Boolean).join(" ");
-      const tip = n ? ` title="${n} of ${total} — ${Math.round((100 * n) / total)}%"` : "";
-      return `<button class="sizechip${cls ? " " + cls : ""}" data-size="${r.id}|${st.id}"${tip}>${st.label}${n ? `<i>${n}</i>` : ""}</button>`;
-    }).join("");
-    return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
-      <div class="sizechips">${chips}</div></div>`;
-  };
-  /* The same grid, filled in by the hand histories instead of by tapping.
-     Separate rows on purpose: these are counted off the villain's actual cards
-     and the pot as it stood, and they can only see hands where his cards are
-     known — which mostly means hands that got shown down. Bluffs that took it
-     down uncontested never appear, so the Bluff rows read low and the manual
-     tallies above are the part only Phil can supply. */
   const auto = sizingAuto(o.id, HANDS);
+  const head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
+    SIZING_STEPS.map((st) => `<span class="sizecol">${st.label}</span>`).join("") + `</div></div>`;
   const autoRow = (r) => {
     const cell = auto.rows[r.id] || {};
     const total = SIZING_STEPS.reduce((n, st) => n + ((cell[st.id] || {}).n || 0), 0);
@@ -2655,8 +2628,9 @@ function renderOppSizing(o) {
       const n = (cell[st.id] || {}).n || 0;
       const cls = [n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
       return `<button class="sizechip auto${cls ? " " + cls : ""}"${n ? ` data-szauto="${r.id}|${st.id}"` : ""}
-        title="${n ? `${n} of ${total} — ${Math.round((100 * n) / total)}%. Tap for the hands.` : "Nothing on record"}"
-        >${st.label}${n ? `<i>${n}</i>` : ""}</button>`;
+        title="${n ? `${st.label} — ${n} of ${total}, ${Math.round((100 * n) / total)}%. Tap for the hands.`
+          : `${st.label} — nothing on record`}"
+        >${n || "·"}</button>`;
     }).join("");
     return `<div class="sizerow"><div class="sizelab">${r.street}${total ? `<span class="sizen">${total}</span>` : ""}</div>
       <div class="sizechips">${chips}</div></div>`;
@@ -2667,28 +2641,17 @@ function renderOppSizing(o) {
   const sk = auto.skipped, why = auto.why || {};
   const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
     `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
-  const skipHTML = skips
-    ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
-  const autoHTML = (auto.n
-    ? `<div class="sizehead autohead">From hand histories<span class="sizen">${auto.n}</span></div>
-       <div class="sizenote">Counted off his shown cards and the pot at the time.
-         Value is two pair or better, or top or second pair; everything under that
-         counts as a bluff, draws included. Bluffs he never had to show don't appear
-         here at all, so read the Bluff rows as a floor.</div>` +
+  const skipHTML = skips ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
+  $("od-sizing").innerHTML = (auto.n
+    ? `<div class="sizenote">From ${auto.n} bet${auto.n === 1 ? "" : "s"} on record. Value is two pair or
+         better, or top or second pair; everything under that counts as a bluff, draws included.
+         Bluffs he never had to show don't appear, so read the Bluff rows as a floor.
+         Tap a count for the hands.</div>` + head +
       ["V", "B"].map((k) =>
         `<div class="sizesub">${k === "V" ? "Value" : "Bluff"}</div>` +
         SIZING_ROWS.filter((r) => r.kind === k).map(autoRow).join("")).join("")
-    : `<div class="sizehead autohead">From hand histories</div>
-       <div class="sizenote">Nothing yet — this needs imported hands where his cards
+    : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
          and the bet amounts are both on record.</div>`) + skipHTML;
-  $("od-sizing").innerHTML =
-    `<div class="sizenote">${sizingUndo
-      ? "Tapping a size now takes one off — tap Done when the count is right."
-      : "Tap a size each time you see it, once you know whether it was value or a bluff."}</div>` +
-    ["V", "B"].map((k) =>
-      `<div class="sizehead">${k === "V" ? "Value" : "Bluff"}</div>` +
-      SIZING_ROWS.filter((r) => r.kind === k).map(rowHTML).join("")).join("") +
-    autoHTML;
 }
 
 function renderOppHud(o) {
@@ -5385,11 +5348,6 @@ function bindStatic() {
     const o = oppById(curOppId);
     if (o) openHudDrill(o, b.dataset.hud);
   };
-  $("od-size-edit").onclick = () => {
-    sizingUndo = !sizingUndo;
-    const o = oppById(curOppId);
-    if (o) renderOppSizing(o);
-  };
   $("od-sizing").onclick = async (e) => {
     const sk = e.target.closest("[data-szskip]");
     if (sk) {
@@ -5402,38 +5360,16 @@ function bindStatic() {
       return;
     }
     const az = e.target.closest("[data-szauto]");
-    if (az) {
-      const o = oppById(curOppId);
-      if (!o) return;
-      const [rowId, stepId] = az.dataset.szauto.split("|");
-      const r = SIZING_ROW_BY_ID[rowId], st = SIZING_STEP_BY_ID[stepId];
-      const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId];
-      if (r && st && cell) {
-        openReadProof(o, `${r.street} ${r.kind === "V" ? "value" : "bluff"} · ${st.label}`, cell.ids,
-          "he sized this way, off his shown cards");
-      }
-      return;
-    }
-    const b = e.target.closest("[data-size]");
-    if (!b) return;
+    if (!az) return;
     const o = oppById(curOppId);
     if (!o) return;
-    const [rowId, stepId] = b.dataset.size.split("|");
-    if (!SIZING_ROW_BY_ID[rowId] || !SIZING_STEP_BY_ID[stepId]) return;
-    const sz = o.sizing || {}, row = sz[rowId] || {}, arr = row[stepId] || [];
-    if (sizingUndo) {
-      if (!arr.length) return;
-      arr.pop();
-      if (!arr.length) delete row[stepId];
-      if (!Object.keys(row).length) delete sz[rowId];
-      if (!Object.keys(sz).length) delete o.sizing;
-    } else {
-      arr.push(Date.now());
-      row[stepId] = arr; sz[rowId] = row; o.sizing = sz;
+    const [rowId, stepId] = az.dataset.szauto.split("|");
+    const r = SIZING_ROW_BY_ID[rowId], st = SIZING_STEP_BY_ID[stepId];
+    const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId];
+    if (r && st && cell) {
+      openReadProof(o, `${r.street} ${r.kind === "V" ? "value" : "bluff"} · ${st.label}`, cell.ids,
+        "he sized this way, off his shown cards");
     }
-    o.updatedAt = Date.now();
-    await dbPut("opponents", o);
-    renderOppSizing(o);
   };
   $("od-reads-edit").onclick = () => {
     showReadPicker = !showReadPicker;

@@ -116,11 +116,14 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   `"6.8k"`, `betsVsPot` replays the money street by street and returns each
   postflop bet with the pot *before* it went in, `madeClass` calls the villain's
   hand value or bluff off his shown cards, `sizeStepFor` buckets the fraction
-  onto Phil's B33/B50/B66/B100/B150 ladder, and `sizingAuto` tallies the grid.
+  onto Phil's B33/B50/B66/B75/B100/B150 ladder, and `sizingAuto` tallies the
+  grid. Cuts are the midpoints between rungs. The panel is the derived grid
+  only as of v160 — the hand-tapped tally that used to sit above it is gone
+  (stored `opponent.sizing` tallies are left in place, just not shown), and the
+  ladder is printed once across the top so each row is nothing but its counts.
   Two standing caveats, both stated in the UI copy: it only sees hands where the
   villain's cards are on record, and cards are mostly on record because the hand
-  went to showdown — **so the Bluff rows are a floor, not a count**, and Phil's
-  manual taps are the corrective rather than a duplicate. **The value/bluff line
+  went to showdown — **so the Bluff rows are a floor, not a count**. **The value/bluff line
   is Phil's, set in v146:** two pair or better, or top or second pair, is value;
   everything under that — third pair, bottom pair, a naked draw, air — is a
   bluff. Nothing goes uncounted, so `skipped.unclear` is now always 0. Only

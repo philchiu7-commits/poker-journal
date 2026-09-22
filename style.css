@@ -991,9 +991,13 @@ textarea.noteedit { margin-bottom: 0; }
 .sizechip i { font-style: normal; font-size: 11px; font-weight: 700; margin-left: 3px; }
 .sizechip.has { color: var(--text); border-color: #3a4658; }
 .sizechip.top { background: #1d3050; border-color: #3f6ea8; color: #cfe2ff; }
-.sizechip.undo { border-color: #6b2f2f; color: #f0a0a0; }
-/* The derived half of the panel. Dashed so it reads as a reading, not a tally
-   Phil made, and greened where the manual rows are blue — two sources, never
+/* The ladder, printed once above the rows — same flex track as a chip so the
+   labels sit over their own column. */
+.sizehdr { margin-bottom: 3px; }
+.sizecol { flex: 1; min-width: 0; padding: 0 2px; text-align: center; white-space: nowrap;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .3px; color: var(--muted); }
+/* The grid is dashed until a cell has something in it, so an empty column reads
+   as no data rather than as a zero, and greened rather than blue —
    confusable at a glance. */
 .sizehead.autohead { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px;
   display: flex; align-items: center; gap: 6px; }

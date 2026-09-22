@@ -375,10 +375,11 @@ function madeClass(hole, board) {
   const above = new Set(board.map((c) => RVAL[c[0]]).filter((v) => v > best)).size;
   return above <= 1 ? "V" : "B";                        // top or second pair is value
 }
-/* Phil's ladder is B33/B50/B66/B100/B150. Bucket to the nearest rung so a 62%
-   bet reads as the 66% he was going for, not as its own category. */
-const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.83, "66"], [1.25, "100"], [Infinity, "150"]];
-const sizeStepFor = (r) => (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[4])[1];
+/* Phil's ladder is B33/B50/B66/B75/B100/B150. Bucket to the nearest rung so a
+   62% bet reads as the 66% he was going for, not as its own category. Cuts are
+   the midpoints between neighbouring rungs. */
+const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.71, "66"], [0.88, "75"], [1.25, "100"], [Infinity, "150"]];
+const sizeStepFor = (r) => (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[SZ_CUTS.length - 1])[1];
 /* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, n, skipped:{…}, why:{…} }
    Walks *his* postflop bets rather than the entries the money-walk managed to
    produce, so every bet that doesn't reach the grid can say which thing was

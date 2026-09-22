@@ -21,6 +21,7 @@ const SIZING_STEPS = [
   { id: "33",  label: "B33"  },
   { id: "50",  label: "B50"  },
   { id: "66",  label: "B66"  },
+  { id: "75",  label: "B75"  },
   { id: "100", label: "B100" },
   { id: "150", label: "B150" },
 ];
@@ -158,7 +159,7 @@ const TENDENCY_TAGS = [
   // flop
   { id: "f-cbet-freq",    cat: "postflop", label: "Cbet freq",       kind: "stat" },
   { id: "f-fold-to-xr",   cat: "postflop", label: "Fold to xR",      kind: "stat" },
-  { id: "f-oop-x-range",  cat: "postflop", label: "OOP X range?" },
+  { id: "f-oop-x-range",  cat: "postflop", label: "Check OOP",       kind: "stat" },
   { id: "f-xr-freq-pfr",  cat: "postflop", label: "xR freq",         kind: "stat" },
   { id: "f-xr-freq-pfc",  cat: "postflop", label: "xR freq",         kind: "choice", options: [["under", "Under"], ["over", "Over"]] },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
