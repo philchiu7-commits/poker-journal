@@ -3269,9 +3269,14 @@ function renderBuild() {
 function renderImportLog() {
   metaGet("importLog").then((log) => {
     const box = $("data-imports");
-    $("data-imports-panel").classList.toggle("hidden", !(log || []).length);
-    if (!(log || []).length) return;
-    box.innerHTML = log.map((e) => {
+    /* The panel stays on screen even with nothing in it. Hiding it made the
+       one feature whose whole job is "where do I undo that?" impossible to
+       find until after the mistake Phil wanted to undo. */
+    if (!(log || []).length) {
+      box.innerHTML = `<div class="muted sub2">Nothing yet — every import from here on leaves a receipt, and you can take it back out again from this panel.</div>`;
+      return;
+    }
+    box.innerHTML = `<div class="muted sub2">Remove takes an import back out — what it added goes, what it wrote over comes back. Anything you've edited since is left alone.</div>` + log.map((e) => {
       const n = (c, w) => (c ? `${c} ${w}${c === 1 ? "" : "s"}` : null);
       const bits = [n(e.counts.opponents, "new opp"), n(e.counts.merged, "merged opp"),
         n(e.counts.hands, "hand"), n(e.counts.sessions, "session"), n(e.counts.ranges, "range")]
