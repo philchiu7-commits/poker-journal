@@ -1901,10 +1901,10 @@ function oppRowHTML(o, st) {
   const type = PLAYER_TYPE_BY_ID[o.type];
   const typeCls = type ? ` ptype-${type.id}` : "";
   const typeStyle = type ? ` style="--player-color:${type.color}"` : "";
-  // Tap the badge — filled with the type icon when set, empty circle otherwise
-  // — to open a bottom-sheet picker without leaving the opponent list.
+  // Tap the badge — icon and name when set, empty circle otherwise — to open a
+  // bottom-sheet picker without leaving the opponent list.
   const typePill = type
-    ? `<button class="ptypemini set" data-ptype-open="${o.id}" title="${esc(type.label)} — tap to change">${type.icon}</button>`
+    ? `<button class="ptypemini set" data-ptype-open="${o.id}" title="${esc(type.label)} — tap to change">${type.icon}<span class="ptname">${esc(type.label)}</span></button>`
     : `<button class="ptypemini empty" data-ptype-open="${o.id}" title="Set player type">◦</button>`;
   // VPIP/PFR/3-bet on the name line — the three numbers you actually read
   // mid-hand. Absent entirely when the opponent has no imported hands, so

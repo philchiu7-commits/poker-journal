@@ -556,7 +556,12 @@ textarea.noteedit { margin-bottom: 0; }
   font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
   vertical-align: -6px;
 }
-.ptypemini.set { border-color: var(--player-color, var(--line)); background: color-mix(in srgb, var(--player-color, var(--panel2)) 20%, var(--panel2)); }
+.ptypemini.set { width: auto; gap: 5px; padding: 0 8px 0 6px; border-color: var(--player-color, var(--line));
+  background: color-mix(in srgb, var(--player-color, var(--panel2)) 20%, var(--panel2)); }
+/* The type reads as a word, not a rebus — the icon alone meant decoding an
+   emoji across the table. Truncates rather than pushing the name off the row. */
+.ptname { font-size: 11.5px; font-weight: 700; letter-spacing: .01em; white-space: nowrap;
+  color: var(--player-color, var(--text)); max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
 .ptypemini.empty { color: var(--muted); font-size: 18px; opacity: .55; }
 .ptypemini:active { transform: scale(.94); }
 .notereview { display: flex; flex-direction: column; gap: 10px; }
