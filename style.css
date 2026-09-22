@@ -1099,3 +1099,11 @@ textarea.noteedit { margin-bottom: 0; }
    the ladder rather than to the phone. */
 .rpeek.szpk { width: min(360px, calc(100vw - 20px)); }
 .rpeek.szpk .sizechip { cursor: default; }
+
+/* Import receipt rows: the label takes the room, Remove stays a chip.
+   .row > * is flex:1 and button.secondary is width:100%, which between them
+   leave the label nothing — both children need their share named here, the
+   same way .noterow does it. */
+.implog { align-items: center; gap: 10px; }
+.implog > div { flex: 1 1 auto; min-width: 0; }
+.implog > button { width: auto; flex: none; padding: 11px 16px; }

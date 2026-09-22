@@ -3263,6 +3263,45 @@ function renderBuild() {
     el.textContent = mine.length === 1 ? mine[0] : mine.length ? mine.join(" + ") : "not installed";
   }).catch(() => {});
 }
+/* What each import put in, and a way to take it back out. The pre-import file
+   below can't do this — importJSON only ever adds, so importing it back merges
+   rather than reverts — which is why the receipts exist at all. */
+function renderImportLog() {
+  metaGet("importLog").then((log) => {
+    const box = $("data-imports");
+    $("data-imports-panel").classList.toggle("hidden", !(log || []).length);
+    if (!(log || []).length) return;
+    box.innerHTML = log.map((e) => {
+      const n = (c, w) => (c ? `${c} ${w}${c === 1 ? "" : "s"}` : null);
+      const bits = [n(e.counts.opponents, "new opp"), n(e.counts.merged, "merged opp"),
+        n(e.counts.hands, "hand"), n(e.counts.sessions, "session"), n(e.counts.ranges, "range")]
+        .filter(Boolean).join(" · ") || "nothing new";
+      const mins = Math.floor((Date.now() - e.ts) / 60000);
+      const ago = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago`
+        : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
+      return `<div class="row implog">
+        <div><div>${esc(e.src || "Imported JSON")}</div>
+          <div class="muted sub2">${ago} · ${bits}</div></div>
+        <button class="secondary" data-undoimp="${e.id}">Remove</button></div>`;
+    }).join("");
+  });
+}
+
+async function removeImport(id) {
+  const log = (await metaGet("importLog")) || [];
+  const e = log.find((l) => l.id === id);
+  if (!e) { toast("That import is no longer on record"); return; }
+  const pl = (c, w) => `${c} ${w}${c === 1 ? "" : "s"}`;
+  const opps = e.counts.opponents + e.counts.merged;
+  if (!confirm(`Remove this import?\n\nIt touched ${pl(e.counts.hands, "hand")} and ${pl(opps, "opponent")}. What it added is deleted and what it wrote over is put back. Anything you have edited since stays as it is.`)) return;
+  try {
+    const r = await undoImport(id);
+    await refreshCache();
+    toast(`Removed ${r.removed} · restored ${r.restored}` + (r.kept ? ` · ${r.kept} left alone (edited since)` : ""));
+    renderData();
+  } catch (err) { toast("Remove failed: " + err.message); }
+}
+
 function renderData() {
   renderBuild();
   metaGet("lastExportAt").then((ts) => {
@@ -3294,6 +3333,7 @@ function renderData() {
     $("data-autobackup").textContent =
       `Auto-backup: updated ${ago} ago · ${c.opponents || 0} opps · ${c.hands || 0} hands. Refreshes on every change (stays inside the app; tap Save to write a file).`;
   });
+  renderImportLog();
   /* The copy taken just before the last import, before the auto-backup rolled
      forward over it. Only a file — importing it back can't undo a merge, since
      importJSON only ever adds. */
@@ -5884,14 +5924,19 @@ function bindStatic() {
       try {
         const data = JSON.parse(raw);
         if (!await confirmImport(data)) return;
-        const counts = await importJSON(data);
+        const counts = await importJSON(data, "Pasted JSON");
         await refreshCache();
         await normaliseHandTokens();
+        await stampImport(counts.logId);   // after normalisation, or undo reads its own tidy-up as an edit
         hideSheet();
         toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
         renderData();
       } catch (err) { toast("Import failed: " + err.message); }
     };
+  };
+  $("data-imports").onclick = (e) => {
+    const b = e.target.closest("[data-undoimp]");
+    if (b) removeImport(b.dataset.undoimp);
   };
   $("data-import").onclick = () => $("data-importfile").click();
   $("data-importfile").onchange = async (e) => {
@@ -5900,9 +5945,10 @@ function bindStatic() {
     try {
       const data = JSON.parse(await f.text());
       if (!await confirmImport(data)) { e.target.value = ""; return; }
-      const counts = await importJSON(data);
+      const counts = await importJSON(data, f.name);
       await refreshCache();
       await normaliseHandTokens();
+      await stampImport(counts.logId);
       toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
       renderData();
     } catch (err) { toast("Import failed: " + err.message); }

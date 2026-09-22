@@ -77,7 +77,7 @@ const metaGet = async (key) => {
    just to throw the string away — ~1ms per tap on desktop, several on a phone,
    and it can never fit anyway. Skip the mirror, and clear any tiny one left
    from when the database was near-empty so metaGet can't resurrect it. */
-const NO_MIRROR = new Set(["autoSnapshot", "preImportSnapshot"]);
+const NO_MIRROR = new Set(["autoSnapshot", "preImportSnapshot", "importLog"]);
 const metaSet = (key, value) => {
   if (NO_MIRROR.has(key)) { try { localStorage.removeItem(_mirrorKey(key)); } catch {} }
   else _mirrorSet(key, value);
@@ -252,16 +252,94 @@ function shortDeckReason(data) {
   return null;
 }
 
+/* An import receipt: what an import added, and a copy of whatever it wrote
+   over. Enough to take that import back out — the pre-import file can't,
+   because importJSON only ever adds, so importing it back merges instead of
+   reverting. Mostly ids, so a receipt is small unless the file overwrote a lot;
+   only the last few are kept. Device-local on purpose: it is not in
+   EXPORT_META_KEYS, and a receipt from another phone would name records this
+   one never imported. */
+const IMPORT_LOG_KEEP = 4;
+const IMP_STORES = ["opponents", "hands", "sessions"];
+const copyRec = (r) => JSON.parse(JSON.stringify(r));
+const markOf = (r) => (r && (r.updatedAt || r.ts || 0)) || 0;
+
+async function importLogAdd(entry) {
+  const log = (await metaGet("importLog")) || [];
+  log.unshift(entry);
+  await metaSet("importLog", log.slice(0, IMPORT_LOG_KEEP));
+}
+
+/* Marks are read back *after* the import settles, not while it runs:
+   normaliseHandTokens tidies imported hands on the way in and bumps their
+   updatedAt doing it, and an undo that read that as "Phil edited this" would
+   refuse to remove the very hands it had just added. */
+async function stampImport(logId) {
+  const log = (await metaGet("importLog")) || [];
+  const e = log.find((l) => l.id === logId);
+  if (!e) return;
+  for (const st of IMP_STORES) {
+    const m = (e.marks[st] = {});
+    for (const id of e.added[st]) { const cur = await dbGet(st, id); if (cur) m[id] = markOf(cur); }
+    for (const p of e.prev[st]) { const cur = await dbGet(st, p.id); if (cur) m[p.id] = markOf(cur); }
+  }
+  await metaSet("importLog", log);
+}
+
+/* Take an import back out, but only where nothing has moved since. A record
+   whose mark no longer matches was edited after the import and is left exactly
+   as it is, counted in `kept` — throwing away one of Phil's own later edits to
+   undo an import would be the worse bug. */
+async function undoImport(logId) {
+  const log = (await metaGet("importLog")) || [];
+  const e = log.find((l) => l.id === logId);
+  if (!e) throw new Error("That import is no longer on record");
+  const res = { removed: 0, restored: 0, kept: 0 };
+  for (const st of IMP_STORES) {
+    const m = (e.marks || {})[st] || {};
+    for (const id of e.added[st]) {
+      const cur = await dbGet(st, id);
+      if (!cur) continue;
+      if (markOf(cur) !== m[id]) { res.kept++; continue; }
+      await dbDel(st, id);
+      res.removed++;
+    }
+    for (const p of e.prev[st]) {
+      const cur = await dbGet(st, p.id);
+      if (cur && markOf(cur) !== m[p.id]) { res.kept++; continue; }
+      await dbPut(st, p.rec);
+      res.restored++;
+    }
+  }
+  if (e.ranges.length) {
+    const byId = new Map(((await metaGet("savedRanges")) || []).map((r) => [r.id, r]));
+    for (const r of e.ranges) {
+      const now = byId.get(r.id);
+      if (!now || (now.updatedAt || 0) !== r.mark) { res.kept++; continue; }
+      if (r.prev) byId.set(r.id, r.prev); else byId.delete(r.id);
+      res.restored++;
+    }
+    await metaSet("savedRanges", [...byId.values()]);
+  }
+  await metaSet("importLog", log.filter((l) => l.id !== logId));
+  return res;
+}
+
 /* Merge by id (newer wins); when an incoming opponent's id is new but its NAME
    uniquely matches an existing profile, fold it in and remap its hands' villain
    refs — so re-logging hands for an existing opponent never spawns a duplicate.
    Never wipes existing data. */
-async function importJSON(data) {
+async function importJSON(data, src) {
   const sd = shortDeckReason(data);
   if (sd) throw new Error(`Short-deck hands — ${sd}. They belong in the short-deck journal.`);
   if (!data || data.app !== "poker-journal" || !Array.isArray(data.opponents))
     throw new Error("Not a poker-journal export file");
   const counts = { opponents: 0, merged: 0, hands: 0, sessions: 0, ranges: 0 };
+  const rc = { id: "imp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    ts: Date.now(), src: src || "", counts,
+    added: { opponents: [], hands: [], sessions: [] },
+    prev: { opponents: [], hands: [], sessions: [] },
+    ranges: [], marks: {} };
 
   const existing = await dbAll("opponents");
   const nameCount = {};
@@ -278,7 +356,8 @@ async function importJSON(data) {
       // fields (name, reads conflicts), but reads/exploits/notes union from
       // both — an import must never drop the other device's additions.
       const cur = await dbGet("opponents", rec.id);
-      if (!cur) { await dbPut("opponents", rec); counts.opponents++; continue; }
+      if (!cur) { await dbPut("opponents", rec); rc.added.opponents.push(rec.id); counts.opponents++; continue; }
+      rc.prev.opponents.push({ id: rec.id, rec: copyRec(cur) });   // before the merge: it mutates `cur`
       const [into, from] = (rec.updatedAt || 0) > (cur.updatedAt || 0) ? [rec, cur] : [cur, rec];
       mergeOppRecords(into, from);
       await dbPut("opponents", into);
@@ -288,12 +367,14 @@ async function importJSON(data) {
     const matchId = nameToId[normName(rec.name)];
     if (matchId) {                           // new id but known name — fold into the existing profile
       const into = await dbGet("opponents", matchId);
+      rc.prev.opponents.push({ id: matchId, rec: copyRec(into) });
       mergeOppRecords(into, rec);
       await dbPut("opponents", into);
       remap[rec.id] = matchId;
       counts.merged++;
     } else {                                 // genuinely new opponent
       await dbPut("opponents", rec);
+      rc.added.opponents.push(rec.id);
       existingIds.add(rec.id);
       nameToId[normName(rec.name)] = rec.id; // later same-name incoming folds into this one too
       counts.opponents++;
@@ -308,12 +389,20 @@ async function importJSON(data) {
       if (Array.isArray(rec.villainIds)) rec.villainIds = [...new Set(rec.villainIds.map((x) => remap[x] || x))];
     }
     const cur = await dbGet("hands", rec.id);
-    if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) { await dbPut("hands", rec); counts.hands++; }
+    if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) {
+      if (cur) rc.prev.hands.push({ id: rec.id, rec: cur }); else rc.added.hands.push(rec.id);
+      await dbPut("hands", rec);
+      counts.hands++;
+    }
   }
   for (const rec of data.sessions || []) {
     if (!rec.id) continue;
     const cur = await dbGet("sessions", rec.id);
-    if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) { await dbPut("sessions", rec); counts.sessions++; }
+    if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) {
+      if (cur) rc.prev.sessions.push({ id: rec.id, rec: cur }); else rc.added.sessions.push(rec.id);
+      await dbPut("sessions", rec);
+      counts.sessions++;
+    }
   }
   // Saved ranges: union by id, newer wins. An import must never drop a range
   // the other device added, same rule as reads and notes.
@@ -323,9 +412,15 @@ async function importJSON(data) {
     for (const r of inMeta.savedRanges) {
       if (!r || !r.id || !Array.isArray(r.hands)) continue;
       const have = byId.get(r.id);
-      if (!have || (r.updatedAt || 0) > (have.updatedAt || 0)) { byId.set(r.id, r); counts.ranges++; }
+      if (!have || (r.updatedAt || 0) > (have.updatedAt || 0)) {
+        rc.ranges.push({ id: r.id, prev: have || null, mark: r.updatedAt || 0 });
+        byId.set(r.id, r);
+        counts.ranges++;
+      }
     }
     if (counts.ranges) await metaSet("savedRanges", [...byId.values()]);
   }
+  await importLogAdd(rc);
+  counts.logId = rc.id;
   return counts;
 }
