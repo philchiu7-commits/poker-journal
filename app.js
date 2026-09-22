@@ -23,6 +23,7 @@ let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
 let showReadPicker = true;        // Reads panel: full picker by default; collapses to a summary. Sticky.
+let readTab = "online";           // which picker layout: "online" = street tree, "live" = by category. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
@@ -139,7 +140,7 @@ const READ_LAYOUT = [
     { label: "As PFR", rows: wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]) },
     { label: "As PFC", rows: [{ ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands"] }] },
   ] },
-  { title: "Uncategorized", subs: [{ rows: [
+  { title: "Uncategorized", catchAll: true, subs: [{ rows: [
     { label: "Range shape", ids: ["merged", "polar", "bad-polar", "sp-dis-board", "oop-protect", "bet-merged-mwp"] },
     { label: "Preflop sizing", ids: ["preflop-sizing", "3bet-sizing"] },
     { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
@@ -160,6 +161,44 @@ const POS_MATRIX = {
     ["Value", ["lrr-v-ns", "lrr-v-ws"]],
     ["Bluff", ["lrr-b-ns", "lrr-b-ws"]]] },
 };
+
+/* The Live tab's picker: the category-first layout the app used before the
+   street tree. Same ids and the same stored reads as READ_LAYOUT — two ways of
+   reading one set, so a read set on one tab shows set on the other. `cat` here
+   names the tag category whose unlisted reads land in this section's "Other",
+   so a new read can't go missing on this tab either. An id may be written as
+   ["id", "Short"] to override the chip's label, which is how the old grouped
+   rows stayed on one line (Station: F T R, not Station F / Station T / …). */
+const LIVE_LAYOUT = [
+  { title: "Preflop", cat: "preflop", subs: [{ rows: [
+    { label: "Opening", ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
+    { matrix: "First raise" },
+    { matrix: "LRR" },
+    { label: "Limping", ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
+    { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
+  ] }] },
+  { title: "Postflop", cat: "postflop", subs: [{ rows: [
+    { label: "Station",     ids: [["station-f", "F"], ["station-t", "T"], ["station-r", "R"]] },
+    { label: "Lead",        ids: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
+    { label: "Raise nuts",  ids: [["raise-nuts-f", "F"], ["raise-nuts-t", "T"], ["raise-nuts-r", "R"]] },
+    { label: "Bluff till",  ids: [["bluff-till-f", "F"], ["bluff-till-t", "T"], ["bluff-till-r", "R"]] },
+    { label: "Bluff raise", ids: [["bluff-raise-f", "F"], ["bluff-raise-t", "T"], ["bluff-raise-r", "R"]] },
+    { label: "B3b F",       ids: [["have-b3b-v-f", "V"], ["have-b3b-b-f", "B"]] },
+    { label: "Bluff XT",    ids: [["bluff-xt-f", "F"], ["bluff-xt-t", "T"], ["bluff-xt-r", "R"]] },
+    { label: "Range",       ids: ["merged", "polar"] },
+    { label: "Cbet & Float", ids: ["pfr-oop-cbet", "over-cbet", "floats-wide", "barrels-off", "cb-light-mwp", "pfc-b-light-mwp"] },
+    { label: "Leads",        ids: ["lead-limped", "check-oop-limped"] },
+    { label: "Range shape",  ids: ["sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block", "bluffs-rivers", "bad-polar"] },
+  ] }] },
+  { title: "Sizing", cat: "sizing", subs: [{ rows: [
+    { label: "Preflop sizing",  ids: ["preflop-sizing", "3bet-sizing"] },
+    { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
+  ] }] },
+  { title: "Tells", cat: "live", subs: [{ rows: [
+    { label: "Physical / timing", ids: ["timing-tells", "snap-call-weak", "talks-when-strong"] },
+    { label: "Mental state",      ids: ["tilts", "bluffcatch-losing", "force-squid"] },
+  ] }] },
+];
 
 /* Felt villain-pill engine tag — one-word read summary shown on each seated
    villain's card. Compound rules win over singles (higher signal), and inside
@@ -2580,17 +2619,23 @@ function renderOppReads(o) {
   const editBtn = $("od-reads-edit");
   editBtn.textContent = showReadPicker ? "Hide" : `Edit${setReads.length ? ` · ${setReads.length}` : ""}`;
   editBtn.classList.toggle("on", showReadPicker);
+  $("od-reads-online").classList.toggle("on", showReadPicker && readTab === "online");
+  $("od-reads-live").classList.toggle("on", showReadPicker && readTab === "live");
   // the picker is ~70 controls — only build it when it's actually on screen
   if (showReadPicker) {
+    const layout = readTab === "live" ? LIVE_LAYOUT : READ_LAYOUT;
     const live = (id) => { const t = TAG_BY_ID[id]; return t && !RETIRED_TAG_IDS.has(id) ? t : null; };
-    const placed = new Set(READ_LAYOUT.flatMap((c) => c.subs.flatMap((sb) => sb.rows.flatMap((r) =>
-      r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids))));
+    // a row's id may be ["id", "Short"] — the label override, Live-tab rows only
+    const idOf = (x) => (Array.isArray(x) ? x[0] : x);
+    const labelOf = (x) => (Array.isArray(x) ? x[1] : TAG_BY_ID[x].label);
+    const placed = new Set(layout.flatMap((c) => c.subs.flatMap((sb) => sb.rows.flatMap((r) =>
+      r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.map(idOf)))));
     /* Two shapes, never mixed inside a row: a read that carries its own
        controls gets a label column and a control column, and a plain yes/no
        read is a chip. One row holding both is what made the tree look ragged. */
     const laid = (id) => isPositionRead(id) || isChoiceRead(id) || isStatRead(id) || isTallyRead(id);
     const isSet = (id) => reads[id] !== undefined && readIsActive(id, reads[id]);
-    const rowIds = (r) => r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids;
+    const rowIds = (r) => r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.map(idOf);
     const rowHTML = (r) => {
       const mx = r.matrix && POS_MATRIX[r.matrix];
       if (mx) {
@@ -2601,21 +2646,27 @@ function renderOppReads(o) {
           `<div class="posmx"><span></span>` + mx.cols.map((c) => `<span class="pmh">${esc(c)}</span>`).join("") +
           `${body}</div></div>`;
       }
-      const ids = r.ids.filter(live);
-      const lines = ids.filter(laid).map((id) =>
-        `<span class="rllab${isSet(id) ? " on" : ""}">${esc(TAG_BY_ID[id].label)}</span>` +
-        `<div class="rlctl">${readBtn(id, TAG_BY_ID[id].label, true)}</div>`).join("");
-      const chips = ids.filter((id) => !laid(id)).map((id) => readBtn(id, TAG_BY_ID[id].label, false)).join("");
+      const items = r.ids.filter((x) => live(idOf(x)));
+      const lines = items.filter((x) => laid(idOf(x))).map((x) =>
+        `<span class="rllab${isSet(idOf(x)) ? " on" : ""}">${esc(labelOf(x))}</span>` +
+        `<div class="rlctl">${readBtn(idOf(x), labelOf(x), true)}</div>`).join("");
+      const chips = items.filter((x) => !laid(idOf(x))).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
       return `<div class="readsub">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
         (lines ? `<div class="readlines">${lines}</div>` : "") +
         (chips ? `<div class="chiprow readwrap">${chips}</div>` : "") +
         (lines || chips ? "" : `<span class="chipnote">—</span>`) + `</div>`;
     };
-    $("od-tags").innerHTML = READ_LAYOUT.map((cat) => {
+    $("od-tags").innerHTML = layout.map((cat) => {
       let subs = cat.subs;
-      if (cat.title === "Uncategorized") {
-        const extra = TENDENCY_TAGS.filter((t) => live(t.id) && !placed.has(t.id)).map((t) => t.id);
-        if (extra.length) subs = [{ rows: subs[0].rows.concat([{ label: "Other", ids: extra }]) }];
+      // whatever the rows don't name still has to show up: catchAll takes the
+      // lot, cat takes that tag category's leftovers
+      if (cat.catchAll || cat.cat) {
+        const extra = TENDENCY_TAGS.filter((t) => live(t.id) && !placed.has(t.id) &&
+          (cat.catchAll || t.cat === cat.cat)).map((t) => t.id);
+        if (extra.length) {
+          const last = subs[subs.length - 1];
+          subs = subs.slice(0, -1).concat([{ ...last, rows: last.rows.concat([{ label: "Other", ids: extra }]) }]);
+        }
       }
       // the count on the card says where this player is already written down
       const n = subs.flatMap((sb) => sb.rows.flatMap(rowIds)).filter((id) => live(id) && isSet(id)).length;
@@ -5544,6 +5595,17 @@ function bindStatic() {
         cell.ids, "he sized this way" + many);
     }
   };
+  const readTabClick = (tab) => () => {
+    // tapping a tab while the picker is collapsed opens it — the tabs are the
+    // only thing to tap up there, and a tab that changes nothing reads as broken
+    if (showReadPicker && readTab === tab) return;
+    readTab = tab; showReadPicker = true;
+    metaSet("readTab", readTab); metaSet("showReadPicker", true);
+    const o = oppById(curOppId);
+    if (o) renderOppReads(o);
+  };
+  $("od-reads-online").onclick = readTabClick("online");
+  $("od-reads-live").onclick = readTabClick("live");
   $("od-reads-edit").onclick = () => {
     showReadPicker = !showReadPicker;
     metaSet("showReadPicker", showReadPicker);   // sticky across opponents and launches
@@ -5980,6 +6042,7 @@ async function boot() {
   lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};
   showReadPicker = (await metaGet("showReadPicker")) ?? true;
+  readTab = (await metaGet("readTab")) === "live" ? "live" : "online";
   // Storage is the only writer, but a half-written or older-shape value must
   // not take the whole tab down — drop what doesn't parse, keep the rest.
   savedRanges = ((await metaGet("savedRanges")) || [])
