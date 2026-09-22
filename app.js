@@ -1879,27 +1879,16 @@ function oppOrderCmp(stats) {
   };
 }
 
-/* The chips worth showing across the room, in one fixed order: exploits first
-   — what Phil does to him — then the reads he featured himself. Nothing else:
-   a read only reaches the front page because he put it there (v161), so an
-   uncurated opponent shows his exploits and his name and no wall of chips.
+/* The chips worth showing across the room: only what Phil put on the card
+   himself, exploits and reads alike, in the order he chose. Nothing promotes
+   itself — an uncurated opponent shows his name and nothing else (v162).
    Shared by the list row, the Table tab and the detail front-page card. */
 function frontChipsHTML(o) {
-  const exploitChips = (o.exploits || [])
-    .filter((e) => !e.hideFront)
-    .map((e) => {
-      const label = (e.abbr && e.abbr.trim()) ? e.abbr.trim() : autoShort(e.text);
-      return `<span class="excard" title="${esc(e.text)}">💡 ${esc(label)}</span>`;
-    }).join("");
-  const readChips = featuredItems(o).filter((it) => it.type === "read")
-    .map((it) => featuredChip(o, it)).filter(Boolean).join("");
-  return exploitChips + readChips;
+  return featuredItems(o).map((it) => featuredChip(o, it)).filter(Boolean).join("");
 }
 
 function cardChipsHTML(o) {
-  const curated = featuredItems(o).map((it) => featuredChip(o, it)).filter(Boolean).join("");
-  const chips = curated || frontChipsHTML(o);
-  return chips || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
+  return frontChipsHTML(o) || `<span class="chipnote">Nothing featured yet — tap Edit to choose reads & exploits.</span>`;
 }
 
 function oppRowHTML(o, st) {
@@ -2368,26 +2357,12 @@ function renderCardSheet() {
   const pool =
     setReads.map((id) => `<button class="chip" data-cadd="read:${esc(id)}">${esc(TAG_BY_ID[id].label)}</button>`).join("") +
     exps.map((e) => `<button class="chip" data-cadd="exploit:${esc(e.id)}">💡 ${esc(e.abbr?.trim() || autoShort(e.text))}</button>`).join("");
-  // Strong reads auto-show on the row while no reads are featured; give each
-  // one a per-opponent opt-out so a noisy read can be kept off the card.
-  const featHasReads = feat.some((it) => it.type === "read");
-  const strong = Object.entries(oppReads(o)).filter(([rid, s]) => isStrongRead(s) && readIsShown(o, rid));
-  const autoHTML = !featHasReads && strong.length
-    ? `<div class="glabel" style="margin-top:12px">Auto-shown strong reads</div>
-       <div class="sheetnote">These show on the row while no reads are featured — tap one to hide/show it.</div>
-       <div class="chiprow" id="card-auto">` +
-      strong.map(([rid, s]) => {
-        const hid = !!(o.hiddenReads || {})[rid];
-        return `<button class="chip mini${hid ? "" : " on " + (STATE_CLASS[s] || "")}" data-chide="${esc(rid)}">${hid ? "🚫 " : ""}${esc(TAG_BY_ID[rid]?.label || rid)}</button>`;
-      }).join("") + `</div>`
-    : "";
   showSheet(`<div class="sheethead"><span class="t">Front-page card</span>
       <button class="chip" data-sheetclose>Done</button></div>
     <div class="sheetnote">Pick which reads &amp; exploits show on this player's row, and drag the order. Exploit chips show your short tag (full text on hover).</div>
     <div class="linelist">${rows}</div>
     <div class="glabel" style="margin-top:12px">Add to card</div>
-    <div class="chiprow" id="card-pool">${pool || `<span class="chipnote">set some reads or add exploits first</span>`}</div>
-    ${autoHTML}`);
+    <div class="chiprow" id="card-pool">${pool || `<span class="chipnote">set some reads or add exploits first</span>`}</div>`);
   const sheet = $("sheet");
   const refresh = async () => {
     o.updatedAt = Date.now();
@@ -2411,12 +2386,6 @@ function renderCardSheet() {
   sheet.querySelectorAll("[data-abbr]").forEach((inp) => inp.onchange = async () => {
     const e = (o.exploits || []).find((x) => x.id === inp.dataset.abbr);
     if (e) { e.abbr = inp.value.trim(); o.updatedAt = Date.now(); await dbPut("opponents", o); renderCardSheet(); }
-  });
-  sheet.querySelectorAll("[data-chide]").forEach((b) => b.onclick = () => {
-    o.hiddenReads = o.hiddenReads || {};
-    const rid = b.dataset.chide;
-    if (o.hiddenReads[rid]) delete o.hiddenReads[rid]; else o.hiddenReads[rid] = true;
-    refresh();
   });
 }
 
@@ -2793,7 +2762,7 @@ function renderOppDetail(id) {
   $("od-exploits").innerHTML = exps.map(({ e: n }) => {
     const topBadge = n.id === topId ? `<span class="topbadge">top</span>` : "";
     const adjBadge = n.adj ? `<span class="adjbadge" title="This player adjusts to this exploit">⚠︎ ADJ</span>` : "";
-    const hidden = !!n.hideFront;
+    const onCard = featuredItems(o).some((it) => it.type === "exploit" && it.id === n.id);
     return n.id === editExploitId
       ? `<div class="noteitem" data-exp="${n.id}">
           <textarea class="noteedit" rows="2">${esc(n.text)}</textarea>
@@ -2801,11 +2770,11 @@ function renderOppDetail(id) {
             <button class="chip mini" data-expcancel>Cancel</button>
             <button class="chip mini on sgreen" data-expsave>Save</button>
           </div></div>`
-      : `<div class="noteitem${n.adj ? " adj" : ""}${hidden ? " hiddenfront" : ""}" data-exp="${n.id}">
+      : `<div class="noteitem${n.adj ? " adj" : ""}" data-exp="${n.id}">
           <div class="notetext">${esc(n.text)} ${adjBadge}${topBadge}</div>
           <div class="noterowbtns">
             <button class="chip mini confcycle${(n.conf ?? 0) === 0 ? " off" : ""}" data-expconfcycle title="Confidence 0–5 · tap to cycle">${n.conf ?? 0}</button>
-            <button class="chip mini pinbtn${hidden ? "" : " on"}" data-exphide title="Show or hide this exploit on the opponent list card">${hidden ? "🚫 Hidden" : "👁 On front"}</button>
+            <button class="chip mini pinbtn${onCard ? " on" : ""}" data-exphide title="Put this exploit on the opponent's front-page card">${onCard ? "👁 On front" : "＋ Front"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
@@ -5592,8 +5561,10 @@ function bindStatic() {
       if (n) { n.adj = !n.adj; o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-exphide]")) {
-      const n = (o.exploits || []).find((x) => x.id === id);   // toggle: show/hide on opponent list card
-      if (n) { n.hideFront = !n.hideFront; o.updatedAt = Date.now(); await dbPut("opponents", o); }
+      const feat = featuredItems(o);                           // toggle: on/off the front-page card
+      const i = feat.findIndex((it) => it.type === "exploit" && it.id === id);
+      if (i < 0) feat.push({ type: "exploit", id }); else feat.splice(i, 1);
+      o.updatedAt = Date.now(); await dbPut("opponents", o);
       renderOppDetail(curOppId);
     } else if (e.target.closest("[data-expconfcycle]")) {
       const n = (o.exploits || []).find((x) => x.id === id);   // cycle 0→1→2→3→4→5→0 confidence
