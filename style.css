@@ -658,6 +658,10 @@ textarea.noteedit { margin-bottom: 0; }
 .tabpair .linkbtn:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
 .tabpair .linkbtn.on { position: relative; z-index: 1; }
 /* History is a record, so its cells don't invite a tap — no pointer, no press. */
+/* A stroke starts on a cell, so a touch that lands on one paints instead of
+   scrolling the page out from under it. History's cells are a record, not a
+   canvas, and keep the scroll. */
+.rgcell.rng:not(.ro) { touch-action: none; }
 .rgcell.rng.ro { cursor: default; }
 .rgcell.rng.ro:active { transform: none; }
 .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
@@ -938,16 +942,23 @@ textarea.noteedit { margin-bottom: 0; }
 .mergeitem.danger { color: #f85149; }
 
 /* ===== HUD ===== */
-.hudgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
-.hudcell { background:#161a22; border:1px solid #232a36; border-radius:10px;
-  padding:6px 4px; text-align:center; width:100%; font:inherit; cursor:pointer;
+/* Thirteen numbers, and the phone has to scroll past them to reach the reads.
+   Auto-fill rather than a fixed three, so a wide window packs more per row
+   instead of stretching three cells across it, and the sample size rides on
+   the label's line instead of claiming a third one. */
+.hudgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:4px; }
+.hudcell { background:#161a22; border:1px solid #232a36; border-radius:8px;
+  padding:4px 3px; text-align:center; width:100%; font:inherit; cursor:pointer;
+  /* The cell's own font-size is what sizes the label's line box — leave it at
+     the body's and the caption line stands a full body line tall. */
+  font-size:9px; line-height:1.3;
   -webkit-appearance:none; appearance:none; }
 /* A cell with no hands behind it is still a number, just not a door. */
 .hudcell.dead { cursor:default; }
 .hudcell:not(.dead):active { background:#1d2230; }
-.hudcell b { display:block; font-size:16px; font-weight:700; color:#e8ecf3; line-height:1.1; }
-.hudcell span { display:block; font-size:9.5px; color:#8b94a5; margin-top:2px; }
-.hudcell i { display:block; font-size:9px; color:#5a6374; font-style:normal; margin-top:1px; }
+.hudcell b { display:block; font-size:14px; font-weight:700; color:#e8ecf3; line-height:1.15; }
+.hudcell span { font-size:9px; color:#8b94a5; }
+.hudcell i { font-size:9px; color:#5a6374; font-style:normal; margin-left:3px; }
 /* Dimmed, not hidden — a number off three hands should look unreliable. */
 .hudcell.thin b { color:#6d7686; }
 .hudcell.thin i { color:#4d5666; }
@@ -1020,6 +1031,20 @@ textarea.noteedit { margin-bottom: 0; }
 .sizesub { font-size: 10.5px; font-weight: 600; color: var(--muted); margin: 7px 0 3px; }
 /* What the auto grid had to leave out. Quiet by default — it is a footnote,
    not a warning — but each line opens the hands behind it. */
+/* The definition, folded away under the grid. Reading it is a one-time thing;
+   the sample size on the fold is not, so that stays out where it shows. */
+.sizedef { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+/* The same triangle the read tree folds with, so the two folds read as one
+   control. A button rather than <details>: everything else that hides in this
+   app hides the same way, through a re-render. */
+.sizedef .sizedefhead { display: block; width: 100%; text-align: left; padding: 2px 0;
+  background: none; border: 0; font-family: inherit; font-size: 11.5px; line-height: 1.35;
+  color: var(--muted); cursor: pointer; -webkit-appearance: none; appearance: none; }
+.sizedef .sizedefhead::before { content: "\25be\00a0"; }
+.sizedef.shut .sizedefhead::before { content: "\25b8\00a0"; }
+.sizedef .sizedefhead:active { color: var(--text); }
+.sizedef.shut .sizenote { display: none; }
+.sizedef .sizenote { margin: 6px 0 0; }
 .sizeskips { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .sizeskips b { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase;
   letter-spacing: .5px; margin-bottom: 1px; }
@@ -1054,6 +1079,19 @@ textarea.noteedit { margin-bottom: 0; }
 .rchead { display: flex; align-items: center; gap: 8px; padding: 7px 11px;
   background: var(--panel2); border-bottom: 1px solid var(--line); }
 .rctitle { font-size: 12.5px; font-weight: 700; letter-spacing: .02em; }
+/* A triangle and nothing else. It sits ahead of the title so the whole column
+   of them lines up down the tree, and it turns a quarter-turn rather than
+   swapping glyph, so the fold reads as one control in two states. */
+.rcfold { width: 16px; height: 16px; flex: none; margin: 0 -2px 0 -3px; padding: 0;
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-appearance: none; appearance: none; }
+.rcfold::before { content: ""; width: 0; height: 0; border-style: solid;
+  border-width: 4.5px 0 4.5px 6px; border-color: transparent transparent transparent currentColor;
+  transform: rotate(90deg); transition: transform .12s ease; }
+.readcat.shut .rcfold::before { transform: rotate(0deg); }
+.rcfold:active { color: var(--text); }
+.readcat.shut .rchead { border-bottom: 0; }
 .rcn { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--accent);
   background: #1c2c47; border: 1px solid var(--accent); border-radius: 999px; padding: 0 7px; }
 /* The role block is the grid, and the pieces inside it fold into that grid
@@ -1087,16 +1125,19 @@ textarea.noteedit { margin-bottom: 0; }
 .statinput::-webkit-outer-spin-button, .statinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .statinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .statunit { font-size: 13px; color: var(--muted); }
-/* The computed twin of .statinput: same box, so a row that mixes a number the
-   app worked out with one Phil typed doesn't look like two different controls.
-   It reads out — no border cue that invites a tap — and wears its sample size,
-   greyed under the count where a percentage is still noise. */
+/* Not a box — a reading. It used to wear .statinput's fill and radius so the
+   two would match in a row, but a filled, rounded control reads as something
+   somebody typed into, and these are the numbers the hands already answered.
+   So it sits in the row as plain type, a size up and a weight bolder than the
+   boxes around it, with its unit and its sample riding quietly beside it. */
 .statcalc {
-  min-width: 56px; padding: 7px 4px; font-size: 13px; font-weight: 600; line-height: 16px;
-  color: var(--text); background: var(--panel2); border: 1px solid transparent;
-  border-radius: 9px; text-align: center;
+  padding: 6px 1px; font-size: 15px; font-weight: 700; line-height: 16px;
+  color: var(--text); letter-spacing: -.2px;
 }
-.statcalc.thin { color: var(--muted); }
+/* Dimmed, not hidden — a number off three spots should look unreliable. */
+.statcalc.thin { color: var(--muted); font-weight: 600; }
+.statcalc + .statunit { align-self: center; margin-left: -4px; }
+.statcalc ~ .statn { align-self: center; }
 .statn { font-size: 11px; color: var(--muted); }
 .tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
 .bubble.tallyclr { padding-left: 9px; padding-right: 9px; color: var(--muted); }

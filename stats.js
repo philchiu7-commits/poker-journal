@@ -387,11 +387,12 @@ function potWalk(h) {
           if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
           return out;
         }
-        /* A raise is priced against the pot as it would stand once he calls,
-           counting only what he put in on top of that call — the convention
-           that keeps B33/B50/B66/B100 meaning min-raise / 2.5x / 3x / 4x. A
-           bet is the same formula with nothing to call. */
-        if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0, potAfterCall: p + toCall, over: v - level });
+        /* A raise is priced the way a bet is: what he put in, over the pot as
+           it stood when he acted. For a raise "what he put in" is the money on
+           top of the call, so B50 means the raise itself was half that pot
+           (Phil, v178). The pot he is raising into already contains the bet he
+           is answering. */
+        if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0, over: v - level });
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
@@ -417,7 +418,9 @@ function betsVsPot(h) {
 /* Was the hand value or a bluff on the street he bet it? Strength only — a
    read on his cards, never on his thinking. Two pair or better is value, and so
    is top or second pair. Everything under that — third pair, bottom pair, a
-   naked draw, air — is a bluff, so nothing goes uncounted any more. */
+   naked draw, air — is a bluff, so nothing goes uncounted any more.
+   Second pair comes back as its own grade, "V2": it is value everywhere except
+   the turn, where what he did on the flop decides it. */
 function madeClass(hole, board) {
   if (!hole || hole.length !== 2 || board.length < 3) return null;
   /* An unreadable card has to stop the grade, not slide through it. Phil's
@@ -437,7 +440,7 @@ function madeClass(hole, board) {
   if (new Set(mine).size > 1) return "V";               // two pair using both cards
   const best = mine[0];
   const above = new Set(board.map((c) => RVAL[c[0]]).filter((v) => v > best)).size;
-  return above <= 1 ? "V" : "B";                        // top or second pair is value
+  return above === 0 ? "V" : above === 1 ? "V2" : "B";  // top pair, second pair, or under it
 }
 /* Phil's ladder is B33/B50/B66/B75/B100/B150. Bucket to the nearest rung so a
    62% bet reads as the 66% he was going for, not as its own category. Cuts are
@@ -458,7 +461,7 @@ const sizeStepFor = (r, act) =>
    missing and name the hand. "Some of my hands aren't in here" should be a
    question the panel answers, not one Phil has to bring to me. */
 function sizingAuto(oppId, hands) {
-  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount", "badRaise"];
+  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount", "badRaise", "turnNoBarrel"];
   const rows = {}, split = {}, skipped = {}, why = {};
   const bump = (cell, step, id) => {
     const c = (cell[step] = cell[step] || { n: 0, ids: [] });
@@ -483,7 +486,7 @@ function sizingAuto(oppId, hands) {
       const hole = (v.cards || []).filter(Boolean);
       const vis = board.slice(0, need);
       if (hole.length !== 2 || vis.length < need) { miss("noCards"); continue; }
-      const k = madeClass(hole, vis);
+      let k = madeClass(hole, vis);
       if (!k) { miss("badCards"); continue; }
       const e = priced.get(a);
       if (!e || e.bad) {
@@ -504,10 +507,22 @@ function sizingAuto(oppId, hands) {
       const ratio = e.ratio !== null && e.ratio !== undefined
         ? e.ratio
         : isR
-          ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
+          ? (e.pot > 0 && e.over > 0 ? e.over / e.pot : null)
           : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
       // A jam needs no rung, so it is counted even when the fraction can't be.
-      if (ratio === null && a.act !== "jam") { miss(isR && e.potAfterCall > 0 ? "badRaise" : "noPot"); continue; }
+      if (ratio === null && a.act !== "jam") { miss(isR && e.pot > 0 ? "badRaise" : "noPot"); continue; }
+      /* Second pair on the turn is a bluff only when it is the second barrel —
+         he bet the flop and bet it again. Bet after the flop checked through,
+         or after he called someone else's flop bet, it is neither value nor a
+         bluff, and a hand that is neither belongs out of the grid rather than
+         in a column that misreads him (Phil, v178). */
+      if (k === "V2" && a.street === "turn") {
+        const barrel = !isR && (h.actions || []).some((x) =>
+          x.street === "flop" && x.actor === a.actor && SZ_AGG.has(x.act));
+        if (!barrel) { miss("turnNoBarrel"); continue; }
+        k = "B";
+      }
+      if (k === "V2") k = "V";
       /* Raises land in one row per kind, the streets together. They are rare
          enough that three rows of them read as noise, so the street is kept
          alongside in `split` and shown on demand instead. */

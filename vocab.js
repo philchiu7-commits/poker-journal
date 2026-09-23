@@ -532,14 +532,17 @@ const RANGE_SQUIDS = [
    record by it, Estimate paints the matching grid. Value/bluff is deliberately
    not split: it is a judgement the action stream can't make, and two grids per
    action is two grids that never get filled. */
+/* Order is the order they sit in the chip row. The overall range goes last:
+   it is the one that is always there and always the biggest, so it reads as
+   the total at the end of the line rather than a heading in front of it. */
 const RANGE_SITS = [
-  { id: "all",   label: "Range", title: "overall range", act: null },
   { id: "raise", label: "Raise", title: "raise",         act: "raise" },
   { id: "limp",  label: "Limp",  title: "limp",          act: "limp" },
   { id: "3bet",  label: "3bet",  title: "3-bet",         act: "3bet" },
   { id: "4bet",  label: "4bet+", title: "4-bet or more", act: "4bet+" },
   { id: "call",  label: "Call",  title: "call",          act: "call" },
   { id: "lrr",   label: "LRR",   title: "limp-reraise",  act: "Lrr" },
+  { id: "all",   label: "Range", title: "overall range", act: null },
 ];
 const RANGE_SIT_BY_ID = Object.fromEntries(RANGE_SITS.map((t) => [t.id, t]));
 const rangeSpotId = (sq, sit, pg = "any") =>

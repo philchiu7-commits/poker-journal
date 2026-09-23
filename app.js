@@ -23,6 +23,10 @@ let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
 let showDerivedReads = {};        // per-opponent toggle for hand-derived read suggestions
 let showReadPicker = true;        // Reads panel: full picker by default; collapses to a summary. Sticky.
+/* Which sections of the read tree are folded shut. A view state, not a read:
+   it is about what you are working on right now, not about the player, so it
+   is the same for every opponent and it does not survive a reload. */
+const readCatShut = new Set();
 let readTab = "online";           // which picker layout: "online" = street tree, "live" = by category. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
@@ -1583,7 +1587,7 @@ function openHudDrill(o, key) {
 
 /* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
 let rangeSquid = RANGE_SQUIDS[0].id;    // nS / wS toggle: which range is being sketched
-let rangeSitSel = RANGE_SITS[0].id;     // which situation is on the grid — "all" is the overall range
+let rangeSitSel = "all";                // which situation is on the grid — "all" is the overall range
 let rangeSitPos = "any";                // which position group is on the grid — "any" is the ungrouped sketch
 /* Two tabs, one grid. History is the hands on record — read off the hand
    histories, nothing to fill in; Estimate is the range you paint. History
@@ -1730,25 +1734,26 @@ function renderOppRanges(o) {
   const key = curRangeSpot();
   const cur = rangeSpotData(o, key);
 
-  /* Every chip counts the tab your thumb is on: on History the hands on record
-     for that chip, on Estimate what you have painted there. A History count is
-     hands, not spots, so it is taken over the whole scope at once rather than
-     summed per seat — "Any" already is every seat. */
-  const painted = (sq, sit, pg) => rangeSpotData(o, rangeSpotId(sq, sit, pg)).hands.length;
+  /* Every chip counts the hands on record behind it, on both tabs. Estimate
+     used to count what you had painted there instead, which made the same chip
+     mean two different things depending on which tab you were on — and the
+     number you actually want while sketching is how much evidence sits behind
+     the spot, not how many squares you have already filled in. What you painted
+     is in the footer under the grid (Phil, v178). A count is hands, not spots,
+     so it is taken over the whole scope at once rather than summed per seat —
+     "Any" already is every seat. */
   const onRecord = (sq, sit, pg) => rangeRowsIn(rowsBy[sq], sit, rangePosGroup(pg).pos).length;
 
   const squids = RANGE_SQUIDS.map((s) => {
-    const n = hist ? onRecord(s.id, rangeSitSel, rangeSitPos) : painted(s.id, rangeSitSel, rangeSitPos);
+    const n = onRecord(s.id, rangeSitSel, rangeSitPos);
     return `<button class="chip mini${s.id === rangeSquid ? " on" : ""}" data-rsquid="${s.id}" title="${esc(s.title)}">${esc(s.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const sits = RANGE_SITS.map((t) => {
-    const n = hist
-      ? onRecord(rangeSquid, t.id, rangeSitPos)
-      : pgs.reduce((m, g) => m + painted(rangeSquid, t.id, g.id), 0);
+    const n = onRecord(rangeSquid, t.id, rangeSitPos);
     return `<button class="chip mini${t.id === rangeSitSel ? " on" : ""}" data-rsit="${t.id}" title="${esc(t.title)}">${esc(t.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
   const groups = pgs.map((g) => {
-    const n = hist ? onRecord(rangeSquid, rangeSitSel, g.id) : painted(rangeSquid, rangeSitSel, g.id);
+    const n = onRecord(rangeSquid, rangeSitSel, g.id);
     return `<button class="chip mini${g.id === rangeSitPos ? " on" : ""}" data-rpg="${g.id}" title="${esc(g.title)}">${esc(g.label)}${n ? `<i>${n}</i>` : ""}</button>`;
   }).join("");
 
@@ -1847,7 +1852,7 @@ function renderOppRanges(o) {
     ${hist
       ? `<div class="rhint">Every hand they turned up from ${esc(rangePosGroup(rangeSitPos).title)}, read off your logged hands.</div>`
       : !cur.hands.length
-        ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SIT_BY_ID[rangeSitSel].title)}`} from ${esc(rangePosGroup(rangeSitPos).title)} — tap the category chips to paint in blocks. The corner notches are what they have actually shown.</div>`
+        ? `<div class="rhint">Sketch ${rangeSitSel === "all" ? "what they play" : `what they ${esc(RANGE_SIT_BY_ID[rangeSitSel].title)}`} from ${esc(rangePosGroup(rangeSitPos).title)} — drag across the grid to paint, or tap the category chips to fill in blocks. The corner notches are what they have actually shown.</div>`
         : ""}`;
   $("od-range-hist").classList.toggle("on", hist);
   $("od-range-est").classList.toggle("on", !hist);
@@ -2776,11 +2781,19 @@ function renderOppReads(o) {
         : `<span class="rctitle">${esc(cat.title)}</span>`;
       const bc = cat.title === "River exploit"
         ? `<button class="chktag" data-check="Bluff catching" title="Bluff-catching checklist">Bluff catch</button>` : "";
-      return `<section class="readcat"><div class="rchead">${title}${bc}` +
+      /* Folded away, the heading still carries its count — that is the whole
+         point of folding one: the streets you have nothing written on get out
+         of the way of the one you are working on, without hiding that they are
+         empty. A triangle rather than a word, because the heading already has
+         a checklist button on it and two words of chrome read as a toolbar. */
+      const shut = readCatShut.has(cat.title);
+      return `<section class="readcat${shut ? " shut" : ""}">` +
+        `<div class="rchead"><button class="rcfold" data-rcfold="${esc(cat.title)}"
+           aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${esc(cat.title)}"></button>${title}${bc}` +
         (n ? `<span class="rcn">${n}</span>` : "") + `</div>` +
-        subs.filter((sb) => shown(sb).length).map((sb) => `<div class="roleblk">` +
+        (shut ? "" : subs.filter((sb) => shown(sb).length).map((sb) => `<div class="roleblk">` +
           (sb.label ? `<div class="rolehead">${esc(sb.label)}</div>` : "") +
-          shown(sb).map(rowHTML).join("") + `</div>`).join("") + `</section>`;
+          shown(sb).map(rowHTML).join("") + `</div>`).join("")) + `</section>`;
     }).join("");
   }
 
@@ -2841,6 +2854,7 @@ const SZ_SKIPS = [
   ["noPot", "the pot can't be rebuilt — no blinds, or an earlier amount missing"],
   ["badAmount", "the amount can't be true — over 3× the pot"],
   ["badRaise", "a raise on record for no more than the bet it faced"],
+  ["turnNoBarrel", "second pair on the turn with no flop barrel behind it — neither value nor bluff"],
 ];
 const SZ_SKIP_BY_ID = Object.fromEntries(SZ_SKIPS.map((x) => [x[0], x[1]]));
 
@@ -2882,6 +2896,10 @@ function checkHTML(key) {
 }
 function showCheck(btn) { openPeek(btn, checkHTML(btn.dataset.check), "chkpk"); }
 
+/* Folded shut? A view state like the read tree's: what you are reading right
+   now, not something about the player, so it is not stored and does not survive
+   a reload. Shut by default — the definition is a read-once. */
+let sizeDefShut = true;
 function renderOppSizing(o) {
   const auto = sizingAuto(o.id, HANDS);
   const head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
@@ -2914,20 +2932,28 @@ function renderOppSizing(o) {
   const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
     `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
   const skipHTML = skips ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
+  /* The definition is long, and it is the sort of thing you read once and then
+     want out of the way of the grid. Folded, at the foot of the panel, with the
+     sample size left showing on the fold — that is the part you check every
+     time. */
+  const defHTML = `<div class="sizedef${sizeDefShut ? " shut" : ""}">
+    <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record — what counts as what</button>
+    <div class="sizenote">Value is two pair or better, or top or second pair; everything under that
+      counts as a bluff, draws included. Second pair on the turn is the one exception: it is a bluff
+      only when it is the second barrel — he bet the flop and bet it again. Bet after the flop checked
+      through, or after he called someone else's flop bet, it is neither value nor a bluff and stays
+      out of the grid. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
+      On the raise rows the rung is what he put in <i>on top of the call</i> as a share of the pot he
+      raised into — B50 means the raise itself was half that pot. Those two rows hold all three
+      streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
+      150% of the pot lands there too. Tap a count for the hands.</div></div>`;
   $("od-sizing").innerHTML = (auto.n
-    ? `<div class="sizenote">From ${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record.
-         Value is two pair or better, or top or second pair; everything under that counts as a bluff,
-         draws included. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
-         On the raise rows the rung is what he put in <i>on top of the call</i> as a share of the pot
-         after it — against a pot-size bet, B33 is a min-raise, B50 a 2.5×, B66 a 3× and B100 a 4×.
-         Those two rows hold all three streets; the label opens the split.
-         Jam counts every all-in whatever it cost, and anything over 150% of the pot lands there too.
-         Tap a count for the hands.</div>` + head +
+    ? head +
       [["bet", "V", "Bet · value"], ["bet", "B", "Bet · bluff"], ["raise", null, "Raise · flop, turn and river"]]
         .map(([m, k, t]) => `<div class="sizesub">${t}</div>` +
           SIZING_ROWS.filter((r) => r.mode === m && (!k || r.kind === k)).map(autoRow).join("")).join("")
     : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
-         and the bet amounts are both on record.</div>`) + skipHTML;
+         and the bet amounts are both on record.</div>`) + skipHTML + (auto.n ? defHTML : "");
 }
 
 function renderOppHud(o) {
@@ -5529,17 +5555,14 @@ function bindStatic() {
     if (pg) { rangeSitPos = pg.dataset.rpg; renderOppRanges(o); return; }
     const dr = e.target.closest("[data-rdrill]");
     if (dr) { openRangeDrill(o); return; }
-    const cl = e.target.closest("[data-rclass]"), cell = e.target.closest("[data-rcell]"), clr = e.target.closest("[data-rclear]");
-    if (!cl && !cell && !clr) return;
+    const cl = e.target.closest("[data-rclass]"), clr = e.target.closest("[data-rclear]");
+    if (!cl && !clr) return;              // the cells themselves are painted by the drag below
     if (rangeTab === "history") return;   // History is the hand histories talking; nothing to edit
     const key = curRangeSpot();
     let { hands, seen } = rangeSpotData(o, key);   // the overall range, or one situation from one position group
     if (cl) {                        // class chip: all in → remove all, else add all
       const ch = RANGE_CLASS_BY_ID[cl.dataset.rclass].hands;
       hands = ch.every((h) => hands.includes(h)) ? hands.filter((h) => !ch.includes(h)) : hands.concat(ch);
-    } else if (cell) {               // grid tap paints one hand class in or out
-      const c = cell.dataset.rcell;
-      hands = hands.includes(c) ? hands.filter((h) => h !== c) : hands.concat(c);
     } else if (clr) {
       if (!confirm(`Clear your estimate of the ${rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos)}?`)) return;
       hands = [];
@@ -5548,6 +5571,53 @@ function bindStatic() {
     renderOppRanges(o);
     await dbPut("opponents", o);
   };
+  /* ---- drag to paint the estimate grid ----
+     The cell the pointer goes down on sets the direction for the whole stroke:
+     start on a hand that is in and the stroke takes hands out, start on one
+     that is out and it puts them in. Without that a drag flips the same square
+     back and forth under a slow finger and lands wherever it happened to stop.
+     Each cell is painted at most once per stroke for the same reason.
+
+     The grid is repainted on release, not per cell: re-rendering 169 squares
+     mid-stroke destroys the element the pointer is tracking, so during the
+     stroke only the class on the cell moves, and the save happens once. */
+  let rgDrag = null;
+  const rgPaint = (cell) => {
+    if (!rgDrag || !cell) return;
+    const c = cell.dataset.rcell;
+    if (rgDrag.done.has(c)) return;
+    rgDrag.done.add(c);
+    if (rgDrag.add) rgDrag.set.add(c); else rgDrag.set.delete(c);
+    cell.classList.toggle("inr", rgDrag.add);
+  };
+  $("od-ranges").addEventListener("pointerdown", (e) => {
+    if (rangeTab === "history" || e.button) return;
+    const cell = e.target.closest("[data-rcell]"), o = oppById(curOppId);
+    if (!cell || !o) return;
+    const set = new Set(rangeSpotData(o, curRangeSpot()).hands);
+    rgDrag = { o, set, add: !set.has(cell.dataset.rcell), done: new Set() };
+    rgPaint(cell);
+  });
+  /* elementFromPoint rather than the event target: a touch keeps reporting the
+     element it started on, so pointerover never fires for the cells it crosses. */
+  $("od-ranges").addEventListener("pointermove", (e) => {
+    if (!rgDrag) return;
+    e.preventDefault();
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    rgPaint(el && el.closest ? el.closest("[data-rcell]") : null);
+  }, { passive: false });
+  const rgDrop = async () => {
+    const d = rgDrag;
+    rgDrag = null;
+    if (!d) return;
+    const key = curRangeSpot();
+    setRangeSpot(d.o, key, [...d.set], rangeSpotData(d.o, key).seen);
+    renderOppRanges(d.o);
+    await dbPut("opponents", d.o);
+  };
+  addEventListener("pointerup", rgDrop);
+  addEventListener("pointercancel", rgDrop);
+
   /* ---- saved-ranges tab ---- */
   // Debounced: a metaSet per keystroke would hit IDB (and the localStorage
   // mirror) on every letter of a range name.
@@ -5677,6 +5747,11 @@ function bindStatic() {
     if (o) openHudDrill(o, b.dataset.hud);
   };
   $("od-sizing").onclick = async (e) => {
+    if (e.target.closest("[data-sizedef]")) {     // fold the definition away
+      sizeDefShut = !sizeDefShut;
+      renderOppSizing(oppById(curOppId));
+      return;
+    }
     const sk = e.target.closest("[data-szskip]");
     if (sk) {
       const o = oppById(curOppId);
@@ -5730,6 +5805,13 @@ function bindStatic() {
     if (o) renderOppReads(o);
   };
   $("od-tags").onclick = async (e) => {
+    const fd = e.target.closest("[data-rcfold]");
+    if (fd) {                       // fold a whole street away; nothing stored on the opponent
+      const t = fd.dataset.rcfold;
+      readCatShut.has(t) ? readCatShut.delete(t) : readCatShut.add(t);
+      renderOppReads(oppById(curOppId));
+      return;
+    }
     const ch = e.target.closest("[data-choice]");
     if (ch) {                       // one-of-N read: tap picks, tapping the active option clears
       const o = oppById(curOppId);
