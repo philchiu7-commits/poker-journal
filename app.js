@@ -981,7 +981,7 @@ function villainRoles(h, oppId) {
      raise and a called 3-bet is also a call, so these narrow what is already
      there rather than replacing it — the same way LRR sits over Limp. */
   const me = "v" + idx;
-  if (made3bet(h, me)) out.push("3b");
+  if (made3bet(h, me) && !limpReraiseClass(pre)) out.push("3b");   // a limp-reraise answers to LRR only (Phil)
   if (called3bet(h, me)) out.push("c3b");
   return out;
 }

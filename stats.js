@@ -108,7 +108,14 @@ function hudCount(oppId, hands) {
     if (aggPre) { c.pfr++; pos(myPos).pfr++; }
     if (oppIso) { c.oppIso++; pos(myPos).isoOpp++; if (didIso) { c.iso++; pos(myPos).iso++; } }
     if (oppCc) { c.oppCc++; if (didCc) c.cc++; }
-    if (opp3) { c.opp3b++; pos(myPos).opp3++; if (did3) { c.n3b++; pos(myPos).three++; } }
+    /* A limp that comes back over the top is a limp-reraise, not a 3-bet
+       (Phil, v205). Limp-RR already counts it, the Ranges panel has always
+       filed it under Lrr, and the same hand in both stats reads as a player who
+       3-bets twice as often as he does. The whole hand leaves the 3-bet stat,
+       denominator included: a limper facing a raise answers with Limp-RR or
+       Limp-fold, so he was never in a 3-bet spot to decline. `did3` is left
+       alone — folding to the 4-bet that came back is still a fold to a 4-bet. */
+    if (opp3 && !limped) { c.opp3b++; pos(myPos).opp3++; if (did3) { c.n3b++; pos(myPos).three++; } }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
     if (oppF4) { c.oppF4b++; if (didF4) c.f4b++; }
@@ -118,8 +125,8 @@ function hudCount(oppId, hands) {
     if (oppIso) mark("iso|" + myPos, didIso, h.id);
     if (oppIso) mark("iso", didIso, h.id);
     if (oppCc) mark("cc", didCc, h.id);
-    if (opp3) mark("three", did3, h.id);
-    if (opp3) mark("three|" + myPos, did3, h.id);
+    if (opp3 && !limped) mark("three", did3, h.id);
+    if (opp3 && !limped) mark("three|" + myPos, did3, h.id);
     if (opp4) mark("four", did4, h.id);
     if (oppF3) mark("f3b", didF3, h.id);
     if (oppF4) mark("f4b", didF4, h.id);
