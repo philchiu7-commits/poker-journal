@@ -165,7 +165,7 @@ const READ_LAYOUT = [
   { title: "Flop exploit", subs: [
     /* Force squid is not a when-bet read — it says what he does to the game, not
        what he does to a flop. Its own line at the foot of As PFR (Phil). */
-    { label: "As PFR", rows: [...wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-freq-pfr", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }]),
+    { label: "As PFR", rows: [...wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-v-pfr", "f-xr-b-pfr", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }]),
       { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [
       { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc", ["raise-nuts-f", "Raise nuts"]] },
@@ -224,7 +224,7 @@ const LIVE_LAYOUT = [
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board", "f-bf-disadv-board"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
       { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
-      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
+      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-freq-pfr", "f-xr-v-pfr", "f-xr-b-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
@@ -1767,6 +1767,8 @@ const STAT_DRILL = {
   probeT:   { ev: ["probeT"],                       yes: "Probed the turn",   no: "Checked it to him" },
   checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
   xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
+  xrVPfr:   { ev: ["xrV"],                          yes: "Check-raised value", no: "Check-raised a bluff" },
+  xrBPfr:   { ev: ["xrB"],                          yes: "Check-raised a bluff", no: "Check-raised value" },
   xrPfc:    { ev: ["xrC"],                          yes: "Check-raised the cbet", no: "Did not" },
   barrel:   { ev: ["bar"],                          yes: "Barrelled",          no: "Gave up" },
   barrelR:  { ev: ["barR"],                         yes: "Fired the river",    no: "Gave up" },
@@ -2966,10 +2968,11 @@ function renderOppReads(o) {
       const counts = st && typeof st === "object" ? st : {};
       const opts = choiceOptions(id).map(([v, l]) => {
         const n = counts[v] || 0;
-        return `<button class="bubble${n ? " on schoice" : ""}" data-tally="${id}" data-val="${v}">` +
+        return `<button class="bubble tallyopt${n ? " on schoice" : ""}" data-tally="${id}" data-val="${v}"` +
+          ` title="Tap to add one${n ? " · hold to take one back" : ""}">` +
           `${esc(l)}${n ? `<span class="tallyn">${n}</span>` : ""}</button>`;
       }).join("");
-      const clr = tallyLeader(counts) ? `<button class="bubble tallyclr" data-tallyclear="${id}" title="Clear">✕</button>` : "";
+      const clr = tallyLeader(counts) ? `<button class="bubble tallyclr" data-tallyclear="${id}" title="Clear all">✕</button>` : "";
       return `<div class="bubbles">${opts}${clr}</div>`;
     }
     // on a line the row label already names the read, so the chip shows the state
@@ -3029,9 +3032,13 @@ function renderOppReads(o) {
       const items = r.ids.filter((x) => live(idOf(x)));
       // a mixed row reads badly when the plain ones drop to a chip strip below
       const asLine = (x) => r.lines || laid(idOf(x));
+      /* A tally with four or more options can't share a line with its label on
+         a phone — the bubbles wrap and the ✕ ends up stranded. Those take the
+         full width: label on top, bubbles across underneath. */
+      const wide = (x) => isTallyRead(idOf(x)) && choiceOptions(idOf(x)).length >= 4 ? " rlwide" : "";
       const lines = items.filter(asLine).map((x) =>
-        `<span class="rllab${isSet(idOf(x)) ? " on" : ""}">${esc(labelOf(x))}</span>` +
-        `<div class="rlctl">${readBtn(idOf(x), labelOf(x), true)}` +
+        `<span class="rllab${isSet(idOf(x)) ? " on" : ""}${wide(x)}">${esc(labelOf(x))}</span>` +
+        `<div class="rlctl${wide(x)}">${readBtn(idOf(x), labelOf(x), true)}` +
         alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("") +
         `</div>`).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
@@ -6265,6 +6272,42 @@ function bindStatic() {
     const o = oppById(curOppId);
     if (o) renderOppReads(o);
   };
+  /* Taking one back. ✕ wipes the whole read, but a miscount is almost always
+     one bubble — hold it (or right-click, on a desktop) to drop a single
+     sighting. The hold swallows the tap that follows it, so a slip can't add
+     one and remove one in the same press. */
+  let tallyHold = null, tallySkip = false;
+  const tallyBack = async (id, val) => {
+    const o = oppById(curOppId); if (!o) return;
+    const reads = oppReads(o), counts = reads[id];
+    if (!counts || typeof counts !== "object" || !counts[val]) return;
+    if (counts[val] > 1) counts[val]--; else delete counts[val];
+    if (!Object.keys(counts).length) delete reads[id];
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppReads(o);
+  };
+  $("od-tags").addEventListener("pointerdown", (e) => {
+    tallySkip = false; clearTimeout(tallyHold);
+    const tl = e.target.closest("[data-tally]");
+    if (!tl) return;
+    const { tally: id, val } = tl.dataset;
+    /* The swallow expires on its own: if the press ends without a click — a
+       drag off the button, a re-render under the finger — the next real tap
+       must still count. */
+    tallyHold = setTimeout(() => {
+      tallySkip = true; tallyBack(id, val);
+      setTimeout(() => { tallySkip = false; }, 700);
+    }, 450);
+  });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"])
+    $("od-tags").addEventListener(ev, () => clearTimeout(tallyHold));
+  $("od-tags").addEventListener("contextmenu", (e) => {
+    const tl = e.target.closest("[data-tally]");
+    if (!tl) return;
+    e.preventDefault();
+    tallyBack(tl.dataset.tally, tl.dataset.val);
+  });
   $("od-tags").onclick = async (e) => {
     const sd = e.target.closest("[data-statdrill]");
     if (sd) { const o = oppById(curOppId); if (o) openStatDrill(o, sd.dataset.statdrill); return; }
@@ -6297,6 +6340,7 @@ function bindStatic() {
     }
     const tl = e.target.closest("[data-tally]");
     if (tl) {                       // tally read: each tap is one more sighting
+      if (tallySkip) { tallySkip = false; return; }   // the hold already took one back
       const o = oppById(curOppId);
       const reads = oppReads(o);
       const { tally: id, val } = tl.dataset;

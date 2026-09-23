@@ -22,6 +22,7 @@ function hudCount(oppId, hands) {
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0, xrC: 0, oppXrC: 0,
+    xrV: 0, xrB: 0, oppXrG: 0,
     probeT: 0, oppProbeT: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
@@ -223,7 +224,26 @@ function hudCount(oppId, hands) {
         if (back) { c.oppFxr++; if (back.act === "fold") c.fxr++; mark("fxr", back.act === "fold", h.id); }
       } else if (first && first.act === "check") {
         const back = after(fi, "bet");
-        if (back) { c.oppXr++; if (back.act === "raise") c.xr++; mark("xr", back.act === "raise", h.id); }
+        if (back) {
+          const did = back.act === "raise";
+          c.oppXr++; if (did) c.xr++; mark("xr", did, h.id);
+          /* Value or bluff, graded off his cards on the flop he raised — the
+             same read madeClass gives the Sizing panel, so the two panels can
+             never disagree about one hand. Only a check-raise he showed down
+             can be graded and the bluffs are the half that gets mucked, so the
+             split leans to value: it says what he showed, not what he does. */
+          if (did) {
+            const hole = (seat[me].cards || []).filter(Boolean);
+            const vis = (h.board || []).filter(Boolean).slice(0, 3);
+            const g = hole.length === 2 && vis.length === 3 ? madeClass(hole, vis) : null;
+            if (g) {
+              c.oppXrG++;
+              if (g === "B") c.xrB++; else c.xrV++;
+              mark("xrV", g !== "B", h.id);
+              mark("xrB", g === "B", h.id);
+            }
+          }
+        }
       }
       let barreled = false;
       if (didCb && turn.length) {
@@ -372,6 +392,8 @@ function hudDerived(c) {
     // he was the preflop raiser, heads-up out of position, and checked instead
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),
+    xrVPfr: p(c.xrV, c.oppXrG),
+    xrBPfr: p(c.xrB, c.oppXrG),
     xrPfc: p(c.xrC, c.oppXrC),
     barrel: p(c.bar, c.oppBar),
     barrelR: p(c.barR, c.oppBarR),

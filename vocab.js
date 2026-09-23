@@ -208,6 +208,10 @@ const TENDENCY_TAGS = [
   { id: "f-fold-to-xr",   cat: "postflop", label: "Fold to xR",      kind: "stat", calc: "foldXr" },
   { id: "f-oop-x-range",  cat: "postflop", label: "Check OOP",       kind: "stat", calc: "checkOop" },
   { id: "f-xr-freq-pfr",  cat: "postflop", label: "xR freq",         kind: "stat", calc: "xrPfr" },
+  /* The same check-raises, split by what he held: both are counted over the
+     ones his cards are known for, so they add up to 100% and share an n. */
+  { id: "f-xr-v-pfr",     cat: "postflop", label: "xR V",            kind: "stat", calc: "xrVPfr" },
+  { id: "f-xr-b-pfr",     cat: "postflop", label: "xR B",            kind: "stat", calc: "xrBPfr" },
   { id: "fold-cbet-f",    cat: "postflop", label: "Fold flop cbet",  kind: "stat", calc: "foldCbF" },
   { id: "fold-cbet-t",    cat: "postflop", label: "Fold turn cbet",  kind: "stat", calc: "foldCbT" },
   { id: "fold-cbet-r",    cat: "postflop", label: "Fold river cbet", kind: "stat", calc: "foldCbR" },

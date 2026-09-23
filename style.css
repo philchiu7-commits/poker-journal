@@ -1156,6 +1156,10 @@ button.sizecol:active { color: var(--text); }
 .rllab.on { color: var(--text); font-weight: 600; }
 .rlctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 0; }
 .rlctl .bubbles { gap: 6px; }
+.rllab.rlwide, .rlctl.rlwide { grid-column: 1 / -1; }
+.rllab.rlwide { padding-bottom: 0; }
+.rlctl.rlwide { padding-top: 4px; }
+.readlines > .rlctl.rlwide { border-top: 0; }
 
 /* HUD-stat reads: the number off his HUD, typed in. Tally reads: tap an option
    once per sighting; the count rides on the chip. */
@@ -1189,7 +1193,13 @@ button.statcalc:active { color: var(--accent); }
 .statcalc ~ .statn { align-self: center; }
 .statn { font-size: 11px; color: var(--muted); }
 .tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
-.bubble.tallyclr { padding-left: 9px; padding-right: 9px; color: var(--muted); }
+/* Tally rows carry six options and a ✕, and at the widths Phil reads them on
+   the ✕ was landing alone on a second line. Narrower boxes and a ✕ sized to
+   its glyph put the whole row back on one. `user-select` off because the undo
+   is a long press, and a long press on text selects it. */
+.bubble.tallyopt { min-width: 36px; padding: 7px 6px; font-size: 12px; }
+.bubble.tallyopt, .bubble.tallyclr { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.bubble.tallyclr { min-width: 0; padding: 7px 9px; color: var(--muted); }
 
 /* Range peek: the preflop read's chart, floated over the picker. Sized so the
    square grid still fits a phone with margins; the Ranges panel's own cell
