@@ -1585,8 +1585,10 @@ const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", thre
   f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
 /* The other bucket gets a fill of its own where the action has a name worth
    seeing: on Iso the hands he did not raise are the ones he came along with,
-   and a hollow ring is nearly invisible next to 168 other squares (Phil). */
-const HUD_CHART_MISS = { iso: NOTCH_COLORS.call };
+   and a hollow ring is nearly invisible next to 168 other squares (Phil). The
+   fill is the Limp yellow, the same colour those hands carry in the Ranges
+   grid, so one hand class reads the same in both places (Phil, v201). */
+const HUD_CHART_MISS = { iso: NOTCH_COLORS.limp };
 /* Which model ordering a stat's own percentage gets drawn as. Fold v 3B and
    Limp-fold are absent on purpose: that number is how often he gives up, and a
    folding range is not a shape you play against (Phil). */
