@@ -172,7 +172,7 @@ const READ_LAYOUT = [
     { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "fold-cbet-t", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] }] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: [...wb(["r-barrel3-freq", "r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]),
+    { label: "As PFR", rows: [...wb(["r-barrel3-freq", "r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]),
       { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bluff-xt-r", "Bluff XT"]] }] },
   ] },
@@ -227,7 +227,7 @@ const LIVE_LAYOUT = [
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
-      { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-traps", "punchbag-r-pfr"] },
+      { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
       { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r"] },
       { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq", "r-af"] },
     ] },

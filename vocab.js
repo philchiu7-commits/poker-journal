@@ -226,6 +226,10 @@ const TENDENCY_TAGS = [
   { id: "r-af",           cat: "postflop", label: "River AF",        kind: "stat", unit: "", calc: "riverAf" },
   { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
   { id: "r-traps",        cat: "postflop", label: "Have traps?" },
+  /* The other thing a river check from the preflop raiser can mean: yes = he is
+     willing to give up with no showdown value, so his river bets are that much
+     more often real. */
+  { id: "r-can-x-nsd",    cat: "postflop", label: "Can X nSD" },
   { id: "punchbag-r-pfr", cat: "postflop", label: "Punch bag" },
   { id: "r-fold-bal",     cat: "postflop", label: "Fold balance",    kind: "choice", options: [["overfold", "Overfold"], ["underfold", "Underfold"]] },
   { id: "r-to-sizing",    cat: "postflop", label: "To sizing",       kind: "choice", options: [["elastic", "Elastic"], ["inelastic", "Inelastic"]] },
