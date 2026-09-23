@@ -160,7 +160,7 @@ const READ_LAYOUT = [
   { title: "Flop exploit", subs: [
     /* Force squid is not a when-bet read — it says what he does to the game, not
        what he does to a flop. Its own line at the foot of As PFR (Phil). */
-    { label: "As PFR", rows: [...wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-freq-pfr", "protect-disadv-board", "f-bf-disadv-board"]),
+    { label: "As PFR", rows: [...wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-freq-pfr", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }]),
       { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [
       { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc", ["raise-nuts-f", "Raise nuts"]] },
@@ -2990,16 +2990,22 @@ function renderOppReads(o) {
     const layout = readTab === "live" ? LIVE_LAYOUT : READ_LAYOUT;
     const live = (id) => { const t = TAG_BY_ID[id]; return t && !RETIRED_TAG_IDS.has(id) ? t : null; };
     // a row's id may be ["id", "Short"] — the label override
-    const idOf = (x) => (Array.isArray(x) ? x[0] : x);
-    const labelOf = (x) => (Array.isArray(x) ? x[1] : TAG_BY_ID[x].label);
+    const idOf = (x) => (Array.isArray(x) ? x[0] : typeof x === "object" ? x.id : x);
+    const labelOf = (x) => (Array.isArray(x) ? x[1]
+      : typeof x === "object" ? (x.label || TAG_BY_ID[x.id].label) : TAG_BY_ID[x].label);
+    /* A row item may carry companions: one label, its own control, then the
+       companions as chips beside it. Two questions about the same spot belong
+       on one line — a second line repeats the label to ask half of it. */
+    const alsoOf = (x) => (x && !Array.isArray(x) && typeof x === "object" ? x.also || [] : []);
+    const idsOf = (x) => [idOf(x), ...alsoOf(x).map(idOf)];
     const placed = new Set(layout.flatMap((c) => c.subs.flatMap((sb) => sb.rows.flatMap((r) =>
-      r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.map(idOf)))));
+      r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.flatMap(idsOf)))));
     /* Two shapes, never mixed inside a row: a read that carries its own
        controls gets a label column and a control column, and a plain yes/no
        read is a chip. One row holding both is what made the tree look ragged. */
     const laid = (id) => isPositionRead(id) || isChoiceRead(id) || isStatRead(id) || isTallyRead(id);
     const isSet = (id) => reads[id] !== undefined && readIsActive(id, reads[id]);
-    const rowIds = (r) => r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.map(idOf);
+    const rowIds = (r) => r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.flatMap(idsOf);
     // liveOnly hides on Online, onlineOnly hides on Live. Either way the row
     // stays listed, so `placed` counts it and the catch-all can't drag it back.
     const skip = readTab === "live" ? "onlineOnly" : "liveOnly";
@@ -3019,7 +3025,9 @@ function renderOppReads(o) {
       const asLine = (x) => r.lines || laid(idOf(x));
       const lines = items.filter(asLine).map((x) =>
         `<span class="rllab${isSet(idOf(x)) ? " on" : ""}">${esc(labelOf(x))}</span>` +
-        `<div class="rlctl">${readBtn(idOf(x), labelOf(x), true)}</div>`).join("");
+        `<div class="rlctl">${readBtn(idOf(x), labelOf(x), true)}` +
+        alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("") +
+        `</div>`).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
       return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
         (lines ? `<div class="readlines">${lines}</div>` : "") +

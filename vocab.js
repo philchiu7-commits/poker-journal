@@ -176,7 +176,7 @@ const TENDENCY_TAGS = [
   { id: "protect-disadv-board", cat: "postflop", label: "Protect DisAdv. Board" },
   /* Bf = bet-fold. The other half of the protection bet on a board that
      favours the caller: he bets it, and a raise is the end of the hand. */
-  { id: "f-bf-disadv-board",   cat: "postflop", label: "Bf" },
+  { id: "f-bf-disadv-board",   cat: "postflop", label: "BetF" },
   { id: "check-oop-limped",     cat: "postflop", label: "Check OOP limped" },
   { id: "bet-merged-mwp",       cat: "postflop", label: "Bet merged mwp" },
   { id: "protected-block",      cat: "postflop", label: "Protected block" }, // yes = medium/protection, no = polar (nuts or bluff)
