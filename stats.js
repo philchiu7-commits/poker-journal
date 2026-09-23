@@ -22,7 +22,8 @@ function hudCount(oppId, hands) {
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0,
-    probeT: 0, oppProbeT: 0, rAgg: 0, rCall: 0,
+    probeT: 0, oppProbeT: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
+    bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, iso: 0, isoOpp: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
@@ -127,6 +128,7 @@ function hudCount(oppId, hands) {
     // ---- postflop
     const flop = A.filter((a) => a.street === "flop");
     const turn = A.filter((a) => a.street === "turn");
+    const river = A.filter((a) => a.street === "river");
     if (!flop.length) continue;
     const sawFlop = flop.some((a) => a.actor === me);
     if (!sawFlop) continue;
@@ -146,6 +148,45 @@ function hudCount(oppId, hands) {
     // wrong.
     const order = [...new Set(flop.map((a) => a.actor))];
     const k = order.length > 2 ? "Mw" : order[0] === me ? "Oop" : "Ip";
+
+    /* Two street-by-street reads that don't care which branch below he lands
+       in, so they're taken before either one gets a chance to `continue`.
+
+       xR: of the times he checked and then faced a bet, how often did he come
+       back over the top. Somebody else raising before it got back to him ends
+       the chance — he is answering a raise by then, and counting it would read
+       as a check-raise he declined. So would a bet he never got a turn to
+       answer.
+
+       Bxt: bet when checked to, as the preflop caller. The chance is the
+       raiser checking to him with nobody having bet, which is what puts him in
+       position on a raiser who showed nothing; checking back is the chance
+       declined. A lead from in front of the raiser is a different bet and is
+       not counted here — out of position on the turn that's Probe T. */
+    for (const [st, acts] of [["F", flop], ["T", turn], ["R", river]]) {
+      const mi = acts.findIndex((a) => a.actor === me);
+      if (mi < 0) continue;
+      if (acts[mi].act === "check") {
+        const bi = acts.findIndex((a, i) => i > mi && a.actor !== me && a.act === "bet");
+        let back = null;
+        for (let i = bi + 1; i > 0 && i < acts.length; i++) {
+          if (acts[i].actor === me) { back = acts[i]; break; }
+          if (HUD_AGG.has(acts[i].act)) break;
+        }
+        if (back) {
+          const did = back.act === "raise" || back.act === "jam";
+          c["oppXr" + st]++; if (did) c["xr" + st]++;
+          mark("xr" + st, did, h.id);
+        }
+      }
+      const before = acts.slice(0, mi);
+      if (lastAgg && lastAgg !== me && before.length && before.every((a) => a.act === "check")
+          && before.some((a) => a.actor === lastAgg)) {
+        const bet = HUD_BET.has(acts[mi].act);
+        c["oppBxt" + st]++; if (bet) c["bxt" + st]++;
+        mark("bxt" + st, bet, h.id);
+      }
+    }
 
     // cbet + second barrel, when our player is the preflop aggressor
     if (lastAgg === me) {
@@ -180,8 +221,7 @@ function hudCount(oppId, hands) {
          hanging it off the same number would make "he fires three" mean
          nothing. */
       if (barreled) {
-        const rvr = A.filter((a) => a.street === "river");
-        const rv = rvr.find((a) => a.actor === me);
+        const rv = river.find((a) => a.actor === me);
         if (rv) { c.oppBarR++; if (rv.act === "bet") c.barR++; mark("barR", rv.act === "bet", h.id); }
       }
       /* The flop read one street on: he bet the turn, somebody came over the
@@ -229,7 +269,6 @@ function hudCount(oppId, hands) {
     if (tResp.act === "fold") { c.ftb++; continue; }
     if (tResp.act !== "call") continue;
     // called the turn barrel too — did they fold to the river bet?
-    const river = A.filter((a) => a.street === "river");
     const rBet = river.findIndex((a) => a.actor === lastAgg && a.act === "bet");
     if (rBet < 0) continue;
     const rResp = river.slice(rBet + 1).find((a) => a.actor === me);
@@ -262,6 +301,12 @@ function hudStats(c) {
     q("fcbIp", "Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
     q("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
     q("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
+    q("xrF", "xR Flop", c.xrF, c.oppXrF, "Checked the flop, got bet into and raised"),
+    q("xrT", "xR Turn", c.xrT, c.oppXrT, "Checked the turn, got bet into and raised"),
+    q("xrR", "xR River", c.xrR, c.oppXrR, "Checked the river, got bet into and raised"),
+    q("bxtF", "Bxt Flop", c.bxtF, c.oppBxtF, "As the preflop caller, bet the flop after the raiser checked to him"),
+    q("bxtT", "Bxt Turn", c.bxtT, c.oppBxtT, "As the preflop caller, bet the turn after the raiser checked to him"),
+    q("bxtR", "Bxt River", c.bxtR, c.oppBxtR, "As the preflop caller, bet the river after the raiser checked to him"),
     q("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
     q("barR", "Barrel R", c.barR, c.oppBarR, "Bet the river after cbetting the flop and barrelling the turn"),
     q("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
