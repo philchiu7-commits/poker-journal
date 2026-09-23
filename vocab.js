@@ -241,35 +241,42 @@ const TENDENCY_TAGS = [
   { id: "force-squid",          cat: "live",     label: "Force squid" },
 ];
 /* Player archetype — Phil sets it manually and it themes the opponent's row
-   on the list plus a pill in the detail header. Colors chosen so the list
-   reads at a glance: teal/green/purple = the fish family, blue = reg,
-   red = the good reg to stay away from, gray = tight/nit. Station fish is
-   the calling station: loose like the loose fish but passive with it, so it
-   sits beside him in a lighter green (Phil, v140). Plain Reg heads the reg
-   block in orange (Phil, v200) — the one you have not pinned down to ABC, good
-   or nit yet is the one worth a second look, and a softer blue read as a
-   weaker ABC reg rather than as its own thing. Its id is `plain-reg` because
+   on the list plus a pill in the detail header. Its id is `plain-reg` because
    `reg` has belonged to ABC reg since the first build and type ids are never
-   renamed. Tight passive fish closes the fish block in a duller green — he is
-   still a fish, just one who waits (Phil, v202). It is a new id rather than the
-   retired `tight-fish`, which one opponent still carries: reusing it would
-   relabel him without Phil saying so. */
+   renamed. Tight passive fish is a new id rather than the retired `tight-fish`,
+   which one opponent still carries: reusing it would relabel him without Phil
+   saying so.
+   Colours: on the list a type shows as a 6px stripe and an 8–14% wash, so the
+   only thing carrying it is hue — two types a shade apart are two types you
+   cannot tell apart at arm's length, which is what happened to Station fish
+   beside Loose fish (Phil, v203). So every type now owns a hue of its own and
+   no two sit within about 50° of each other: cyan, green, pink, violet and
+   lemon for the fish, then orange, blue, red and gray for the regs. The split
+   is deliberate — the fish run bright and saturated, the reg block runs darker
+   and cooler, so which family a row belongs to reads before the colour does.
+   Lightness is not doing any work here on purpose: it is the first thing a
+   6px stripe throws away. */
 const PLAYER_TYPES = [
-  { id: "whale",        label: "Whale",        icon: "🐋", color: "#3ec7c7" },
+  { id: "whale",        label: "Whale",        icon: "🐋", color: "#35c2d8" },
   { id: "loose-fish",   label: "Loose fish",   icon: "🐟", color: "#4fbf5a" },
-  { id: "station-fish", label: "Station fish", icon: "☎️", color: "#7ad6a0" },
-  { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#a35bd6" },
-  { id: "tight-passive-fish", label: "Tight passive fish", icon: "🐡", color: "#8fb26a" },
+  { id: "station-fish", label: "Station fish", icon: "☎️", color: "#e06fa6" },
+  { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#8f5fe0" },
+  { id: "tight-passive-fish", label: "Tight passive fish", icon: "🐡", color: "#d9d24d" },
   { id: "plain-reg",    label: "Reg",          icon: "👤", color: "#e08a3c" },
   { id: "reg",          label: "ABC reg",      icon: "🃏", color: "#4f7fdf" },
   { id: "good-reg",     label: "Good reg",     icon: "🦈", color: "#d64848" },
   { id: "tight-reg",    label: "Tight reg",    icon: "🔒", color: "#7a8496" },
 ];
 /* No longer offered, but anyone still carrying one keeps their badge and can
-   re-pick or Clear — dropping the entry would leave the id set and unclearable. */
+   re-pick or Clear — dropping the entry would leave the id set and unclearable.
+   Both wear the same muted taupe (v203): a retired badge is not one of the nine
+   hues, so a row carrying one reads as "set to something that is no longer on
+   the list" rather than borrowing the look of a type it is not — Fish was the
+   same orange Reg wears now, and Tight fish the same yellow as Tight passive
+   fish. */
 const RETIRED_PLAYER_TYPES = [
-  { id: "fish",       label: "Fish",       icon: "🐠", color: "#e08a3c" },
-  { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#c5c33a" },
+  { id: "fish",       label: "Fish",       icon: "🐠", color: "#8b8378" },
+  { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#8b8378" },
 ];
 const PLAYER_TYPE_BY_ID = Object.fromEntries(
   PLAYER_TYPES.concat(RETIRED_PLAYER_TYPES).map((t) => [t.id, t]));
