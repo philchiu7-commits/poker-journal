@@ -208,6 +208,7 @@ const TENDENCY_TAGS = [
   { id: "t-bluff-hands",  cat: "postflop", label: "Bluffs",          kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
+  { id: "t-probe",        cat: "postflop", label: "Probe T",         kind: "stat", calc: "probeT" },
   { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
   { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["wide", "Wide"]] },
   { id: "have-lead-t",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
@@ -236,12 +237,16 @@ const TENDENCY_TAGS = [
    reads at a glance: teal/green/purple = the fish family, blue = reg,
    red = the good reg to stay away from, gray = tight/nit. Station fish is
    the calling station: loose like the loose fish but passive with it, so it
-   sits beside him in a lighter green (Phil, v140). */
+   sits beside him in a lighter green (Phil, v140). Plain Reg heads the reg
+   block in a softer blue: a competent regular you have not pinned down to ABC,
+   good or nit yet. Its id is `plain-reg` because `reg` has belonged to ABC reg
+   since the first build and type ids are never renamed. */
 const PLAYER_TYPES = [
   { id: "whale",        label: "Whale",        icon: "🐋", color: "#3ec7c7" },
   { id: "loose-fish",   label: "Loose fish",   icon: "🐟", color: "#4fbf5a" },
   { id: "station-fish", label: "Station fish", icon: "☎️", color: "#7ad6a0" },
   { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#a35bd6" },
+  { id: "plain-reg",    label: "Reg",          icon: "👤", color: "#7f8fd6" },
   { id: "reg",          label: "ABC reg",      icon: "🃏", color: "#4f7fdf" },
   { id: "good-reg",     label: "Good reg",     icon: "🦈", color: "#d64848" },
   { id: "tight-reg",    label: "Tight reg",    icon: "🔒", color: "#7a8496" },

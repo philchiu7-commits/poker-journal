@@ -21,7 +21,8 @@ function hudCount(oppId, hands) {
     seats: 0, vpip: 0, pfr: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
-    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0, rAgg: 0, rCall: 0,
+    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0,
+    probeT: 0, oppProbeT: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
@@ -175,7 +176,21 @@ function hudCount(oppId, hands) {
 
     // facing someone else's cbet
     const cbIdx = flop.findIndex((a) => a.actor === lastAgg && a.act === "bet");
-    if (cbIdx < 0) continue;
+    if (cbIdx < 0) {
+      /* Probe: the preflop raiser gave up the flop and he takes the turn
+         himself. Out of position by convention — first to act on the turn,
+         which the turn order tells us the same way the flop order does for the
+         cbet splits. The flop has to have gone through untouched: if anyone
+         else bet it the pot already has an aggressor, and his turn bet is a
+         lead into that, not a probe at a raiser who showed nothing. */
+      if (lastAgg && !flop.some((a) => HUD_BET.has(a.act)) && turn.length && turn[0].actor === me) {
+        c.oppProbeT++;
+        const probed = turn[0].act === "bet";
+        if (probed) c.probeT++;
+        mark("probeT", probed, h.id);
+      }
+      continue;
+    }
     const resp = flop.slice(cbIdx + 1).find((a) => a.actor === me);
     if (!resp) continue;
     c["oppFcb" + k]++;
@@ -239,6 +254,7 @@ function hudDerived(c) {
     cbet: p(cb, oppCb),
     foldXr: p(c.fxr, c.oppFxr),
     foldXrT: p(c.fxrT, c.oppFxrT),
+    probeT: p(c.probeT, c.oppProbeT),
     // he was the preflop raiser, heads-up out of position, and checked instead
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),

@@ -169,7 +169,7 @@ const READ_LAYOUT = [
   ] },
   { title: "Turn exploit", subs: [
     { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr"]) },
-    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
+    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
   ] },
   { title: "River exploit", subs: [
     { label: "As PFR", rows: [...wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]),
@@ -222,7 +222,7 @@ const LIVE_LAYOUT = [
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["barrels-off", "Barrels"]] },
       { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr"] },
-      { label: "As PFC", lines: true, ids: ["t-bet-vol", "t-call-style", "have-lead-t"] },
+      { label: "As PFC", lines: true, ids: ["t-probe", "t-bet-vol", "t-call-style", "have-lead-t"] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq", "t-fold-to-xr"] },
     ] },
     { label: "River", rows: [
@@ -1730,6 +1730,7 @@ const STAT_DRILL = {
   cbet:     { ev: ["cbIp", "cbOop", "cbMw"],       yes: "Cbet",               no: "Checked it back or gave up" },
   foldXr:   { ev: ["fxr"],                          yes: "Folded to the raise", no: "Did not fold" },
   foldXrT:  { ev: ["fxrT"],                         yes: "Folded to the raise", no: "Did not fold" },
+  probeT:   { ev: ["probeT"],                       yes: "Probed the turn",   no: "Checked it to him" },
   checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
   xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
   barrel:   { ev: ["bar"],                          yes: "Barrelled",          no: "Gave up" },
