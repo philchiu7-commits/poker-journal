@@ -142,6 +142,11 @@ const READ_LAYOUT = [
      tag that belongs on a street has to be named in a row below or it won't
      appear here. liveOnly rows are the limp / LRR / squid machinery, a live
      table's preflop rather than an online one. */
+  /* Squid first: it is the thing that changes every other read below it,
+     so it sits above the streets rather than inside Preflop (Phil). */
+  { title: "Squid exploit", subs: [{ rows: [
+    { label: "SlowP Open", lines: true, ids: [["slowp-open-ws", "wSquid"], ["slowp-open-ns", "nSquid"]] },
+  ] }] },
   { title: "Preflop", subs: [{ rows: [
     /* Opening is off both tabs (Phil): the HUD answers how wide he opens better
        than a yes/no does. Listed, not deleted — `placed` still counts these ids,
@@ -210,6 +215,7 @@ const LIVE_LAYOUT = [
     { label: "Limping", ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
     { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
     { label: "Style", lines: true, ids: ["preflop-style", "limp-scale-ws", "limp-scale-ns"] },
+    { label: "SlowP Open", lines: true, ids: [["slowp-open-ws", "wSquid"], ["slowp-open-ns", "nSquid"]] },
     { label: "Sizing", ids: ["preflop-sizing", "3bet-sizing"] },
   ] }] },
   { title: "Postflop", cat: "postflop", subs: [

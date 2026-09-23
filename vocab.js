@@ -124,6 +124,11 @@ const TENDENCY_TAGS = [
   { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
   { id: "limp-wide-multiplier", cat: "preflop",  label: "Goes for multipliers" },
   { id: "wide-cc",              cat: "preflop",  label: "Wide CC" },
+  /* Slowplaying the open: does he flat or limp his monsters instead of
+     raising them? Asked twice because a squid in play changes the answer —
+     the extra dead money is the reason to raise, or the reason to trap. */
+  { id: "slowp-open-ws",        cat: "preflop",  label: "wSquid SlowP Open" },
+  { id: "slowp-open-ns",        cat: "preflop",  label: "nSquid SlowP Open" },
   // preflop — 3bet / 4bet (linear/polar/bluff are retired — see RETIRED_TAG_IDS)
   { id: "3bet-linear",          cat: "preflop",  label: "3bet linear" },
   { id: "3bet-polar",           cat: "preflop",  label: "3bet polar" },
