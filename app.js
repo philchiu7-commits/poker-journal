@@ -168,7 +168,7 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr"]) },
+    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr"]) },
     { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
   ] },
   { title: "River exploit", subs: [
@@ -223,7 +223,7 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["barrels-off", "Barrels"]] },
       { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr"] },
       { label: "As PFC", lines: true, ids: ["t-bet-vol", "t-call-style", "have-lead-t"] },
-      { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq"] },
+      { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq", "t-fold-to-xr"] },
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
@@ -1555,6 +1555,7 @@ function openReadProof(o, label, ids, sub, other) {
 const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lfold: "Limp-fold", af: "Agg factor" };
 const HUD_DRILL_LABEL = {
   vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
+  cc: ["Cold called", "Raised or folded"],
   three: ["3-bet", "Did not 3-bet"], four: ["4-bet", "Did not 4-bet"],
   f3b: ["Folded", "Did not fold"],
   bar: ["Barrelled", "Gave up"], ftb: ["Folded", "Did not fold"],
@@ -1567,9 +1568,24 @@ const HUD_DRILL_LABEL = {
    an outlined one is a hand he had the same chance in and did something else.
    Only hands he turned up can appear at all, so the foot says how many of them
    that is — most of a preflop stat's hands were never shown. */
-const HUD_CHART_ACT = { vpip: null, pfr: "raise", three: "3bet", four: "4bet+",
+const HUD_CHART_ACT = { vpip: null, pfr: "raise", cc: "call", three: "3bet", four: "4bet+",
   f3b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
-function hudChartHTML(o, stat, hands, yes, no) {
+/* Which model ordering a stat's own percentage gets drawn as. Fold v 3B and
+   Limp-fold are absent on purpose: that number is how often he gives up, and a
+   folding range is not a shape you play against (Phil). */
+const HUD_MODEL_KIND = { vpip: "play", pfr: "raise", cc: "call", three: "3bet", four: "4bet",
+  limp: "limp", lrr: "lrr" };
+/* The model is a wash over the same 13x13 rather than a second grid: the peek
+   is already nearly a phone wide, two grids would run past the viewport, and
+   the comparison you want is whether his shown hands sit inside a range that
+   wide. */
+const tintHex = (hex, t, base = [26, 29, 35]) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return "#2b3342";
+  const v = parseInt(m[1], 16), c = [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  return "#" + c.map((x, i) => Math.round(base[i] + (x - base[i]) * t).toString(16).padStart(2, "0")).join("");
+};
+function hudChartHTML(o, stat, hands, yes, no, label) {
   const cells = {};
   let shown = 0;
   for (const x of hands) {
@@ -1577,24 +1593,68 @@ function hudChartHTML(o, stat, hands, yes, no) {
     const hc = handClass((v || {}).cards);
     if (!hc) continue;                          // never shown, or squid cards
     shown++;
-    const e = cells[hc] = cells[hc] || { did: 0, miss: 0 };
+    const e = cells[hc] = cells[hc] || { did: 0, miss: 0, ids: [] };
     e[x.ok ? "did" : "miss"]++;
+    e.ids.push(x.h.id);
   }
+  /* Every entry in the stream is one chance, so the hit rate over these hands
+     is the percentage printed on the cell. That is the width to draw. */
+  const hit = hands.filter((x) => x.ok).length;
+  const kind = HUD_MODEL_KIND[stat];
+  const model = kind && hands.length ? modelRange(kind, (100 * hit) / hands.length) : null;
+  const mset = model ? new Set(model.hands) : null;
   const foot = `${shown} of ${hands.length} hand${hands.length === 1 ? "" : "s"} had his cards on record`;
-  if (!shown) return `<div class="rdsub">No cards on record for any of these hands — nothing to chart.</div>`;
+  if (!shown && !model) return `<div class="rdsub">No cards on record for any of these hands — nothing to chart.</div>`;
   const hue = HUD_CHART_ACT[stat] ? notchColor(HUD_CHART_ACT[stat]) : "var(--accent)";
+  const tint = tintHex(HUD_CHART_ACT[stat] ? notchColor(HUD_CHART_ACT[stat]) : "#4a7fd0", 0.3);
   const grid = HAND_CLASSES.map((hc) => {
     const e = cells[hc];
-    const cls = "rgcell rng ro" + (e && e.did ? " inr" : "") + (e && e.miss ? " opp" : "");
-    const tip = hc + (e ? ` \u00b7 ${e.did ? `${yes} ${e.did}\u00d7` : ""}${e.did && e.miss ? " \u00b7 " : ""}${
-      e.miss ? `${no} ${e.miss}\u00d7` : ""}` : "");
-    return `<div class="${cls}"${e && e.did ? ` style="--fill:${hue}"` : ""} title="${esc(tip)}">${hc}</div>`;
+    const inm = mset && mset.has(hc);
+    const cls = "rgcell rng ro" + (e && e.did ? " inr" : "") + (e && e.miss ? " opp" : "") + (inm ? " mdl" : "");
+    const tip = hc + (inm ? ` · inside a ${model.pct.toFixed(0)}% range` : "")
+      + (e ? ` · ${e.did ? `${yes} ${e.did}×` : ""}${e.did && e.miss ? " · " : ""}${
+        e.miss ? `${no} ${e.miss}×` : ""} · tap for the hand${e.ids.length === 1 ? "" : "s"}` : "");
+    const style = e && e.did ? ` style="--fill:${hue}"` : inm ? ` style="--mdl:${tint}"` : "";
+    return `<div class="${cls}"${style}${e ? ` data-hcell="${hc}" data-hands="${esc(e.ids.join(","))}"` : ""
+      } title="${esc(tip)}">${hc}</div>`;
   }).join("");
-  return `<div class="hudchart"><div class="rggrid">${grid}</div></div>
+  const mleg = model
+    ? `<span class="rglegitem"><span class="rgswatch" style="background:${tint}"></span>${
+        model.pct.toFixed(0)}% model range</span>`
+    : "";
+  return `<div class="hudchart" data-hclabel="${esc(label || "")}"><div class="rggrid">${grid}</div></div>
     <div class="rglegend hudleg">
       <span class="rglegitem"><span class="rgswatch" style="background:${hue}"></span>${esc(yes)}</span>
       <span class="rglegitem"><span class="rgswatch hudoppsw"></span>${esc(no)}</span>
-      <span class="rglegnote">${foot}</span></div>`;
+      ${mleg}
+      <span class="rglegnote">${foot}${model
+        ? ` · the wash is what a ${model.pct.toFixed(0)}% range looks like, not what he holds` : ""}</span></div>`;
+}
+/* One square off a chart: the hands behind it. A single hand opens straight
+   into it — a sheet holding one row is a tap you did not need. */
+function openChartCellHands(o, label, cls, ids) {
+  const byId = new Map(HANDS.map((h) => [h.id, h]));
+  const hands = [...new Set(ids)].map((i) => byId.get(i)).filter(Boolean).sort((a, b) => b.ts - a.ts);
+  if (!hands.length) return;
+  hideRangePeek();
+  if (hands.length === 1) { hideSheet(); location.hash = "#handview/" + hands[0].id; return; }
+  sheetGroup = "__rdrill__";
+  showSheet(
+    `<div class="sheethead"><span class="t">${esc(cls)}${label ? " · " + esc(label) : ""}</span>
+       <button data-sheetclose>Close</button></div>
+     <div class="rdsub">${hands.length} hands · ${esc(o.name)}</div>
+     <div class="list rgcell-hands">${hands.map((h) => handRowHTML(h, o.id)).join("")}</div>`);
+}
+/* Wherever a chart is drawn, tapping a square it has hands for opens them. */
+function chartCellClick(e) {
+  const cell = e.target.closest("[data-hcell]");
+  if (!cell) return false;
+  const o = oppById(curOppId);
+  if (!o) return false;
+  const chart = cell.closest(".hudchart");
+  openChartCellHands(o, (chart && chart.dataset.hclabel) || "", cell.dataset.hcell,
+    (cell.dataset.hands || "").split(",").filter(Boolean));
+  return true;
 }
 function hudDrillHands(o, key) {
   const c = hudFor(o.id, HANDS);
@@ -1625,7 +1685,7 @@ function openHudDrill(o, key) {
      is the question the number raises. Postflop ones are about a street, not a
      starting hand, so they stay a list. */
   openDrillSheet(o, d.label, d.hands, d.yes, d.no,
-    d.stat in HUD_CHART_ACT ? hudChartHTML(o, d.stat, d.hands, d.yes, d.no) : "");
+    d.stat in HUD_CHART_ACT ? hudChartHTML(o, d.stat, d.hands, d.yes, d.no, d.label) : "");
 }
 /* Hovering a HUD number shows the same chart the tap opens, without the sheet
    (Phil). Postflop numbers have no chart to show, so they peek as their hands. */
@@ -1636,8 +1696,8 @@ function showHudPeek(btn) {
   if (!d) return;
   const head = `<div class="rpkhead">${esc(d.label)} · ${d.hands.filter((x) => x.ok).length} of ${d.hands.length}</div>`;
   if (d.stat in HUD_CHART_ACT) {
-    openPeek(btn, head + hudChartHTML(o, d.stat, d.hands, d.yes, d.no)
-      + `<div class="rpkfoot"><span>Tap the number for the hands</span></div>`, "hudpk");
+    openPeek(btn, head + hudChartHTML(o, d.stat, d.hands, d.yes, d.no, d.label)
+      + `<div class="rpkfoot"><span>Tap a square for its hands</span></div>`, "hudpk");
     return;
   }
   openPeek(btn, head + drillRowsHTML(o, d.hands, d.yes, d.no)
@@ -1669,6 +1729,7 @@ function openDrillSheet(o, label, hands, yes, no, chart) {
 const STAT_DRILL = {
   cbet:     { ev: ["cbIp", "cbOop", "cbMw"],       yes: "Cbet",               no: "Checked it back or gave up" },
   foldXr:   { ev: ["fxr"],                          yes: "Folded to the raise", no: "Did not fold" },
+  foldXrT:  { ev: ["fxrT"],                         yes: "Folded to the raise", no: "Did not fold" },
   checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
   xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
   barrel:   { ev: ["bar"],                          yes: "Barrelled",          no: "Gave up" },
@@ -1824,6 +1885,7 @@ function openPeek(btn, html, cls) {
     p.addEventListener("click", (e) => {
       const hd = e.target.closest("[data-hand]");     // hand rows in a stat peek still open the hand
       if (hd) { hideRangePeek(); location.hash = "#handview/" + hd.dataset.hand; return; }
+      if (chartCellClick(e)) return;                  // a square in the chart = its hands
       const b = e.target.closest("[data-rjumpopen]");
       if (!b) return;
       const [sq2, sit2, pg2] = b.dataset.rjumpopen.split("|");
@@ -5446,6 +5508,7 @@ function sheetClick(e) {
   if (sheetGroup === "__rdrill__") {
     const r = e.target.closest("[data-hand]");
     if (r) { hideSheet(); location.hash = "#handview/" + r.dataset.hand; return; }
+    if (chartCellClick(e)) return;
   }
   if (sheetGroup === "__rlmenu__") {
     const b = e.target.closest("[data-rlact]");

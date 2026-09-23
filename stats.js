@@ -9,15 +9,19 @@ const HUD_AGG = new Set(["raise", "3bet", "4bet", "5bet", "jam", "limp-raise", "
 const HUD_VOL = new Set([...HUD_AGG, "call", "limp", "bet"]);
 const HUD_BET = new Set(["bet", "raise", "3bet", "4bet", "jam"]);
 
+/* The seats that already have money in front of them before the action starts.
+   A call from one of these is a defend, never a cold call. */
+const HUD_BLIND_SEATS = new Set(["SB", "BB", "STD"]);
+
 /* Below this many opportunities a percentage is noise, shown greyed. */
 const HUD_MIN = 15;
 
 function hudCount(oppId, hands) {
   const c = {
-    seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
+    seats: 0, vpip: 0, pfr: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
-    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, xr: 0, oppXr: 0, rAgg: 0, rCall: 0,
+    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
@@ -49,7 +53,13 @@ function hudCount(oppId, hands) {
        each pushed VPIP over 100% and made the drill-down disagree with the
        number above it, so the walk sets flags and the counters move once. */
     let vol = false, aggPre = false, opp3 = false, did3 = false, oppF3 = false, didF3 = false;
-    let opp4 = false, did4 = false;
+    let opp4 = false, did4 = false, oppCc = false, didCc = false, actedVol = false;
+    /* Cold-calling is calling a raise with nothing of yours in the pot yet, so
+       the blinds and the straddle are out: their call is a defend off a
+       discounted price and a different range, which is the whole reason the
+       word "cold" is in the name. A limper who then calls a raise is out for
+       the same reason. */
+    const cold = !HUD_BLIND_SEATS.has(myPos);
     for (const a of pre) {
       const mine = a.actor === me;
       if (mine) {
@@ -62,6 +72,8 @@ function hudCount(oppId, hands) {
            into the denominator would read as a player who defends far more
            than he does. */
         else if (limpFaced && a.act === "fold") limpFold = true;
+        if (cold && !oppCc && !actedVol && sawRaise) { oppCc = true; if (a.act === "call") didCc = true; }
+        if (HUD_VOL.has(a.act)) actedVol = true;    // after the test — his own call is not money already in
         if (sawRaise && !sawThree) { opp3 = true; if (a.act === "3bet") did3 = true; }
         /* Everyone who gets a turn against a live 3-bet, not just the man who
            opened it — a cold 4-bet is still a 4-bet, and 20 of the 52 on record
@@ -80,11 +92,13 @@ function hudCount(oppId, hands) {
     }
     if (vol) c.vpip++;
     if (aggPre) c.pfr++;
+    if (oppCc) { c.oppCc++; if (didCc) c.cc++; }
     if (opp3) { c.opp3b++; if (did3) c.n3b++; }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
     mark("vpip", vol, h.id);
     mark("pfr", aggPre, h.id);
+    if (oppCc) mark("cc", didCc, h.id);
     if (opp3) mark("three", did3, h.id);
     if (opp4) mark("four", did4, h.id);
     if (oppF3) mark("f3b", didF3, h.id);
@@ -147,6 +161,15 @@ function hudCount(oppId, hands) {
         const t = turn.find((a) => a.actor === me);
         if (t) { c.oppBar++; if (t.act === "bet") c.bar++; mark("bar", t.act === "bet", h.id); }
       }
+      /* The flop read one street on: he bet the turn, somebody came over the
+         top, and he had a turn to answer it. Not conditioned on a flop cbet —
+         a check-back then a turn stab gets raised the same way. */
+      const ti = turn.findIndex((a) => a.actor === me);
+      if (ti >= 0 && turn[ti].act === "bet") {
+        const rj = turn.findIndex((a, i) => i > ti && a.actor !== me && a.act === "raise");
+        const tBack = rj < 0 ? null : turn.slice(rj + 1).find((a) => a.actor === me) || null;
+        if (tBack) { c.oppFxrT++; if (tBack.act === "fold") c.fxrT++; mark("fxrT", tBack.act === "fold", h.id); }
+      }
       continue;                             // can't fold to your own cbet
     }
 
@@ -187,6 +210,7 @@ function hudStats(c) {
   return [
     r("vpip", "VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
     r("pfr", "PFR", c.pfr, c.seats, "Raised preflop"),
+    r("cc", "Cold call", c.cc, c.oppCc, "Called a raise with nothing of his in the pot yet — blind and straddle defends are not cold calls"),
     r("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
     r("four", "4-bet", c.n4b, c.opp4b, "4-bet when facing a 3-bet — cold 4-bets counted too"),
     r("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
@@ -214,6 +238,7 @@ function hudDerived(c) {
   return {
     cbet: p(cb, oppCb),
     foldXr: p(c.fxr, c.oppFxr),
+    foldXrT: p(c.fxrT, c.oppFxrT),
     // he was the preflop raiser, heads-up out of position, and checked instead
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),

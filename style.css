@@ -676,6 +676,9 @@ textarea.noteedit { margin-bottom: 0; }
    hand he had the same chance in and played another way. Both at once is both
    marks — the class he splits is the read. */
 .rgcell.rng.opp { box-shadow: inset 0 0 0 1.5px #4d5766; }
+/* The model range under the record: a wash, never louder than a hand he showed. */
+.rgcell.rng.mdl:not(.inr) { background: var(--mdl, #2b3342); color: #b9c1cd; }
+.rgcell.rng[data-hcell] { cursor: pointer; }
 .hudchart { max-width: 288px; margin: 0 auto 8px; }
 .rgswatch.hudoppsw { background: #1a1d23; box-shadow: inset 0 0 0 1.5px #4d5766; }
 /* These legend labels are sentences ("Did not 3-bet"), not action names. */

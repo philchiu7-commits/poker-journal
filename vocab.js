@@ -204,6 +204,7 @@ const TENDENCY_TAGS = [
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
   // turn
   { id: "t-barrel2-freq", cat: "postflop", label: "2nd barrel freq", kind: "stat", calc: "barrel" },
+  { id: "t-fold-to-xr", cat: "postflop", label: "Fold to xR", kind: "stat", calc: "foldXrT" },
   { id: "t-bluff-hands",  cat: "postflop", label: "Bluffs",          kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
@@ -586,3 +587,76 @@ const rangeSpotTitle = (sq, sit, pg) =>
   + (!pg || pg === "any" ? "" : " from " + rangePosGroup(pg).title)
   + " · " + (RANGE_SQUIDS.find((s) => s.id === sq)?.title || sq);
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326
+
+/* ---------- Model ranges ----------
+   A measured frequency is a width, and a width is a shape: "PFR 22%" is a range
+   you can draw. `modelRange(kind, pct)` walks that kind's ordering, adding
+   classes until the combos reach that percent of 1326, so the grid it returns
+   really is the size of the number above it.
+   The orderings are NOT one strength ladder read at different depths. A cold
+   call or a limp is what he did *instead* of raising, so the top of the
+   strength ladder belongs at the bottom of those two — nobody's 8% cold-call
+   range is AA/KK/QQ/AKs (Phil). There they come last, as the trap tail, and the
+   hands that flat well lead: pairs for the set, suited connectors and suited
+   broadways for the multiway pots a limped table actually plays.
+   This is a model, not a read: it says what a range of his width looks like,
+   never what he holds. */
+const MR_RANKS = "23456789TJQKA";
+const mrParts = (c) => {
+  const a = MR_RANKS.indexOf(c[0]) + 2, b = MR_RANKS.indexOf(c[1]) + 2;
+  return { hi: Math.max(a, b), lo: Math.min(a, b), pair: a === b, suited: c[2] === "s" };
+};
+/* Raw strength: the ladder a raising range is cut off. Pairs are scored on the
+   same scale as everything else rather than jumped to the front — AKs over JJ
+   is the whole difference between a 4-bet range and a list of pairs. */
+function mrStrength(c) {
+  const { hi, lo, pair, suited } = mrParts(c);
+  if (pair) return hi * 6.8 + 30;
+  const gap = hi - lo - 1;
+  let v = hi * 3.4 + lo * 2.6 - Math.min(gap, 7) * 5.2 + (suited ? 12 : 0);
+  if (gap === 0) v += 4;
+  else if (gap === 1) v += 1.5;
+  if (hi === 14) v += 8;
+  return v;
+}
+/* How well it flats: set-mining and suited multiway playability, not high card.
+   Small pairs and suited connectors lead; big cards are worth much less here
+   because the big-card hands get raised rather than called. */
+function mrSpec(c) {
+  const { hi, lo, pair, suited } = mrParts(c);
+  if (pair) return 92 + (hi <= 9 ? 22 : hi <= 11 ? 10 : 2) + hi * 0.4;
+  const gap = hi - lo - 1;
+  let v = 24 + lo * 3 + hi - Math.min(gap, 7) * 6.4 + (suited ? 30 : 0);
+  if (gap === 0) v += 9;
+  else if (gap === 1) v += 3;
+  if (hi === 14 && suited) v += 7;
+  return v;
+}
+/* The hands that get raised or 3-bet instead of flatted. Demoted, not deleted:
+   a wide enough limp range still ends in them, which is exactly where a trap
+   lives. */
+const MR_PREMIUM = new Set(["AA", "KK", "QQ", "AKs", "AKo"]);
+const mrOrder = (f) => HAND_CLASSES.slice().sort((a, b) => f(b) - f(a));
+const mrFlat = (f) => (c) => f(c) - (MR_PREMIUM.has(c) ? 1000 : 0);
+const MR_ORDERS = {
+  play:   mrOrder((c) => mrStrength(c) + 0.45 * mrSpec(c)),      // VPIP: everything he plays
+  raise:  mrOrder(mrStrength),
+  "3bet": mrOrder((c) => mrStrength(c) + (mrParts(c).suited && mrParts(c).hi === 14 ? 14 : 0)),
+  "4bet": mrOrder(mrStrength),
+  call:   mrOrder(mrFlat((c) => mrSpec(c) + 0.3 * mrStrength(c))),
+  limp:   mrOrder(mrFlat(mrSpec)),
+  lrr:    mrOrder((c) => mrStrength(c) + (mrParts(c).suited && mrParts(c).hi - mrParts(c).lo <= 2 ? 8 : 0)),
+};
+function modelRange(kind, pct) {
+  const ord = MR_ORDERS[kind] || MR_ORDERS.raise;
+  const want = Math.max(0, Math.min(100, pct || 0)) * 13.26;     // combos, of 1326
+  const hands = [];
+  let n = 0;
+  for (const c of ord) {
+    if (n >= want) break;
+    hands.push(c); n += handClassCombos(c);
+  }
+  // one class either side of the target: land on whichever is closer
+  if (hands.length > 1 && n - want > handClassCombos(hands[hands.length - 1]) / 2) n -= handClassCombos(hands.pop());
+  return { hands, combos: n, pct: n / 13.26 };
+}
