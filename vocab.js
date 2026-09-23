@@ -217,6 +217,11 @@ const TENDENCY_TAGS = [
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
   { id: "t-hero-fold",    cat: "postflop", label: "Can Hero Fold?" },
+  /* He cbet the flop and checked the turn: yes = that check is the hand over,
+     so stab it. No = he checks turns he intends to keep playing, and the stab
+     runs into a check-raise. Narrower than the complement of 2nd barrel freq,
+     which also holds the turns he folded or called a lead on. */
+  { id: "t-cb-gu",        cat: "postflop", label: "Cb GU" },
   /* The turn brought a flush and he bet anyway: yes = that bet is a made hand
      charging the draw, not a barrel, so raising it as a bluff is burning money. */
   { id: "t-protect-flush", cat: "postflop", label: "Protect T Flush" },
