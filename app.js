@@ -164,6 +164,7 @@ const READ_LAYOUT = [
       { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [
       { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
+      { label: "Float", lines: true, ids: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] },
       { label: "Streets vs Him", lines: true, ids: ["fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
     ] },
   ] },
@@ -214,7 +215,7 @@ const LIVE_LAYOUT = [
   { title: "Postflop", cat: "postflop", subs: [
     { label: "Flop", rows: [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
-      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", "protect-disadv-board"] },
+      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
       { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },

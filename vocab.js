@@ -205,6 +205,11 @@ const TENDENCY_TAGS = [
   { id: "fold-cbet-r",    cat: "postflop", label: "Fold river cbet", kind: "stat", calc: "foldCbR" },
   { id: "f-xr-freq-pfc",  cat: "postflop", label: "xR freq",         kind: "choice", options: [["under", "Under"], ["over", "Over"]] },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
+  /* Floating in and out of position are different plays, not one habit at two
+     prices: OOP he has to lead or check-raise the turn to ever win it, IP the
+     float is free when checked to. `floats-wide` stays the one-line summary. */
+  { id: "f-float-oop",    cat: "postflop", label: "Float OOP" },
+  { id: "f-float-ip",     cat: "postflop", label: "Float IP" },
   // turn
   { id: "t-barrel2-freq", cat: "postflop", label: "2nd barrel freq", kind: "stat", calc: "barrel" },
   { id: "t-fold-to-xr", cat: "postflop", label: "Fold to xR", kind: "stat", calc: "foldXrT" },
