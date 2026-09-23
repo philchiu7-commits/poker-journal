@@ -246,15 +246,17 @@ const TENDENCY_TAGS = [
    red = the good reg to stay away from, gray = tight/nit. Station fish is
    the calling station: loose like the loose fish but passive with it, so it
    sits beside him in a lighter green (Phil, v140). Plain Reg heads the reg
-   block in a softer blue: a competent regular you have not pinned down to ABC,
-   good or nit yet. Its id is `plain-reg` because `reg` has belonged to ABC reg
-   since the first build and type ids are never renamed. */
+   block in orange (Phil, v200) — the one you have not pinned down to ABC, good
+   or nit yet is the one worth a second look, and a softer blue read as a
+   weaker ABC reg rather than as its own thing. Its id is `plain-reg` because
+   `reg` has belonged to ABC reg since the first build and type ids are never
+   renamed. */
 const PLAYER_TYPES = [
   { id: "whale",        label: "Whale",        icon: "🐋", color: "#3ec7c7" },
   { id: "loose-fish",   label: "Loose fish",   icon: "🐟", color: "#4fbf5a" },
   { id: "station-fish", label: "Station fish", icon: "☎️", color: "#7ad6a0" },
   { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#a35bd6" },
-  { id: "plain-reg",    label: "Reg",          icon: "👤", color: "#7f8fd6" },
+  { id: "plain-reg",    label: "Reg",          icon: "👤", color: "#e08a3c" },
   { id: "reg",          label: "ABC reg",      icon: "🃏", color: "#4f7fdf" },
   { id: "good-reg",     label: "Good reg",     icon: "🦈", color: "#d64848" },
   { id: "tight-reg",    label: "Tight reg",    icon: "🔒", color: "#7a8496" },
