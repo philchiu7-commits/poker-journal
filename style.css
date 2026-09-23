@@ -991,6 +991,8 @@ textarea.noteedit { margin-bottom: 0; }
 .hudpos td { text-align:center; color:#d6dbe4; padding:3px 2px; min-width:34px; }
 .hudpos td i { display:block; font-size:9px; color:#5a6374; font-style:normal; }
 .hudpos td.thin { color:#6d7686; }
+.hudpos tr:first-child td[data-poscol] { cursor:pointer; }
+.hudpos tr:first-child td[data-poscol]:active { color:#d6dbe4; }
 .hudpos td.hudtap { cursor:pointer; }
 .hudpos td.hudtap:active { background:#1d2230; }
 .hudempty { color:#8b94a5; font-size:12px; line-height:1.5; }

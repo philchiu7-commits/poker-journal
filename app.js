@@ -3314,6 +3314,13 @@ function sizing3HTML(o) {
       acts after the opener on the flop. Tap a count for the range he showed at it.</div></div>`;
 }
 
+/* Which seats are folded out of the per-seat table. A preference about the
+   table you sit at rather than about a player — a seat that never exists in
+   your game is noise on everyone — so it is stored once, applies to every
+   opponent and survives a reload. Every cell carries its own denominator, so
+   folding a column away can never move a number. */
+let posHidden = new Set();
+const savePosHidden = () => metaSet("hudHiddenSeats", [...posHidden]);
 function renderOppHud(o) {
   const c = hudFor(o.id, HANDS);
   const nEl = $("od-hud-n"), box = $("od-hud");
@@ -3355,7 +3362,9 @@ function renderOppHud(o) {
 
   // How he enters a pot is the read Phil actually plays against, and it moves
   // seat by seat — a blended number hides the button from the under-the-gun.
-  const seats = POSITIONS.filter((p) => (c.byPos[p] || {}).seats);
+  const hasSeat = (p) => !!(c.byPos[p] || {}).seats;
+  const seats = POSITIONS.filter((p) => hasSeat(p) && !posHidden.has(p));
+  const hidSeats = POSITIONS.filter((p) => hasSeat(p) && posHidden.has(p));
   /* Each row carries its own denominator — raising and limping are out of the
      seats he was dealt, isolating is out of the hands somebody limped into
      ahead of him, what he did after his own limp is out of those limps, and
@@ -3367,15 +3376,22 @@ function renderOppHud(o) {
     return `<td class="${d && d < 8 ? "thin" : ""}${d ? " hudtap" : ""}"${d ? ` data-hud="${key}|${p}"` : ""}
       title="${tip} from ${p}: ${b[key]}/${d}${d ? ". Tap for the hands." : ""}">${v}<i>${d}</i></td>`;
   }).join("") + "</tr>";
-  const posTable = seats.length
-    ? `<div class="hudpos"><table>
-         <tr><th></th>${seats.map((p) => `<td>${p}</td>`).join("")}</tr>
+  /* Tapping a seat heading folds that column away; the ones folded away sit
+     under the table so there is always a way back. */
+  const posHid = hidSeats.length
+    ? `<div class="szcols"><b>Hidden</b>${hidSeats.map((p) =>
+        `<button class="szcol" data-posshow="${p}">${p}</button>`).join("")
+      }<button class="szcol all" data-posshow="*">Show all</button></div>`
+    : "";
+  const posTable = seats.length || hidSeats.length
+    ? `<div class="hudpos">${!seats.length ? "" : `<table>
+         <tr><th></th>${seats.map((p) => `<td data-poscol="${p}" title="Hide the ${p} column">${p}</td>`).join("")}</tr>
          ${row("PFR", "pfr", "seats", "Raised preflop")}
          ${row("Iso", "iso", "isoOpp", "Raised over a limp with the pot unraised")}
          ${row("Limp", "limp", "seats", "Limped")}
          ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
          ${row("Limp-fold", "lfold", "faced", "Limped, got raised, folded")}
-       </table></div>`
+       </table>`}${posHid}</div>`
     : "";
   /* Two blocks, not one wall: how he enters a pot and what he does once he is
      in one are read at different moments, and the limp table below belongs to
@@ -6127,6 +6143,23 @@ function bindStatic() {
     if (b) openPlayerTypeSheet(b.dataset.ptypeOpen);
   };
   $("od-hud").onclick = (e) => {
+    const pc = e.target.closest("[data-poscol]");
+    if (pc) {
+      // never fold the last one away — an empty table has no way back
+      if (pc.parentElement.querySelectorAll("[data-poscol]").length > 1) {
+        posHidden.add(pc.dataset.poscol);
+        savePosHidden();
+        renderOppDetail(curOppId);
+      }
+      return;
+    }
+    const ps = e.target.closest("[data-posshow]");
+    if (ps) {
+      if (ps.dataset.posshow === "*") posHidden.clear(); else posHidden.delete(ps.dataset.posshow);
+      savePosHidden();
+      renderOppDetail(curOppId);
+      return;
+    }
     const t3 = e.target.closest("[data-sz3]");
     if (t3) { if (peekBtn === t3) hideRangePeek(); else showSize3(t3); return; }
     const b = e.target.closest("[data-hud]");
@@ -6658,6 +6691,7 @@ async function boot() {
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   szHidden = new Set((await metaGet("sizingHiddenCols")) || []);
+  posHidden = new Set((await metaGet("hudHiddenSeats")) || []);
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
   dupeDismissed = new Set((await metaGet("dupeDismissed")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];
