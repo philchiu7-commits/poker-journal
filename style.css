@@ -663,6 +663,15 @@ textarea.noteedit { margin-bottom: 0; }
    canvas, and keep the scroll. */
 .rgcell.rng:not(.ro) { touch-action: none; }
 .rgcell.rng.ro { cursor: default; }
+/* HUD drill chart: a filled cell is a hand he did it with, an outlined one a
+   hand he had the same chance in and played another way. Both at once is both
+   marks — the class he splits is the read. */
+.rgcell.rng.opp { box-shadow: inset 0 0 0 1.5px #4d5766; }
+.hudchart { max-width: 288px; margin: 0 auto 8px; }
+.rgswatch.hudoppsw { background: #1a1d23; box-shadow: inset 0 0 0 1.5px #4d5766; }
+/* These legend labels are sentences ("Did not 3-bet"), not action names. */
+.rglegend.hudleg .rglegitem { text-transform: none; }
+.rgcell-hands.short { max-height: 40vh; }
 .rgcell.rng.ro:active { transform: none; }
 .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .rfoot .spacer { flex: 1; }
@@ -1055,6 +1064,15 @@ textarea.noteedit { margin-bottom: 0; }
 .sizechip.auto.has { color: var(--text); border-color: #3c5a45; border-style: solid; cursor: pointer; }
 .sizechip.auto.top { background: #1b3326; border-color: #3f8a5d; color: #c8ecd6; }
 .sizechip.auto.has:active { background: #244934; }
+/* Bluff rows in red: green and red is the one pairing you can read across a
+   grid without reading the row label first. */
+.sizechip.auto.bl.has { border-color: #6b3a40; }
+.sizechip.auto.bl.top { background: #33191e; border-color: #a8505c; color: #f0cbd1; }
+.sizechip.auto.bl.has:active { background: #4a2229; }
+/* 3-bet sizes live under the HUD now — preflop numbers with preflop numbers. */
+.hudsz3 { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.hudsz3 .sizenote { margin: 8px 0 0; font-size: 11.5px; }
+.hudsz3 .sizelab { width: 72px; white-space: nowrap; font-size: 12.5px; }
 #od-size-edit.on { color: #f85149; }
 
 /* The limp-reraise rate rides in the range footer: a frequency off every

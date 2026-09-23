@@ -143,7 +143,11 @@ const READ_LAYOUT = [
      appear here. liveOnly rows are the limp / LRR / squid machinery, a live
      table's preflop rather than an online one. */
   { title: "Preflop", subs: [{ rows: [
-    { label: "Opening", ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
+    /* Opening is off both tabs (Phil): the HUD answers how wide he opens better
+       than a yes/no does. Listed, not deleted — `placed` still counts these ids,
+       so the Live catch-all can't drag them back in under Other, and the saved
+       reads stay on every opponent. */
+    { label: "Opening", hidden: true, ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
     { matrix: "First raise", liveOnly: true },
     { matrix: "LRR", liveOnly: true },
     { label: "Limping", liveOnly: true, ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
@@ -195,7 +199,7 @@ const POS_MATRIX = {
    because there is no HUD at a live table. */
 const LIVE_LAYOUT = [
   { title: "Preflop", cat: "preflop", subs: [{ rows: [
-    { label: "Opening", ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
+    { label: "Opening", hidden: true, ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
     { matrix: "First raise" },
     { matrix: "LRR" },
     { label: "Limping", ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
@@ -1554,6 +1558,40 @@ const HUD_DRILL_LABEL = {
   limp: ["Limped", "Did not limp"], lrr: ["Limp-reraised", "Just limped"],
   lfold: ["Folded the limp", "Defended the limp"],
 };
+/* The hands behind a preflop HUD number, on the same 13x13 the Ranges panel
+   draws. A filled cell is a hand he did it with, in that action's own colour;
+   an outlined one is a hand he had the same chance in and did something else.
+   Only hands he turned up can appear at all, so the foot says how many of them
+   that is — most of a preflop stat's hands were never shown. */
+const HUD_CHART_ACT = { vpip: null, pfr: "raise", three: "3bet", four: "4bet+",
+  f3b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
+function hudChartHTML(o, stat, hands, yes, no) {
+  const cells = {};
+  let shown = 0;
+  for (const x of hands) {
+    const v = (x.h.villains || []).find((z) => z.opponentId === o.id);
+    const hc = handClass((v || {}).cards);
+    if (!hc) continue;                          // never shown, or squid cards
+    shown++;
+    const e = cells[hc] = cells[hc] || { did: 0, miss: 0 };
+    e[x.ok ? "did" : "miss"]++;
+  }
+  const foot = `${shown} of ${hands.length} hand${hands.length === 1 ? "" : "s"} had his cards on record`;
+  if (!shown) return `<div class="rdsub">No cards on record for any of these hands — nothing to chart.</div>`;
+  const hue = HUD_CHART_ACT[stat] ? notchColor(HUD_CHART_ACT[stat]) : "var(--accent)";
+  const grid = HAND_CLASSES.map((hc) => {
+    const e = cells[hc];
+    const cls = "rgcell rng ro" + (e && e.did ? " inr" : "") + (e && e.miss ? " opp" : "");
+    const tip = hc + (e ? ` \u00b7 ${e.did ? `${yes} ${e.did}\u00d7` : ""}${e.did && e.miss ? " \u00b7 " : ""}${
+      e.miss ? `${no} ${e.miss}\u00d7` : ""}` : "");
+    return `<div class="${cls}"${e && e.did ? ` style="--fill:${hue}"` : ""} title="${esc(tip)}">${hc}</div>`;
+  }).join("");
+  return `<div class="hudchart"><div class="rggrid">${grid}</div></div>
+    <div class="rglegend hudleg">
+      <span class="rglegitem"><span class="rgswatch" style="background:${hue}"></span>${esc(yes)}</span>
+      <span class="rglegitem"><span class="rgswatch hudoppsw"></span>${esc(no)}</span>
+      <span class="rglegnote">${foot}</span></div>`;
+}
 function openHudDrill(o, key) {
   const c = hudFor(o.id, HANDS);
   const evs = (c.ev || {})[key] || [];
@@ -1578,12 +1616,17 @@ function openHudDrill(o, key) {
       + list.slice().sort((a, b) => b.h.ts - a.h.ts).map((x) => handRowHTML(x.h, o.id)).join("")
     : "";
   const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
+  /* Preflop stats get the grid above the list — which hands he does this with
+     is the question the number raises. Postflop ones are about a street, not a
+     starting hand, so they stay a list. */
+  const chart = stat in HUD_CHART_ACT ? hudChartHTML(o, stat, hands, yes, no) : "";
   sheetGroup = "__rdrill__";                    // same row → #handview handler
   showSheet(
     `<div class="sheethead"><span class="t">${esc(label)} · ${esc(o.name)}</span>
        <button data-sheetclose>Close</button></div>
      <div class="rdsub">${hit.length} of ${hands.length} hand${hands.length === 1 ? "" : "s"}</div>
-     <div class="list rgcell-hands">${block(yes, hit)}${block(no, miss)}</div>`);
+     ${chart}
+     <div class="list rgcell-hands${chart ? " short" : ""}">${block(yes, hit)}${block(no, miss)}</div>`);
 }
 
 /* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
@@ -2739,7 +2782,7 @@ function renderOppReads(o) {
     // liveOnly hides on Online, onlineOnly hides on Live. Either way the row
     // stays listed, so `placed` counts it and the catch-all can't drag it back.
     const skip = readTab === "live" ? "onlineOnly" : "liveOnly";
-    const shown = (sb) => sb.rows.filter((r) => !r[skip]);
+    const shown = (sb) => sb.rows.filter((r) => !r[skip] && !r.hidden);
     const rowHTML = (r) => {
       const mx = r.matrix && POS_MATRIX[r.matrix];
       if (mx) {
@@ -2774,6 +2817,9 @@ function renderOppReads(o) {
           subs = subs.slice(0, -1).concat([{ ...last, rows: last.rows.concat([{ label: "Other", ids: extra }]) }]);
         }
       }
+      // a section with every row hidden on this tab is a heading and nothing
+      // under it — drop it rather than draw an empty fold
+      if (!subs.some((sb) => shown(sb).length)) return "";
       // the count on the card says where this player is already written down
       const n = subs.flatMap(shown).flatMap(rowIds).filter((id) => live(id) && isSet(id)).length;
       // a street heading with a checklist behind it is a control, not a label
@@ -2943,7 +2989,7 @@ function renderOppSizing(o) {
     const top = total ? Math.max(...SIZING_STEPS.map((st) => (cell[st.id] || {}).n || 0)) : 0;
     const chips = SIZING_STEPS.map((st) => {
       const n = (cell[st.id] || {}).n || 0;
-      const cls = [n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
+      const cls = [r.kind === "B" ? "bl" : "", n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
       return `<button class="sizechip auto${cls ? " " + cls : ""}"${n ? ` data-szauto="${r.id}|${st.id}"` : ""}
         title="${n ? `${st.label} — ${n} of ${total}, ${Math.round((100 * n) / total)}%. Tap for the hands.`
           : `${st.label} — nothing on record`}"
@@ -2954,16 +3000,55 @@ function renderOppSizing(o) {
        are already spoken for by the hand list. */
     const lab = r.mode === "raise"
       ? `<button class="szsplit" data-szsplit="${r.id}" title="Flop, turn and river separately">${r.label}</button>`
-      : r.street;
+      : r.kind === "V" ? "Value" : "Bluff";
     return `<div class="sizerow"><div class="sizelab">${lab}${total ? `<span class="sizen">${total}</span>` : ""}</div>
       <div class="sizechips">${chips}</div></div>`;
   };
   /* Every bet of his that didn't make it, and the one thing that was missing.
      A grid that quietly drops a third of his bets reads as a grid that has seen
      them, so the shortfall is printed and each reason opens its hands. */
-  /* 3-bets sit in their own block under the postflop rows: a different street,
-     a shorter ladder, and a cell that opens a range chart rather than a hand
-     list — hovering a size to see the shape is the whole question here. */
+  const sk = auto.skipped, why = auto.why || {};
+  const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
+    `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
+  const skipHTML = skips ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
+  /* The definition is long, and it is the sort of thing you read once and then
+     want out of the way of the grid. Folded, at the foot of the panel, with the
+     sample size left showing on the fold — that is the part you check every
+     time. */
+  const defHTML = `<div class="sizedef${sizeDefShut ? " shut" : ""}">
+    <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${auto.n} bet${
+      auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record — what counts as what</button>
+    <div class="sizenote">Value is two pair or better, or top or second pair; everything under that
+      counts as a bluff, draws included. Second pair on the turn is the one exception: it counts as a
+      bluff, however he got there — barrelled, raised, or led after calling the flop. Only a turn bet
+      after nobody bet the flop is left out, as neither value nor bluff. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
+      On the raise rows the rung is what he puts in <i>on top of the call</i>, against the pot with
+      that call in it — the same thing the B33/B50/B66 buttons compute, so a raise made with a button
+      lands on its own rung. B100 is the pot-sized raise either way. Those two rows hold all three
+      streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
+      150% of the pot lands there too. Tap a count for the hands.
+      His 3-bet sizes are preflop and live under the HUD.</div></div>`;
+  $("od-sizing").innerHTML = (auto.n
+    /* Grouped by street, value over bluff — the question at the table is what a
+       given flop bet size means, so the two readings of one street belong side
+       by side rather than three rows apart. */
+    ? head +
+      [["Flop", "Bet · flop"], ["Turn", "Bet · turn"], ["River", "Bet · river"]]
+        .map(([st, t]) => `<div class="sizesub">${t}</div>` +
+          SIZING_ROWS.filter((r) => r.mode === "bet" && r.street === st).map(autoRow).join("")).join("") +
+      `<div class="sizesub">Raise · flop, turn and river</div>` +
+      SIZING_ROWS.filter((r) => r.mode === "raise").map(autoRow).join("")
+    : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
+         and the bet amounts are both on record.</div>`) + skipHTML + (auto.n ? defHTML : "");
+}
+
+/* The 3-bet rows are preflop, so they sit under the HUD rather than with the
+   postflop sizing grid — same question the numbers above them answer, asked of
+   his raise sizes. A cell opens the range he showed at that size, not a hand
+   list: the shape is the whole point here. */
+function sizing3HTML(o) {
+  const auto = sizingAuto(o.id, HANDS);
+  if (!auto.n3) return "";
   const t3head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
     SIZING_3BET_STEPS.map((st) => `<span class="sizecol">${st.label}</span>`).join("") + `</div></div>`;
   const t3row = (r) => {
@@ -2982,45 +3067,11 @@ function renderOppSizing(o) {
     return `<div class="sizerow"><div class="sizelab">${r.label}${total ? `<span class="sizen">${total}</span>` : ""}</div>
       <div class="sizechips">${chips}</div></div>`;
   };
-  const t3HTML = auto.n3
-    ? `<div class="sizesub">3bet · preflop</div>` + t3head + SIZING_3BET_ROWS.map(t3row).join("")
-    : "";
-  const sk = auto.skipped, why = auto.why || {};
-  const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
-    `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
-  const skipHTML = skips ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
-  /* The definition is long, and it is the sort of thing you read once and then
-     want out of the way of the grid. Folded, at the foot of the panel, with the
-     sample size left showing on the fold — that is the part you check every
-     time. */
-  const defHTML = `<div class="sizedef${sizeDefShut ? " shut" : ""}">
-    <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${[
-      auto.n ? `${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"}` : "",
-      auto.n3 ? `${auto.n3} 3-bet${auto.n3 === 1 ? "" : "s"}` : "",
-    ].filter(Boolean).join(" and ")} on record — what counts as what</button>
-    <div class="sizenote">Value is two pair or better, or top or second pair; everything under that
-      counts as a bluff, draws included. Second pair on the turn is the one exception: it counts as a
-      bluff, however he got there — barrelled, raised, or led after calling the flop. Only a turn bet
-      after nobody bet the flop is left out, as neither value nor bluff. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
-      On the raise rows the rung is what he puts in <i>on top of the call</i>, against the pot with
-      that call in it — the same thing the B33/B50/B66 buttons compute, so a raise made with a button
-      lands on its own rung. B100 is the pot-sized raise either way. Those two rows hold all three
-      streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
-      150% of the pot lands there too. Tap a count for the hands.
-      The 3-bet rows are priced the same way and placed by whether he ends up acting after the
-      opener on the flop, so they count hands that never saw one. They need no cards — the size is
-      the answer — so they hold more hands than the grid above; hover a count for the range he
-      showed at it. There is no Jam among them: nothing on record is a preflop all-in, so anything
-      over 150% sits on B150.</div></div>`;
-  $("od-sizing").innerHTML = (auto.n
-    ? head +
-      [["bet", "V", "Bet · value"], ["bet", "B", "Bet · bluff"], ["raise", null, "Raise · flop, turn and river"]]
-        .map(([m, k, t]) => `<div class="sizesub">${t}</div>` +
-          SIZING_ROWS.filter((r) => r.mode === m && (!k || r.kind === k)).map(autoRow).join("")).join("")
-    : auto.n3 ? ""
-    : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
-         and the bet amounts are both on record.</div>`) + t3HTML + skipHTML
-    + (auto.n || auto.n3 ? defHTML : "");
+  return `<div class="hudsz3"><div class="sizesub">3-bet sizing</div>` + t3head +
+    SIZING_3BET_ROWS.map(t3row).join("") +
+    `<div class="sizenote">From ${auto.n3} 3-bet${auto.n3 === 1 ? "" : "s"} on record — the rung is what he
+      puts in <i>on top of the call</i>, against the pot with that call in it. Rows split by whether he
+      acts after the opener on the flop. Tap a count for the range he showed at it.</div></div>`;
 }
 
 function renderOppHud(o) {
@@ -3031,7 +3082,7 @@ function renderOppHud(o) {
     box.innerHTML = `<div class="hudempty">No imported hands for ${esc(o.name)} yet.
       The HUD counts every seat and every preflop action, which only the
       bookmarklet import records — hand-typed hands are the ones worth writing
-      down, so they would read far looser than the player really is.</div>`;
+      down, so they would read far looser than the player really is.</div>` + sizing3HTML(o);
     return;
   }
   nEl.textContent = `${c.seats} hand${c.seats === 1 ? "" : "s"}`;
@@ -3071,7 +3122,7 @@ function renderOppHud(o) {
          ${row("Limp-fold", "lfold", "faced", "Limped, got raised, folded")}
        </table></div>`
     : "";
-  box.innerHTML = `<div class="hudgrid">${cells}${afCell}</div>${posTable}`;
+  box.innerHTML = `<div class="hudgrid">${cells}${afCell}</div>${posTable}${sizing3HTML(o)}`;
 }
 
 function renderOppDetail(id) {
@@ -5808,6 +5859,8 @@ function bindStatic() {
     if (b) openPlayerTypeSheet(b.dataset.ptypeOpen);
   };
   $("od-hud").onclick = (e) => {
+    const t3 = e.target.closest("[data-sz3]");
+    if (t3) { if (peekBtn === t3) hideRangePeek(); else showSize3(t3); return; }
     const b = e.target.closest("[data-hud]");
     if (!b) return;
     const o = oppById(curOppId);
@@ -5941,16 +5994,18 @@ function bindStatic() {
     await dbPut("opponents", o);
     renderOppReads(o);
   };
-  $("od-sizing").addEventListener("pointerover", (e) => {
-    if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-szsplit],[data-sz3]");
-    if (b && b !== peekBtn) (b.dataset.sz3 ? showSize3 : showSizeSplit)(b);
-  });
-  $("od-sizing").addEventListener("pointerout", (e) => {
-    if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-szsplit],[data-sz3]");
-    if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
-  });
+  for (const hh of [$("od-sizing"), $("od-hud")]) {     // 3-bet sizes moved under the HUD
+    hh.addEventListener("pointerover", (e) => {
+      if (!matchMedia("(hover: hover)").matches) return;
+      const b = e.target.closest("[data-szsplit],[data-sz3]");
+      if (b && b !== peekBtn) (b.dataset.sz3 ? showSize3 : showSizeSplit)(b);
+    });
+    hh.addEventListener("pointerout", (e) => {
+      if (!matchMedia("(hover: hover)").matches) return;
+      const b = e.target.closest("[data-szsplit],[data-sz3]");
+      if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
+    });
+  }
   $("od-tags").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
     const b = e.target.closest("[data-rjump],[data-check]");
