@@ -387,12 +387,14 @@ function potWalk(h) {
           if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
           return out;
         }
-        /* A raise is priced the way a bet is: what he put in, over the pot as
-           it stood when he acted. For a raise "what he put in" is the money on
-           top of the call, so B50 means the raise itself was half that pot
-           (Phil, v178). The pot he is raising into already contains the bet he
-           is answering. */
-        if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0, over: v - level });
+        /* A raise is what he put in on top of the call, over the whole pot
+           once his call is in: the money carried in from earlier streets, plus
+           everything anyone has put in this street, plus the call itself. A
+           pot-sized raise is then B100, the same thing the pot button computes
+           (Phil, v181). Leaving his call out of the divisor prices every raise
+           a bucket too high and piles a third of them into the B150 overflow. */
+        if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0,
+          over: v - level, potAfterCall: p + toCall });
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
@@ -507,7 +509,7 @@ function sizingAuto(oppId, hands) {
       const ratio = e.ratio !== null && e.ratio !== undefined
         ? e.ratio
         : isR
-          ? (e.pot > 0 && e.over > 0 ? e.over / e.pot : null)
+          ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
           : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
       // A jam needs no rung, so it is counted even when the fraction can't be.
       if (ratio === null && a.act !== "jam") { miss(isR && e.pot > 0 ? "badRaise" : "noPot"); continue; }
