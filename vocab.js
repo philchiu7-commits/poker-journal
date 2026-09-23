@@ -250,12 +250,16 @@ const TENDENCY_TAGS = [
    or nit yet is the one worth a second look, and a softer blue read as a
    weaker ABC reg rather than as its own thing. Its id is `plain-reg` because
    `reg` has belonged to ABC reg since the first build and type ids are never
-   renamed. */
+   renamed. Tight passive fish closes the fish block in a duller green — he is
+   still a fish, just one who waits (Phil, v202). It is a new id rather than the
+   retired `tight-fish`, which one opponent still carries: reusing it would
+   relabel him without Phil saying so. */
 const PLAYER_TYPES = [
   { id: "whale",        label: "Whale",        icon: "🐋", color: "#3ec7c7" },
   { id: "loose-fish",   label: "Loose fish",   icon: "🐟", color: "#4fbf5a" },
   { id: "station-fish", label: "Station fish", icon: "☎️", color: "#7ad6a0" },
   { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#a35bd6" },
+  { id: "tight-passive-fish", label: "Tight passive fish", icon: "🐡", color: "#8fb26a" },
   { id: "plain-reg",    label: "Reg",          icon: "👤", color: "#e08a3c" },
   { id: "reg",          label: "ABC reg",      icon: "🃏", color: "#4f7fdf" },
   { id: "good-reg",     label: "Good reg",     icon: "🦈", color: "#d64848" },
