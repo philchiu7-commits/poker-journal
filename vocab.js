@@ -154,6 +154,9 @@ const TENDENCY_TAGS = [
   { id: "bluff-xt-f",           cat: "postflop", label: "Bluff XT F" },
   { id: "bluff-xt-t",           cat: "postflop", label: "Bluff XT T" },
   { id: "bluff-xt-r",           cat: "postflop", label: "Bluff XT R" },
+  /* The other half of the same check-flop-bet-turn line: yes = he fires it
+     thin for value too, so Bluff XT alone doesn't tell you to call. */
+  { id: "thin-xt-t",            cat: "postflop", label: "Thin XT T" },
   { id: "merged",               cat: "postflop", label: "Merged" },
   { id: "polar",                cat: "postflop", label: "Polar" },
   { id: "bad-polar",            cat: "postflop", label: "Bad polar" },
