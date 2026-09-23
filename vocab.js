@@ -149,8 +149,10 @@ const TENDENCY_TAGS = [
      or No and nothing else, and tapping the lit one takes it back. */
   { id: "raise-nuts-f",         cat: "postflop", label: "Raise nuts F", kind: "choice",
     options: [["yes", "Yes"], ["no", "No"]] },
-  { id: "raise-nuts-t",         cat: "postflop", label: "Raise nuts T" },
-  { id: "raise-nuts-r",         cat: "postflop", label: "Raise nuts R" },
+  { id: "raise-nuts-t",         cat: "postflop", label: "Raise nuts T", kind: "choice",
+    options: [["yes", "Yes"], ["no", "No"]] },
+  { id: "raise-nuts-r",         cat: "postflop", label: "Raise nuts R", kind: "choice",
+    options: [["yes", "Yes"], ["no", "No"]] },
   { id: "bluff-till-f",         cat: "postflop", label: "Bluff till F" },
   { id: "bluff-till-t",         cat: "postflop", label: "Bluff till T" },
   { id: "bluff-till-r",         cat: "postflop", label: "Bluff till R" },
