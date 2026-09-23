@@ -230,6 +230,9 @@ const TENDENCY_TAGS = [
   { id: "r-barrel3-freq", cat: "postflop", label: "3rd barrel freq", kind: "stat", calc: "barrelR" },
   { id: "r-af",           cat: "postflop", label: "River AF",        kind: "stat", unit: "", calc: "riverAf" },
   { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
+  /* The value-side counterpart to the bluff reads: does he ever bet a hand that
+     only beats a bluff-catcher, or is a river bet always two pair plus? */
+  { id: "r-thin",         cat: "postflop", label: "Have thin?" },
   { id: "r-traps",        cat: "postflop", label: "Have traps?" },
   /* The other thing a river check from the preflop raiser can mean: yes = he is
      willing to give up with no showdown value, so his river bets are that much
