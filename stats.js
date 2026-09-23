@@ -21,7 +21,7 @@ function hudCount(oppId, hands) {
     seats: 0, vpip: 0, pfr: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0, f4b: 0, oppF4b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
-    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0,
+    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0, xrC: 0, oppXrC: 0,
     probeT: 0, oppProbeT: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
@@ -267,6 +267,24 @@ function hudCount(oppId, hands) {
       }
       continue;
     }
+    /* Check-raise as the preflop caller: he checked, the raiser cbet, and he
+       came back over the top. The mirror of xR as PFR, so it stays a check-
+       raise — a raise from in position with no check in front of it is a
+       different play. Somebody else raising before it got back to him ends the
+       chance; by then he is answering that raise, not the cbet. */
+    const myFi = flop.findIndex((a) => a.actor === me);
+    if (myFi >= 0 && myFi < cbIdx && flop[myFi].act === "check") {
+      let back = null;
+      for (let i = cbIdx + 1; i < flop.length; i++) {
+        if (flop[i].actor === me) { back = flop[i]; break; }
+        if (HUD_AGG.has(flop[i].act)) break;
+      }
+      if (back) {
+        const did = back.act === "raise" || back.act === "jam";
+        c.oppXrC++; if (did) c.xrC++;
+        mark("xrC", did, h.id);
+      }
+    }
     const resp = flop.slice(cbIdx + 1).find((a) => a.actor === me);
     if (!resp) continue;
     c["oppFcb" + k]++;
@@ -354,6 +372,7 @@ function hudDerived(c) {
     // he was the preflop raiser, heads-up out of position, and checked instead
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),
+    xrPfc: p(c.xrC, c.oppXrC),
     barrel: p(c.bar, c.oppBar),
     barrelR: p(c.barR, c.oppBarR),
     foldCbF: p(fcb, oppFcb),

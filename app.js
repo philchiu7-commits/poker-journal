@@ -1761,6 +1761,7 @@ const STAT_DRILL = {
   probeT:   { ev: ["probeT"],                       yes: "Probed the turn",   no: "Checked it to him" },
   checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
   xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
+  xrPfc:    { ev: ["xrC"],                          yes: "Check-raised the cbet", no: "Did not" },
   barrel:   { ev: ["bar"],                          yes: "Barrelled",          no: "Gave up" },
   barrelR:  { ev: ["barR"],                         yes: "Fired the river",    no: "Gave up" },
   foldCbF:  { ev: ["fcbIp", "fcbOop", "fcbMw"],     yes: "Folded",             no: "Did not fold" },

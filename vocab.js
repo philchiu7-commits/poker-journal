@@ -203,7 +203,7 @@ const TENDENCY_TAGS = [
   { id: "fold-cbet-f",    cat: "postflop", label: "Fold flop cbet",  kind: "stat", calc: "foldCbF" },
   { id: "fold-cbet-t",    cat: "postflop", label: "Fold turn cbet",  kind: "stat", calc: "foldCbT" },
   { id: "fold-cbet-r",    cat: "postflop", label: "Fold river cbet", kind: "stat", calc: "foldCbR" },
-  { id: "f-xr-freq-pfc",  cat: "postflop", label: "xR freq",         kind: "choice", options: [["under", "Under"], ["over", "Over"]] },
+  { id: "f-xr-freq-pfc",  cat: "postflop", label: "xR freq",         kind: "stat", calc: "xrPfc" },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
   /* Floating in and out of position are different plays, not one habit at two
      prices: OOP he has to lead or check-raise the turn to ever win it, IP the
