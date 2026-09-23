@@ -1583,6 +1583,10 @@ const HUD_DRILL_LABEL = {
    that is — most of a preflop stat's hands were never shown. */
 const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
   f3b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
+/* The other bucket gets a fill of its own where the action has a name worth
+   seeing: on Iso the hands he did not raise are the ones he came along with,
+   and a hollow ring is nearly invisible next to 168 other squares (Phil). */
+const HUD_CHART_MISS = { iso: NOTCH_COLORS.call };
 /* Which model ordering a stat's own percentage gets drawn as. Fold v 3B and
    Limp-fold are absent on purpose: that number is how often he gives up, and a
    folding range is not a shape you play against (Phil). */
@@ -1619,15 +1623,22 @@ function hudChartHTML(o, stat, hands, yes, no, label) {
   const foot = `${shown} of ${hands.length} hand${hands.length === 1 ? "" : "s"} had his cards on record`;
   if (!shown && !model) return `<div class="rdsub">No cards on record for any of these hands — nothing to chart.</div>`;
   const hue = HUD_CHART_ACT[stat] ? notchColor(HUD_CHART_ACT[stat]) : "var(--accent)";
+  const mhue = HUD_CHART_MISS[stat];
   const tint = tintHex(HUD_CHART_ACT[stat] ? notchColor(HUD_CHART_ACT[stat]) : "#4a7fd0", 0.3);
   const grid = HAND_CLASSES.map((hc) => {
     const e = cells[hc];
     const inm = mset && mset.has(hc);
-    const cls = "rgcell rng ro" + (e && e.did ? " inr" : "") + (e && e.miss ? " opp" : "") + (inm ? " mdl" : "");
+    const cls = "rgcell rng ro" + (e && (e.did || (e.miss && mhue)) ? " inr" : "")
+      + (e && e.miss && !mhue ? " opp" : "") + (inm ? " mdl" : "");
     const tip = hc + (inm ? ` · inside a ${model.pct.toFixed(0)}% range` : "")
       + (e ? ` · ${e.did ? `${yes} ${e.did}×` : ""}${e.did && e.miss ? " · " : ""}${
         e.miss ? `${no} ${e.miss}×` : ""} · tap for the hand${e.ids.length === 1 ? "" : "s"}` : "");
-    const style = e && e.did ? ` style="--fill:${hue}"` : inm ? ` style="--mdl:${tint}"` : "";
+    /* Played two ways is two facts, the same as the Ranges grid: half the cell
+       each rather than the stronger action swallowing the other. */
+    const fill = !e ? null : e.did && e.miss && mhue
+      ? `linear-gradient(90deg,${hue} 0 50%,${mhue} 50% 100%)`
+      : e.did ? hue : e.miss && mhue ? mhue : null;
+    const style = fill ? ` style="--fill:${fill}"` : inm ? ` style="--mdl:${tint}"` : "";
     return `<div class="${cls}"${style}${e ? ` data-hcell="${hc}" data-hands="${esc(e.ids.join(","))}"` : ""
       } title="${esc(tip)}">${hc}</div>`;
   }).join("");
@@ -1638,7 +1649,8 @@ function hudChartHTML(o, stat, hands, yes, no, label) {
   return `<div class="hudchart" data-hclabel="${esc(label || "")}"><div class="rggrid">${grid}</div></div>
     <div class="rglegend hudleg">
       <span class="rglegitem"><span class="rgswatch" style="background:${hue}"></span>${esc(yes)}</span>
-      <span class="rglegitem"><span class="rgswatch hudoppsw"></span>${esc(no)}</span>
+      <span class="rglegitem"><span class="rgswatch${mhue ? "" : " hudoppsw"}"${
+        mhue ? ` style="background:${mhue}"` : ""}></span>${esc(no)}</span>
       ${mleg}
       <span class="rglegnote">${foot}${model
         ? ` · the wash is what a ${model.pct.toFixed(0)}% range looks like, not what he holds` : ""}</span></div>`;
