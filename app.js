@@ -2942,9 +2942,9 @@ function renderOppSizing(o) {
       counts as a bluff, draws included. Second pair on the turn is the one exception: it counts as a
       bluff, however he got there — barrelled, raised, or led after calling the flop. Only a turn bet
       after nobody bet the flop is left out, as neither value nor bluff. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
-      On the raise rows the rung is what he put in <i>on top of the call</i> as a share of the whole
-      pot once his call is in — what was already out there, plus the bet he is answering, plus the
-      call itself. A pot-sized raise is B100. Those two rows hold all three
+      On the raise rows the rung is the size he raises <i>to</i>, against the raise that would be
+      pot-sized — three times the bet he is answering, plus everything else already in the pot.
+      Against a pot-size bet a min-raise is B50, a 3× is B75, and the pot-sized raise is B100. Those two rows hold all three
       streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
       150% of the pot lands there too. Tap a count for the hands.</div></div>`;
   $("od-sizing").innerHTML = (auto.n

@@ -387,14 +387,13 @@ function potWalk(h) {
           if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
           return out;
         }
-        /* A raise is what he put in on top of the call, over the whole pot
-           once his call is in: the money carried in from earlier streets, plus
-           everything anyone has put in this street, plus the call itself. A
-           pot-sized raise is then B100, the same thing the pot button computes
-           (Phil, v181). Leaving his call out of the divisor prices every raise
-           a bucket too high and piles a third of them into the B150 overflow. */
+        /* A raise is priced by the size he raises *to*, over the raise that
+           would be pot-sized: three times the bet he faces plus everything
+           else already in the pot (Phil, v182). With no bet in front of him
+           that divisor is just the pot, so the same fraction reads a bet and
+           a raise alike and B100 means pot-sized either way. */
         if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0,
-          over: v - level, potAfterCall: p + toCall });
+          to: v, over: v - level, potRaise: p + 2 * level - had });
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
@@ -503,13 +502,13 @@ function sizingAuto(oppId, hands) {
         continue;
       }
       /* A raise on record for no more than the bet it faced is a mislabelled
-         call, not a sizing: the increment is zero or negative and there is no
-         honest rung for it. Say so rather than bucket it at the bottom. */
+         call, not a sizing: it raised nothing and there is no honest rung for
+         it. Say so rather than bucket it at the bottom. */
       const isR = !!e.raise;
       const ratio = e.ratio !== null && e.ratio !== undefined
         ? e.ratio
         : isR
-          ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
+          ? (e.potRaise > 0 && e.over > 0 ? e.to / e.potRaise : null)
           : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
       // A jam needs no rung, so it is counted even when the fraction can't be.
       if (ratio === null && a.act !== "jam") { miss(isR && e.pot > 0 ? "badRaise" : "noPot"); continue; }
