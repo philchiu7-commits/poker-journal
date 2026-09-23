@@ -169,8 +169,8 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range", "t-protect-flush"], ["punchbag-t-pfr", "t-hero-fold"]) },
-    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "fold-cbet-t", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] }] },
+    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr", "t-hero-fold"]) },
+    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "fold-cbet-t", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], "t-protect-flush"] }] },
   ] },
   { title: "River exploit", subs: [
     { label: "As PFR", rows: [...wb(["r-barrel3-freq", "r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal", "r-thin"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]),
@@ -222,8 +222,8 @@ const LIVE_LAYOUT = [
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "t-protect-flush", "punchbag-t-pfr", "t-hero-fold"] },
-      { label: "As PFC", lines: true, ids: ["t-probe", "t-bet-vol", "t-call-style", "have-lead-t"] },
+      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr", "t-hero-fold"] },
+      { label: "As PFC", lines: true, ids: ["t-probe", "t-bet-vol", "t-call-style", "have-lead-t", "t-protect-flush"] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq", "t-fold-to-xr"] },
     ] },
     { label: "River", rows: [
