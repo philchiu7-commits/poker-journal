@@ -212,6 +212,9 @@ const TENDENCY_TAGS = [
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
   { id: "t-hero-fold",    cat: "postflop", label: "Can Hero Fold?" },
+  /* The turn brought a flush and he bet anyway: yes = that bet is a made hand
+     charging the draw, not a barrel, so raising it as a bluff is burning money. */
+  { id: "t-protect-flush", cat: "postflop", label: "Protect T Flush" },
   { id: "t-probe",        cat: "postflop", label: "Probe T",         kind: "stat", calc: "probeT" },
   { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
   { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["wide", "Wide"]] },

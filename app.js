@@ -168,7 +168,7 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr", "t-hero-fold"]) },
+    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range", "t-protect-flush"], ["punchbag-t-pfr", "t-hero-fold"]) },
     { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] }] },
   ] },
   { title: "River exploit", subs: [
@@ -221,7 +221,7 @@ const LIVE_LAYOUT = [
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr", "t-hero-fold"] },
+      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "t-protect-flush", "punchbag-t-pfr", "t-hero-fold"] },
       { label: "As PFC", lines: true, ids: ["t-probe", "t-bet-vol", "t-call-style", "have-lead-t"] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq", "t-fold-to-xr"] },
     ] },
@@ -1561,6 +1561,7 @@ function openReadProof(o, label, ids, sub, other) {
 const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lfold: "Limp-fold", af: "Agg factor" };
 const HUD_DRILL_LABEL = {
   vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
+  iso: ["Isolated the limper", "Limped along, called or folded"],
   cc: ["Cold called", "Raised or folded"],
   three: ["3-bet", "Did not 3-bet"], four: ["4-bet", "Did not 4-bet"],
   f3b: ["Folded", "Did not fold"],
@@ -1574,12 +1575,12 @@ const HUD_DRILL_LABEL = {
    an outlined one is a hand he had the same chance in and did something else.
    Only hands he turned up can appear at all, so the foot says how many of them
    that is — most of a preflop stat's hands were never shown. */
-const HUD_CHART_ACT = { vpip: null, pfr: "raise", cc: "call", three: "3bet", four: "4bet+",
+const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
   f3b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
 /* Which model ordering a stat's own percentage gets drawn as. Fold v 3B and
    Limp-fold are absent on purpose: that number is how often he gives up, and a
    folding range is not a shape you play against (Phil). */
-const HUD_MODEL_KIND = { vpip: "play", pfr: "raise", cc: "call", three: "3bet", four: "4bet",
+const HUD_MODEL_KIND = { vpip: "play", pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet",
   limp: "limp", lrr: "lrr" };
 /* The model is a wash over the same 13x13 rather than a second grid: the peek
    is already nearly a phone wide, two grids would run past the viewport, and
@@ -3313,18 +3314,21 @@ function renderOppHud(o) {
        title="${esc(tip)} — ${d} chance${d === 1 ? "" : "s"}${d ? ". Tap for the hands." : ""}">
        <b>${pct === null ? "—" : Math.round(pct) + "%"}</b>
        <span>${esc(label)}</span><i>${d}</i></button>`;
-  const cells = hudStats(c).map((r) => cell(r.key, r.label, r.pct, r.d, r.thin, r.tip)).join("");
+  const rows = hudStats(c);
+  const cellsFor = (st) => rows.filter((r) => r.street === st)
+    .map((r) => cell(r.key, r.label, r.pct, r.d, r.thin, r.tip)).join("");
   const af = hudAF(c);
   const afN = af ? af.n : 0;
   const afCell = `<button class="hudcell${!af || af.n < HUD_MIN ? " thin" : ""}${afN ? "" : " dead"}"${afN ? ` data-hud="af"` : ""}
       title="Postflop bets and raises per call — ${afN} action${afN === 1 ? "" : "s"}${afN ? ". Tap for the hands." : ""}">
       <b>${!af ? "—" : af.inf ? "∞" : af.v.toFixed(1)}</b><span>Agg factor</span><i>${afN}</i></button>`;
 
-  // Limping is the read Phil actually plays against, so it gets its own row
-  // broken out by seat rather than one blended number.
+  // How he enters a pot is the read Phil actually plays against, and it moves
+  // seat by seat — a blended number hides the button from the under-the-gun.
   const seats = POSITIONS.filter((p) => (c.byPos[p] || {}).seats);
-  /* Each row carries its own denominator — how often he limped is out of the
-     seats he was dealt, what he did next is out of the limps themselves, and
+  /* Each row carries its own denominator — raising and limping are out of the
+     seats he was dealt, isolating is out of the hands somebody limped into
+     ahead of him, what he did after his own limp is out of those limps, and
      whether he folded is out of the limps somebody actually raised. The count
      rides under every cell so two rows are never read off one base. */
   const row = (label, key, den, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
@@ -3336,12 +3340,20 @@ function renderOppHud(o) {
   const posTable = seats.length
     ? `<div class="hudpos"><table>
          <tr><th></th>${seats.map((p) => `<td>${p}</td>`).join("")}</tr>
+         ${row("PFR", "pfr", "seats", "Raised preflop")}
+         ${row("Iso", "iso", "isoOpp", "Raised over a limp with the pot unraised")}
          ${row("Limp", "limp", "seats", "Limped")}
          ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
          ${row("Limp-fold", "lfold", "faced", "Limped, got raised, folded")}
        </table></div>`
     : "";
-  box.innerHTML = `<div class="hudgrid">${cells}${afCell}</div>${posTable}${sizing3HTML(o)}`;
+  /* Two blocks, not one wall: how he enters a pot and what he does once he is
+     in one are read at different moments, and the limp table below belongs to
+     the preflop half, so it sits with it. */
+  box.innerHTML = `<div class="glabel">Preflop</div>
+    <div class="hudgrid">${cellsFor("pre")}</div>${posTable}
+    <div class="glabel" style="margin-top:14px">Postflop</div>
+    <div class="hudgrid">${cellsFor("post")}${afCell}</div>${sizing3HTML(o)}`;
 }
 
 function renderOppDetail(id) {

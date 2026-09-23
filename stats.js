@@ -18,14 +18,14 @@ const HUD_MIN = 15;
 
 function hudCount(oppId, hands) {
   const c = {
-    seats: 0, vpip: 0, pfr: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
+    seats: 0, vpip: 0, pfr: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0,
     probeT: 0, oppProbeT: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
-  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
+  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, iso: 0, isoOpp: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
   /* Every stat also keeps the hands it was counted off — one entry per hand it
      had a chance in, flagged with whether that chance was taken — so tapping a
      number can show you the hands behind it instead of asking you to trust it.
@@ -55,6 +55,7 @@ function hudCount(oppId, hands) {
        number above it, so the walk sets flags and the counters move once. */
     let vol = false, aggPre = false, opp3 = false, did3 = false, oppF3 = false, didF3 = false;
     let opp4 = false, did4 = false, oppCc = false, didCc = false, actedVol = false;
+    let limpSeen = false, oppIso = false, didIso = false;
     /* Cold-calling is calling a raise with nothing of yours in the pot yet, so
        the blinds and the straddle are out: their call is a defend off a
        discounted price and a different range, which is the whole reason the
@@ -73,6 +74,12 @@ function hudCount(oppId, hands) {
            into the denominator would read as a player who defends far more
            than he does. */
         else if (limpFaced && a.act === "fold") limpFold = true;
+        /* Isolating: raising over a limp while the pot is still unraised. The
+           chance is his first turn in a hand somebody has already limped into
+           — over-limping behind, calling or folding is that chance declined.
+           Once anyone has raised, a raise of his is a 3-bet and counts there;
+           his own limp is not a limp in front of him, so it can't make one. */
+        if (!oppIso && limpSeen && !sawRaise) { oppIso = true; didIso = HUD_AGG.has(a.act); }
         if (cold && !oppCc && !actedVol && sawRaise) { oppCc = true; if (a.act === "call") didCc = true; }
         if (HUD_VOL.has(a.act)) actedVol = true;    // after the test — his own call is not money already in
         if (sawRaise && !sawThree) { opp3 = true; if (a.act === "3bet") did3 = true; }
@@ -83,6 +90,7 @@ function hudCount(oppId, hands) {
         if (sawThree && !sawFour) { opp4 = true; if (a.act === "4bet") did4 = true; }
         if (opener === me && sawThree) { oppF3 = true; if (a.act === "fold") didF3 = true; }
       }
+      if (a.act === "limp" && !mine) limpSeen = true;
       if (HUD_AGG.has(a.act)) {
         if (limped && !mine) limpFaced = true;
         lastAgg = a.actor;
@@ -92,13 +100,17 @@ function hudCount(oppId, hands) {
       }
     }
     if (vol) c.vpip++;
-    if (aggPre) c.pfr++;
+    if (aggPre) { c.pfr++; pos(myPos).pfr++; }
+    if (oppIso) { c.oppIso++; pos(myPos).isoOpp++; if (didIso) { c.iso++; pos(myPos).iso++; } }
     if (oppCc) { c.oppCc++; if (didCc) c.cc++; }
     if (opp3) { c.opp3b++; if (did3) c.n3b++; }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
     mark("vpip", vol, h.id);
     mark("pfr", aggPre, h.id);
+    mark("pfr|" + myPos, aggPre, h.id);
+    if (oppIso) mark("iso|" + myPos, didIso, h.id);
+    if (oppIso) mark("iso", didIso, h.id);
     if (oppCc) mark("cc", didCc, h.id);
     if (opp3) mark("three", did3, h.id);
     if (opp4) mark("four", did4, h.id);
@@ -229,25 +241,30 @@ function hudCount(oppId, hands) {
   return c;
 }
 
-/* One row per stat: value as a percentage of its own opportunity count. */
+/* One row per stat: value as a percentage of its own opportunity count. Each
+   carries the street it belongs to, so the grid can be read as two blocks —
+   how he enters a pot, then what he does once he is in one. */
 function hudStats(c) {
-  const r = (key, label, n, d, tip) => ({ key, label, n, d, tip, pct: d ? (100 * n) / d : null, thin: d < HUD_MIN });
+  const mk = (street) => (key, label, n, d, tip) =>
+    ({ key, label, n, d, tip, street, pct: d ? (100 * n) / d : null, thin: d < HUD_MIN });
+  const r = mk("pre"), q = mk("post");
   return [
     r("vpip", "VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
     r("pfr", "PFR", c.pfr, c.seats, "Raised preflop"),
+    r("iso", "Iso", c.iso, c.oppIso, "Raised over a limp with the pot still unraised — over-limping, calling or folding behind is the same chance declined"),
     r("cc", "Cold call", c.cc, c.oppCc, "Called a raise with nothing of his in the pot yet — blind and straddle defends are not cold calls"),
     r("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
     r("four", "4-bet", c.n4b, c.opp4b, "4-bet when facing a 3-bet — cold 4-bets counted too"),
     r("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
-    r("cbIp", "Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
-    r("cbOop", "Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
-    r("cbMw", "Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
-    r("fcbIp", "Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
-    r("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
-    r("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
-    r("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
-    r("barR", "Barrel R", c.barR, c.oppBarR, "Bet the river after cbetting the flop and barrelling the turn"),
-    r("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
+    q("cbIp", "Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
+    q("cbOop", "Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
+    q("cbMw", "Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
+    q("fcbIp", "Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
+    q("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
+    q("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
+    q("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
+    q("barR", "Barrel R", c.barR, c.oppBarR, "Bet the river after cbetting the flop and barrelling the turn"),
+    q("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
   ];
 }
 
