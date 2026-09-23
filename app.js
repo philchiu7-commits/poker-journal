@@ -158,7 +158,10 @@ const READ_LAYOUT = [
     { label: "MWP limp", rows: [{ lines: true, ids: ["mwl-oop-probe", "mwl-xr", "mwl-ip-stab"] }] },
   ] },
   { title: "Flop exploit", subs: [
-    { label: "As PFR", rows: wb(["f-cbet-freq", "f-fold-to-xr", "force-squid"], ["f-oop-x-range", "f-xr-freq-pfr", "protect-disadv-board"]) },
+    /* Force squid is not a when-bet read — it says what he does to the game, not
+       what he does to a flop. Its own line at the foot of As PFR (Phil). */
+    { label: "As PFR", rows: [...wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-freq-pfr", "protect-disadv-board"]),
+      { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [
       { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
       { label: "Streets vs Him", lines: true, ids: ["fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
@@ -169,7 +172,8 @@ const READ_LAYOUT = [
     { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal", "force-squid"], ["r-traps", "punchbag-r-pfr"]) },
+    { label: "As PFR", rows: [...wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]),
+      { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bluff-xt-r", "Bluff XT"]] }] },
   ] },
 ];
@@ -1611,22 +1615,89 @@ function openHudDrill(o, key) {
     if (h) hands.push({ h, ok: e.ok });
   }
   const [yes, no] = HUD_DRILL_LABEL[key.split("|")[0]] || ["Counted", "Did not"];
+  /* Preflop stats get the grid above the list — which hands he does this with
+     is the question the number raises. Postflop ones are about a street, not a
+     starting hand, so they stay a list. */
+  openDrillSheet(o, label, hands, yes, no, stat in HUD_CHART_ACT ? hudChartHTML(o, stat, hands, yes, no) : "");
+}
+/* One sheet for every "show me the hands behind this number", wherever the
+   number was tapped: [{h, ok}] in, hit over miss out. */
+function openDrillSheet(o, label, hands, yes, no, chart) {
   const block = (ttl, list) => list.length
     ? `<div class="rdhead"><b>${esc(ttl)}</b><span class="spacer"></span><span class="rdact muted">${list.length}</span></div>`
       + list.slice().sort((a, b) => b.h.ts - a.h.ts).map((x) => handRowHTML(x.h, o.id)).join("")
     : "";
   const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
-  /* Preflop stats get the grid above the list — which hands he does this with
-     is the question the number raises. Postflop ones are about a street, not a
-     starting hand, so they stay a list. */
-  const chart = stat in HUD_CHART_ACT ? hudChartHTML(o, stat, hands, yes, no) : "";
   sheetGroup = "__rdrill__";                    // same row → #handview handler
   showSheet(
     `<div class="sheethead"><span class="t">${esc(label)} · ${esc(o.name)}</span>
        <button data-sheetclose>Close</button></div>
      <div class="rdsub">${hit.length} of ${hands.length} hand${hands.length === 1 ? "" : "s"}</div>
-     ${chart}
+     ${chart || ""}
      <div class="list rgcell-hands${chart ? " short" : ""}">${block(yes, hit)}${block(no, miss)}</div>`);
+}
+
+/* The stat reads in the read picker are counted off the same walk as the HUD,
+   so they can open the same sheet. Keyed by the read's `calc`, because that is
+   what says which event stream the number came off. `checkOop` is the cbet
+   stream read backwards — he checked in exactly the spots he did not bet — so
+   it drills the misses. `riverAf` is deliberately absent: it is a ratio with no
+   event stream of its own, and a drill that guessed at one would be fiction. */
+const STAT_DRILL = {
+  cbet:     { ev: ["cbIp", "cbOop", "cbMw"],       yes: "Cbet",               no: "Checked it back or gave up" },
+  foldXr:   { ev: ["fxr"],                          yes: "Folded to the raise", no: "Did not fold" },
+  checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
+  xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
+  barrel:   { ev: ["bar"],                          yes: "Barrelled",          no: "Gave up" },
+  foldCbF:  { ev: ["fcbIp", "fcbOop", "fcbMw"],     yes: "Folded",             no: "Did not fold" },
+  foldCbT:  { ev: ["ftb"],                          yes: "Folded",             no: "Did not fold" },
+  foldCbR:  { ev: ["frb"],                          yes: "Folded",             no: "Did not fold" },
+};
+function statDrillHands(o, id) {
+  const spec = STAT_DRILL[statCalcKey(id)];
+  if (!spec) return null;
+  const c = hudFor(o.id, HANDS);
+  const byId = new Map(HANDS.map((h) => [h.id, h]));
+  const seen = new Set(), hands = [];
+  for (const k of spec.ev) for (const e of (c.ev || {})[k] || []) {
+    if (seen.has(e.id)) continue;               // one hand can only speak once
+    seen.add(e.id);
+    const h = byId.get(e.id);
+    if (h) hands.push({ h, ok: spec.flip ? !e.ok : !!e.ok });
+  }
+  return hands.length ? { spec, hands } : null;
+}
+function openStatDrill(o, id) {
+  const d = statDrillHands(o, id);
+  if (!d) return;
+  openDrillSheet(o, TAG_BY_ID[id]?.label || id, d.hands, d.spec.yes, d.spec.no, "");
+}
+/* Hovering the number is enough to see the hands (Phil). A peek that runs past
+   the screen can't be scrolled without the pointer leaving it, so it shows the
+   most recent few of each block and says how many it held back; the tap still
+   opens the whole list. */
+const ST_PEEK_MAX = 5;
+function statPeekHTML(o, id) {
+  const d = statDrillHands(o, id);
+  if (!d) return "";
+  const { spec, hands } = d;
+  const block = (ttl, list) => {
+    if (!list.length) return "";
+    const rows = list.slice().sort((a, b) => b.h.ts - a.h.ts);
+    return `<div class="stpkh">${esc(ttl)}<span>${list.length}</span></div>`
+      + rows.slice(0, ST_PEEK_MAX).map((x) => handRowHTML(x.h, o.id)).join("")
+      + (rows.length > ST_PEEK_MAX ? `<div class="stpkmore">+${rows.length - ST_PEEK_MAX} more</div>` : "");
+  };
+  const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
+  return `<div class="rpkhead">${esc(TAG_BY_ID[id]?.label || id)} \u00b7 ${hit.length} of ${hands.length}</div>
+    <div class="list stpklist">${block(spec.yes, hit)}${block(spec.no, miss)}</div>
+    <div class="rpkfoot"><span>Tap the number for all of them</span></div>`;
+}
+function showStatPeek(btn) {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const html = statPeekHTML(o, btn.dataset.statdrill);
+  if (html) openPeek(btn, html, "stpk");
 }
 
 /* ---------- approximate ranges (o.ranges[spot] = { hands, seen }) ---------- */
@@ -1722,6 +1793,8 @@ function openPeek(btn, html, cls) {
     p.id = "rpeek"; p.className = "rpeek";
     p.addEventListener("pointerleave", () => { if (matchMedia("(hover: hover)").matches) hideRangePeek(); });
     p.addEventListener("click", (e) => {
+      const hd = e.target.closest("[data-hand]");     // hand rows in a stat peek still open the hand
+      if (hd) { hideRangePeek(); location.hash = "#handview/" + hd.dataset.hand; return; }
       const b = e.target.closest("[data-rjumpopen]");
       if (!b) return;
       const [sq2, sit2, pg2] = b.dataset.rjumpopen.split("|");
@@ -2162,9 +2235,13 @@ function oppRowHTML(o, st) {
   // VPIP/PFR/3-bet on the name line — the three numbers you actually read
   // mid-hand. Absent entirely when the opponent has no imported hands, so
   // live-only profiles look exactly as they did before the HUD existed.
+  // The sample size is not printed beside them: the hand badge at the end of the
+  // row already carries a count, and two numbers a few apart on one line read as
+  // an error. It stays in the tooltip, which is where the difference (imported
+  // hands, not every logged hand) can be said in words.
   const m = hudMini(hudFor(o.id, HANDS));
   const hudLine = !oppEditMode && m
-    ? `<span class="hudline${m.thin ? " thin" : ""}" title="VPIP ${m.vpip}% · PFR ${m.pfr}% · 3-bet ${m.three === null ? "no chances yet" : m.three + "%"} — over ${m.seats} imported hand${m.seats === 1 ? "" : "s"}">${m.vpip}/${m.pfr}/${m.three === null ? "–" : m.three}<i>${m.seats}</i></span>`
+    ? `<span class="hudline${m.thin ? " thin" : ""}" title="VPIP ${m.vpip}% · PFR ${m.pfr}% · 3-bet ${m.three === null ? "no chances yet" : m.three + "%"} — over ${m.seats} imported hand${m.seats === 1 ? "" : "s"}">${m.vpip}/${m.pfr}/${m.three === null ? "–" : m.three}</span>`
     : "";
   return `<div class="lrow opprow${typeCls}${oppEditMode ? " editing" : ""}" data-opp="${o.id}"${typeStyle}>
     ${handle}
@@ -2725,9 +2802,11 @@ function renderOppReads(o) {
         // off the hands, so it reads out rather than types in — and it carries
         // the opportunity count, greyed below the sample where a % is noise
         const v = d.pct != null ? Math.round(d.pct) : d.v.toFixed(1);
-        return `<div class="bubbles"><span class="statcalc${d.thin ? " thin" : ""}"` +
+        const drill = !!STAT_DRILL[statCalcKey(id)];
+        return `<div class="bubbles"><${drill ? "button" : "span"} class="statcalc${d.thin ? " thin" : ""}"` +
+          (drill ? ` data-statdrill="${id}"` : "") +
           ` title="${esc(lbl)} — ${v}${u} off ${d.n} spot${d.n === 1 ? "" : "s"} in the imported hands` +
-          `${d.thin ? `, under the ${HUD_MIN} this app trusts` : ""}">${v}</span>` +
+          `${d.thin ? `, under the ${HUD_MIN} this app trusts` : ""}${drill ? ". Tap for those hands." : ""}">${v}</${drill ? "button" : "span"}>` +
           (u ? `<span class="statunit">${esc(u)}</span>` : "") +
           `<span class="statn">n${d.n}</span></div>`;
       }
@@ -2800,7 +2879,7 @@ function renderOppReads(o) {
         `<span class="rllab${isSet(idOf(x)) ? " on" : ""}">${esc(labelOf(x))}</span>` +
         `<div class="rlctl">${readBtn(idOf(x), labelOf(x), true)}</div>`).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
-      return `<div class="readsub">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
+      return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
         (lines ? `<div class="readlines">${lines}</div>` : "") +
         (chips ? `<div class="chiprow readwrap">${chips}</div>` : "") +
         (lines || chips ? "" : `<span class="chipnote">—</span>`) + `</div>`;
@@ -2979,15 +3058,24 @@ function showCheck(btn) { openPeek(btn, checkHTML(btn.dataset.check), "chkpk"); 
    now, not something about the player, so it is not stored and does not survive
    a reload. Shut by default — the definition is a read-once. */
 let sizeDefShut = true;
+/* Which rungs are folded out of the grid. A preference about the ladder, not
+   about a player, so it is stored once and applies to everyone — and it
+   survives a reload, unlike the definition fold: a rung he never sees should
+   stay gone. Counts and shares are still taken over the whole ladder; hiding a
+   column must not move a percentage. */
+let szHidden = new Set();
+const saveSzHidden = () => metaSet("sizingHiddenCols", [...szHidden]);
 function renderOppSizing(o) {
   const auto = sizingAuto(o.id, HANDS);
+  const cols = SIZING_STEPS.filter((st) => !szHidden.has(st.id));
   const head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
-    SIZING_STEPS.map((st) => `<span class="sizecol">${st.label}</span>`).join("") + `</div></div>`;
+    cols.map((st) => `<button class="sizecol" data-szcol="${st.id}"
+      title="Hide the ${st.label} column">${st.label}</button>`).join("") + `</div></div>`;
   const autoRow = (r) => {
     const cell = auto.rows[r.id] || {};
     const total = SIZING_STEPS.reduce((n, st) => n + ((cell[st.id] || {}).n || 0), 0);
     const top = total ? Math.max(...SIZING_STEPS.map((st) => (cell[st.id] || {}).n || 0)) : 0;
-    const chips = SIZING_STEPS.map((st) => {
+    const chips = cols.map((st) => {
       const n = (cell[st.id] || {}).n || 0;
       const cls = [r.kind === "B" ? "bl" : "", n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
       return `<button class="sizechip auto${cls ? " " + cls : ""}"${n ? ` data-szauto="${r.id}|${st.id}"` : ""}
@@ -3011,6 +3099,14 @@ function renderOppSizing(o) {
   const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
     `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
   const skipHTML = skips ? `<div class="sizeskips"><b>Left out</b>${skips}</div>` : "";
+  /* Directly under the grid, not down with the footnotes: a row total that
+     doesn't match the cells beside it is alarming until you can see which rung
+     is folded away. */
+  const hidHTML = szHidden.size
+    ? `<div class="szcols"><b>Hidden</b>${SIZING_STEPS.filter((st) => szHidden.has(st.id))
+        .map((st) => `<button class="szcol" data-szshow="${st.id}">${st.label}</button>`).join("")
+      }<button class="szcol all" data-szshow="*">Show all</button></div>`
+    : "";
   /* The definition is long, and it is the sort of thing you read once and then
      want out of the way of the grid. Folded, at the foot of the panel, with the
      sample size left showing on the fold — that is the part you check every
@@ -3027,6 +3123,9 @@ function renderOppSizing(o) {
       lands on its own rung. B100 is the pot-sized raise either way. Those two rows hold all three
       streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
       150% of the pot lands there too. Tap a count for the hands.
+      Tap a column heading to fold that rung out of the grid — every count and share
+      above still takes in the hidden columns, so a row total can be larger than the
+      cells left showing.
       His 3-bet sizes are preflop and live under the HUD.</div></div>`;
   $("od-sizing").innerHTML = (auto.n
     /* Grouped by street, value over bluff — the question at the table is what a
@@ -3039,7 +3138,7 @@ function renderOppSizing(o) {
       `<div class="sizesub">Raise · flop, turn and river</div>` +
       SIZING_ROWS.filter((r) => r.mode === "raise").map(autoRow).join("")
     : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
-         and the bet amounts are both on record.</div>`) + skipHTML + (auto.n ? defHTML : "");
+         and the bet amounts are both on record.</div>`) + hidHTML + skipHTML + (auto.n ? defHTML : "");
 }
 
 /* The 3-bet rows are preflop, so they sit under the HUD rather than with the
@@ -3049,13 +3148,14 @@ function renderOppSizing(o) {
 function sizing3HTML(o) {
   const auto = sizingAuto(o.id, HANDS);
   if (!auto.n3) return "";
+  const t3cols = SIZING_3BET_STEPS.filter((st) => !szHidden.has(st.id));   // same ladder, same hidden rungs
   const t3head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
-    SIZING_3BET_STEPS.map((st) => `<span class="sizecol">${st.label}</span>`).join("") + `</div></div>`;
+    t3cols.map((st) => `<span class="sizecol">${st.label}</span>`).join("") + `</div></div>`;
   const t3row = (r) => {
     const cell = auto.rows[r.id] || {};
     const total = SIZING_3BET_STEPS.reduce((n, st) => n + ((cell[st.id] || {}).n || 0), 0);
     const top = total ? Math.max(...SIZING_3BET_STEPS.map((st) => (cell[st.id] || {}).n || 0)) : 0;
-    const chips = SIZING_3BET_STEPS.map((st) => {
+    const chips = t3cols.map((st) => {
       const c = cell[st.id] || {}, n = c.n || 0, sh = (c.cards || []).length;
       const cls = [n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
       return `<button class="sizechip auto${cls ? " " + cls : ""}"${n ? ` data-sz3="${r.id}|${st.id}"` : ""}
@@ -5867,6 +5967,23 @@ function bindStatic() {
     if (o) openHudDrill(o, b.dataset.hud);
   };
   $("od-sizing").onclick = async (e) => {
+    const hc = e.target.closest("[data-szcol]");
+    if (hc) {
+      // never fold the last one away — an empty grid has no way back
+      if (SIZING_STEPS.filter((st) => !szHidden.has(st.id)).length > 1) {
+        szHidden.add(hc.dataset.szcol);
+        saveSzHidden();
+        renderOppDetail(curOppId);
+      }
+      return;
+    }
+    const sc = e.target.closest("[data-szshow]");
+    if (sc) {
+      if (sc.dataset.szshow === "*") szHidden.clear(); else szHidden.delete(sc.dataset.szshow);
+      saveSzHidden();
+      renderOppDetail(curOppId);
+      return;
+    }
     if (e.target.closest("[data-sizedef]")) {     // fold the definition away
       sizeDefShut = !sizeDefShut;
       renderOppSizing(oppById(curOppId));
@@ -5930,6 +6047,8 @@ function bindStatic() {
     if (o) renderOppReads(o);
   };
   $("od-tags").onclick = async (e) => {
+    const sd = e.target.closest("[data-statdrill]");
+    if (sd) { const o = oppById(curOppId); if (o) openStatDrill(o, sd.dataset.statdrill); return; }
     const fd = e.target.closest("[data-rcfold]");
     if (fd) {                       // fold a whole street away; nothing stored on the opponent
       const t = fd.dataset.rcfold;
@@ -6008,18 +6127,18 @@ function bindStatic() {
   }
   $("od-tags").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump],[data-check]");
-    if (b && b !== peekBtn) (b.dataset.check ? showCheck : showRangePeek)(b);
+    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill]");
+    if (b && b !== peekBtn) (b.dataset.statdrill ? showStatPeek : b.dataset.check ? showCheck : showRangePeek)(b);
   });
   $("od-tags").addEventListener("pointerout", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump],[data-check]");
+    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill]");
     if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
   });
   document.addEventListener("click", (e) => {
     if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")
       && !e.target.closest("[data-check]") && !e.target.closest("[data-szsplit]")
-      && !e.target.closest("[data-sz3]")) hideRangePeek();
+      && !e.target.closest("[data-statdrill]") && !e.target.closest("[data-sz3]")) hideRangePeek();
   }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
   window.addEventListener("scroll", () => hideRangePeek(), true);
@@ -6369,6 +6488,7 @@ async function boot() {
   }
   await loadBlindsDefault();
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
+  szHidden = new Set((await metaGet("sizingHiddenCols")) || []);
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
   dupeDismissed = new Set((await metaGet("dupeDismissed")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];

@@ -507,7 +507,9 @@ function sizingAuto(oppId, hands) {
     const tv = tm && V[Number(tm[1])];
     if (tv && tv.opponentId === oppId) {
       const op = pre.slice(0, ti).reverse().find((x) => x.act === "raise");
-      const seat = (id) => (id === "h" ? h.heroPos
+      // "hero" is the actor token everywhere else in the app; "h" matched nothing,
+      // so every 3-bet made over *my* open was dropped from this grid (v188)
+      const seat = (id) => (id === "hero" ? h.heroPos
         : ((V[Number((/^v(\d+)$/.exec(String(id)) || [])[1])] || {}).pos));
       const mine = seat(t3.actor), theirs = op && seat(op.actor);
       const e = priced.get(t3);
