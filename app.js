@@ -2885,6 +2885,38 @@ function showSizeSplit(btn) {
   if (o) openPeek(btn, sizeSplitHTML(o, btn.dataset.szsplit), "szpk");
 }
 
+/* The chart behind a 3-bet cell: the same 13x13 the Ranges panel draws, filled
+   with the hands he actually showed at that size. The count above it is every
+   3-bet he made at that size; the chart can only hold the ones he had to show,
+   so the two numbers differ and the foot says by how much. */
+function size3PeekHTML(o, rowId, stepId) {
+  const r = SIZING_3BET_ROW_BY_ID[rowId], st = SIZING_STEP_BY_ID[stepId];
+  const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId] || { n: 0, cards: [] };
+  const seen = {};
+  for (const cards of cell.cards || []) {
+    const c = handClass(cards);
+    if (c) seen[c] = (seen[c] || 0) + 1;
+  }
+  const keys = Object.keys(seen);
+  const cells = HAND_CLASSES.map((c) => {
+    const k = seen[c];
+    return `<div class="rgcell rng ro${k ? " inr" : ""}"
+      title="${c}${k ? ` · shown ${k}\u00d7` : ""}">${c}</div>`;
+  }).join("");
+  const shown = (cell.cards || []).length;
+  return `<div class="rpkhead">${esc(r ? r.label : rowId)} \u00b7 ${esc(st ? st.label : stepId)}</div>
+    <div class="rggrid">${cells}</div>
+    <div class="rpkfoot"><span>${cell.n} at this size \u00b7 ${shown
+      ? `${shown} shown down, ${keys.length} hand${keys.length === 1 ? "" : "s"} on the chart`
+      : "none of them shown down"}</span></div>`;
+}
+function showSize3(btn) {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const [rowId, stepId] = btn.dataset.sz3.split("|");
+  openPeek(btn, size3PeekHTML(o, rowId, stepId), "");
+}
+
 function checkHTML(key) {
   const c = STREET_CHECKS[key];
   if (!c) return "";
@@ -2928,6 +2960,30 @@ function renderOppSizing(o) {
   /* Every bet of his that didn't make it, and the one thing that was missing.
      A grid that quietly drops a third of his bets reads as a grid that has seen
      them, so the shortfall is printed and each reason opens its hands. */
+  /* 3-bets sit in their own block under the postflop rows: a different street,
+     a shorter ladder, and a cell that opens a range chart rather than a hand
+     list — hovering a size to see the shape is the whole question here. */
+  const t3head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
+    SIZING_3BET_STEPS.map((st) => `<span class="sizecol">${st.label}</span>`).join("") + `</div></div>`;
+  const t3row = (r) => {
+    const cell = auto.rows[r.id] || {};
+    const total = SIZING_3BET_STEPS.reduce((n, st) => n + ((cell[st.id] || {}).n || 0), 0);
+    const top = total ? Math.max(...SIZING_3BET_STEPS.map((st) => (cell[st.id] || {}).n || 0)) : 0;
+    const chips = SIZING_3BET_STEPS.map((st) => {
+      const c = cell[st.id] || {}, n = c.n || 0, sh = (c.cards || []).length;
+      const cls = [n ? "has" : "", n && n === top ? "top" : ""].filter(Boolean).join(" ");
+      return `<button class="sizechip auto${cls ? " " + cls : ""}"${n ? ` data-sz3="${r.id}|${st.id}"` : ""}
+        title="${n ? `${st.label} — ${n} of ${total}, ${Math.round((100 * n) / total)}%${
+          sh ? ". Hover for the range he showed." : ". None of them shown down."}`
+          : `${st.label} — nothing on record`}"
+        >${n || "·"}</button>`;
+    }).join("");
+    return `<div class="sizerow"><div class="sizelab">${r.label}${total ? `<span class="sizen">${total}</span>` : ""}</div>
+      <div class="sizechips">${chips}</div></div>`;
+  };
+  const t3HTML = auto.n3
+    ? `<div class="sizesub">3bet · preflop</div>` + t3head + SIZING_3BET_ROWS.map(t3row).join("")
+    : "";
   const sk = auto.skipped, why = auto.why || {};
   const skips = SZ_SKIPS.filter(([k]) => sk[k]).map(([k, t]) =>
     `<button class="szskip" data-szskip="${k}">${sk[k]} ${sk[k] === 1 ? "bet" : "bets"} — ${t}</button>`).join("");
@@ -2937,7 +2993,10 @@ function renderOppSizing(o) {
      sample size left showing on the fold — that is the part you check every
      time. */
   const defHTML = `<div class="sizedef${sizeDefShut ? " shut" : ""}">
-    <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record — what counts as what</button>
+    <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${[
+      auto.n ? `${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"}` : "",
+      auto.n3 ? `${auto.n3} 3-bet${auto.n3 === 1 ? "" : "s"}` : "",
+    ].filter(Boolean).join(" and ")} on record — what counts as what</button>
     <div class="sizenote">Value is two pair or better, or top or second pair; everything under that
       counts as a bluff, draws included. Second pair on the turn is the one exception: it counts as a
       bluff, however he got there — barrelled, raised, or led after calling the flop. Only a turn bet
@@ -2946,14 +3005,21 @@ function renderOppSizing(o) {
       that call in it — the same thing the B33/B50/B66 buttons compute, so a raise made with a button
       lands on its own rung. B100 is the pot-sized raise either way. Those two rows hold all three
       streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
-      150% of the pot lands there too. Tap a count for the hands.</div></div>`;
+      150% of the pot lands there too. Tap a count for the hands.
+      The 3-bet rows are priced the same way and placed by whether he ends up acting after the
+      opener on the flop, so they count hands that never saw one. They need no cards — the size is
+      the answer — so they hold more hands than the grid above; hover a count for the range he
+      showed at it. There is no Jam among them: nothing on record is a preflop all-in, so anything
+      over 150% sits on B150.</div></div>`;
   $("od-sizing").innerHTML = (auto.n
     ? head +
       [["bet", "V", "Bet · value"], ["bet", "B", "Bet · bluff"], ["raise", null, "Raise · flop, turn and river"]]
         .map(([m, k, t]) => `<div class="sizesub">${t}</div>` +
           SIZING_ROWS.filter((r) => r.mode === m && (!k || r.kind === k)).map(autoRow).join("")).join("")
+    : auto.n3 ? ""
     : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
-         and the bet amounts are both on record.</div>`) + skipHTML + (auto.n ? defHTML : "");
+         and the bet amounts are both on record.</div>`) + t3HTML + skipHTML
+    + (auto.n || auto.n3 ? defHTML : "");
 }
 
 function renderOppHud(o) {
@@ -5768,6 +5834,11 @@ function bindStatic() {
       if (peekBtn === sp) hideRangePeek(); else showSizeSplit(sp);
       return;
     }
+    const t3 = e.target.closest("[data-sz3]");
+    if (t3) {
+      if (peekBtn === t3) hideRangePeek(); else showSize3(t3);
+      return;
+    }
     const az = e.target.closest("[data-szauto]");
     if (!az) return;
     const o = oppById(curOppId);
@@ -5871,12 +5942,12 @@ function bindStatic() {
   };
   $("od-sizing").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-szsplit]");
-    if (b && b !== peekBtn) showSizeSplit(b);
+    const b = e.target.closest("[data-szsplit],[data-sz3]");
+    if (b && b !== peekBtn) (b.dataset.sz3 ? showSize3 : showSizeSplit)(b);
   });
   $("od-sizing").addEventListener("pointerout", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-szsplit]");
+    const b = e.target.closest("[data-szsplit],[data-sz3]");
     if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
   });
   $("od-tags").addEventListener("pointerover", (e) => {
@@ -5891,7 +5962,8 @@ function bindStatic() {
   });
   document.addEventListener("click", (e) => {
     if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")
-      && !e.target.closest("[data-check]") && !e.target.closest("[data-szsplit]")) hideRangePeek();
+      && !e.target.closest("[data-check]") && !e.target.closest("[data-szsplit]")
+      && !e.target.closest("[data-sz3]")) hideRangePeek();
   }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
   window.addEventListener("scroll", () => hideRangePeek(), true);

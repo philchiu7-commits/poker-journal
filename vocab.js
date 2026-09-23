@@ -5,6 +5,13 @@
    U9 ahead of them. STD is the UTG seat — the straddle sits there but acts
    last preflop and third postflop. */
 const POSITIONS = ["U9", "U8", "U7", "U6", "HJ", "CO", "BN", "SB", "BB", "STD"];
+/* The same seats in *postflop* order — the blinds first and the straddle third,
+   which is the one seat the two orders disagree about. Checked against the flop
+   action order on the 103 three-bet hands that have a flop: they agree on 102,
+   and the one that disagrees is a hand whose flop check simply wasn't recorded,
+   so the seat map is the better of the two. Most 3-bets never see a flop at
+   all, which is why position is read off this rather than off the action. */
+const POSITIONS_POST = ["SB", "BB", "STD", "U9", "U8", "U7", "U6", "HJ", "CO", "BN"];
 const STREETS = ["pre", "flop", "turn", "river"];
 const SIZED_ACTS = ["bet", "raise", "3bet", "4bet", "5bet"];
 const SIZES_OPEN = ["30k", "40k", "50k", "60k", "Jam"];   // open raise: chip amounts
@@ -34,8 +41,9 @@ const SIZING_STEPS = [
    a villain raises a fraction as often as he bets, and split three ways every
    cell reads 0 or 1; the per-street split is still kept and sits behind the
    row label. The ladder is shared on purpose — a raise is priced as the share
-   of the pot he added *on top of the call*, the convention that makes B33 a
-   min-raise, B50 a 2.5x, B66 a 3x and B100 a 4x against a pot-size bet.
+   of the pot he added *on top of the call* — what the B33/B50/B66 buttons
+   themselves compute. A raise in x-of-the-bet has no fixed rung, so don't
+   label these with one (Phil, v183).
    Row ids are stable: the bet rows keep theirs. */
 const SIZING_ROWS = [
   { id: "flop-v",  street: "Flop",  kind: "V", mode: "bet" },
@@ -48,8 +56,20 @@ const SIZING_ROWS = [
   { id: "raise-b", label: "Bluff",  kind: "B", mode: "raise" },
 ];
 const SIZING_RAISE_STREETS = ["flop", "turn", "river"];
+/* 3-bets get a block of their own: two rows, out of position and in, priced the
+   same way a raise is. No Jam column — nothing on record is written as a
+   preflop all-in, and every 3-bet over 150% of the pot would land in one, so a
+   Jam column here would read as shoves that never happened. Over 150% goes to
+   B150 instead (Phil). Cards aren't needed for the count, only for the chart
+   behind it, so these rows see far more hands than the postflop grid. */
+const SIZING_3BET_STEPS = SIZING_STEPS.filter((x) => x.id !== "jam");
+const SIZING_3BET_ROWS = [
+  { id: "3bet-oop", label: "3bet OOP" },
+  { id: "3bet-ip",  label: "3bet IP"  },
+];
 const SIZING_STEP_BY_ID = Object.fromEntries(SIZING_STEPS.map((x) => [x.id, x]));
 const SIZING_ROW_BY_ID = Object.fromEntries(SIZING_ROWS.map((r) => [r.id, r]));
+const SIZING_3BET_ROW_BY_ID = Object.fromEntries(SIZING_3BET_ROWS.map((r) => [r.id, r]));
 
 const RANKS = "AKQJT98765432";
 const SUITS = [

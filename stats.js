@@ -388,7 +388,7 @@ function potWalk(h) {
            dwarf the pot when the stacks are deep. Six hands in the export trip
            this, and each one used to poison every street that followed it. */
         if (a.act !== "jam" && p > 0 && bet > p * (st === "pre" ? SZ_MAX_POT_PRE : SZ_MAX_POT)) {
-          if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
+          out.push({ a, street: st, pot: p, bet, bad: true });
           return out;
         }
         /* A raise is what he puts in on top of the call, over the pot with
@@ -396,7 +396,9 @@ function potWalk(h) {
            89% of his raises land on a rung this way against 27% for the size
            he raises *to*. Both agree at B100, the pot-sized raise, which is
            why the two readings were so hard to tell apart by eye. */
-        if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0,
+        /* Preflop entries come out too now: a 3-bet is priced exactly the way
+           a postflop raise is, and only `sizingAuto` reads this. */
+        out.push({ a, street: st, pot: p, bet, raise: toCall > 0,
           over: v - level, potAfterCall: p + toCall });
         inv[a.actor] = v;
         level = Math.max(level, v);
@@ -468,13 +470,14 @@ const sizeStepFor = (r, act) =>
 function sizingAuto(oppId, hands) {
   const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount", "badRaise", "turnFlopCheck"];
   const rows = {}, split = {}, skipped = {}, why = {};
-  const bump = (cell, step, id) => {
-    const c = (cell[step] = cell[step] || { n: 0, ids: [] });
+  const bump = (cell, step, id, cards) => {
+    const c = (cell[step] = cell[step] || { n: 0, ids: [], cards: [] });
     c.n++;
     if (!c.ids.includes(id)) c.ids.push(id);
+    if (cards) c.cards.push(cards);
   };
   for (const k of K) { skipped[k] = 0; why[k] = []; }
-  let n = 0;
+  let n = 0, n3 = 0;
   for (const h of hands) {
     const V = h.villains || [];
     const board = (h.board || []).filter(Boolean);
@@ -482,6 +485,32 @@ function sizingAuto(oppId, hands) {
        came from and not to another bet of the same size on the same street. */
     const priced = new Map(betsVsPot(h).map((e) => [e.a, e]));
     const miss = (k) => { skipped[k]++; if (!why[k].includes(h.id)) why[k].push(h.id); };
+    /* His preflop 3-bet, if he made one. Position is whether he ends up acting
+       after the opener postflop, off POSITIONS_POST — see the note there for
+       why the seat map beats the flop action order in this one spot. Cards ride
+       along for the chart behind the cell but aren't required to count it: the
+       row answers which size he picks, not what he held. */
+    const pre = (h.actions || []).filter((a) => a.street === "pre");
+    const ti = pre.findIndex((a) => a.act === "3bet");
+    const t3 = ti >= 0 ? pre[ti] : null;
+    const tm = t3 && /^v(\d+)$/.exec(String(t3.actor || ""));
+    const tv = tm && V[Number(tm[1])];
+    if (tv && tv.opponentId === oppId) {
+      const op = pre.slice(0, ti).reverse().find((x) => x.act === "raise");
+      const seat = (id) => (id === "h" ? h.heroPos
+        : ((V[Number((/^v(\d+)$/.exec(String(id)) || [])[1])] || {}).pos));
+      const mine = seat(t3.actor), theirs = op && seat(op.actor);
+      const e = priced.get(t3);
+      if (e && !e.bad && e.over > 0 && e.potAfterCall > 0 && mine && theirs) {
+        const ip = POSITIONS_POST.indexOf(mine) > POSITIONS_POST.indexOf(theirs);
+        const rid = ip ? "3bet-ip" : "3bet-oop";
+        let step = sizeStepFor(e.over / e.potAfterCall, t3.act);
+        if (step === "jam") step = "150";       // no preflop Jam column — see vocab.js
+        const hole = (tv.cards || []).filter(Boolean);
+        bump(rows[rid] = rows[rid] || {}, step, h.id, hole.length === 2 ? hole : null);
+        n3++;
+      }
+    }
     for (const a of h.actions || []) {
       const need = SZ_BOARD_N[a && a.street];
       if (!need || !SZ_AGG.has(a.act)) continue;                // preflop, or not a bet
@@ -541,5 +570,5 @@ function sizingAuto(oppId, hands) {
       n++;
     }
   }
-  return { rows, split, n, skipped, why };
+  return { rows, split, n, n3, skipped, why };
 }
