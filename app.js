@@ -2944,7 +2944,7 @@ function renderOppSizing(o) {
       after nobody bet the flop is left out, as neither value nor bluff. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
       On the raise rows the rung is the size he raises <i>to</i>, against the raise that would be
       pot-sized — three times the bet he is answering, plus everything else already in the pot.
-      Against a pot-size bet a min-raise is B50, a 3× is B75, and the pot-sized raise is B100. Those two rows hold all three
+      A raise in x-of-the-bet has no fixed rung: 3x over a small bet is a small raise. Those two rows hold all three
       streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
       150% of the pot lands there too. Tap a count for the hands.</div></div>`;
   $("od-sizing").innerHTML = (auto.n
