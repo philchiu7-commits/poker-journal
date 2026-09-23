@@ -357,11 +357,15 @@ function potWalk(h) {
   put("SB", SB);
   put("BB", BB);
   const straddle = actorAt.STD && STD ? put("STD", STD) : 0;
-  /* One ante for the table, not one each — these are big-blind-ante games.
-     Dropping it shrank every preflop pot and pushed the sizes that followed a
-     bucket too high; counting one per seat instead overshoots the other way
-     and reads Phil's known 66% turn bet as a half-pot. */
-  let pot = ANTE;
+  /* Every seat dealt in posts the ante. The v147 note here claimed the
+     opposite and it was wrong: measured against Phil's own B33/B50/B66/B75/
+     B100 buttons, one ante for the table puts 10% of his bets on a rung and
+     one ante per seat puts 96% — because the buttons size off the real pot,
+     so a pot rebuilt ~6% light shows a B50 as a 53%. Same answer on his
+     hand-typed hands (9% → 93%), so it is not a DX quirk. */
+  const seats = new Set((h.villains || []).map((v) => v.pos).filter(Boolean));
+  if (h.heroPos) seats.add(h.heroPos);
+  let pot = ANTE * Math.max(1, seats.size);
   const out = [];
   for (const st of SZ_STREETS) {
     const A = (h.actions || []).filter((a) => a.street === st);
@@ -387,13 +391,13 @@ function potWalk(h) {
           if (st !== "pre") out.push({ a, street: st, pot: p, bet, bad: true });
           return out;
         }
-        /* A raise is priced by the size he raises *to*, over the raise that
-           would be pot-sized: three times the bet he faces plus everything
-           else already in the pot (Phil, v182). With no bet in front of him
-           that divisor is just the pot, so the same fraction reads a bet and
-           a raise alike and B100 means pot-sized either way. */
+        /* A raise is what he puts in on top of the call, over the pot with
+           that call in it — which is what the buttons themselves compute:
+           89% of his raises land on a rung this way against 27% for the size
+           he raises *to*. Both agree at B100, the pot-sized raise, which is
+           why the two readings were so hard to tell apart by eye. */
         if (st !== "pre") out.push({ a, street: st, pot: p, bet, raise: toCall > 0,
-          to: v, over: v - level, potRaise: p + 2 * level - had });
+          over: v - level, potAfterCall: p + toCall });
         inv[a.actor] = v;
         level = Math.max(level, v);
       } else if (a.act === "call" || a.act === "limp") inv[a.actor] = level;
@@ -508,7 +512,7 @@ function sizingAuto(oppId, hands) {
       const ratio = e.ratio !== null && e.ratio !== undefined
         ? e.ratio
         : isR
-          ? (e.potRaise > 0 && e.over > 0 ? e.to / e.potRaise : null)
+          ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
           : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
       // A jam needs no rung, so it is counted even when the fraction can't be.
       if (ratio === null && a.act !== "jam") { miss(isR && e.pot > 0 ? "badRaise" : "noPot"); continue; }
