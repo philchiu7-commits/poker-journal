@@ -18,7 +18,7 @@ const HUD_MIN = 15;
 
 function hudCount(oppId, hands) {
   const c = {
-    seats: 0, vpip: 0, pfr: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
+    seats: 0, vpip: 0, pfr: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0, f4b: 0, oppF4b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0,
@@ -55,7 +55,7 @@ function hudCount(oppId, hands) {
        each pushed VPIP over 100% and made the drill-down disagree with the
        number above it, so the walk sets flags and the counters move once. */
     let vol = false, aggPre = false, opp3 = false, did3 = false, oppF3 = false, didF3 = false;
-    let opp4 = false, did4 = false, oppCc = false, didCc = false, actedVol = false;
+    let opp4 = false, did4 = false, oppF4 = false, didF4 = false, oppCc = false, didCc = false, actedVol = false;
     let limpSeen = false, oppIso = false, didIso = false;
     /* Cold-calling is calling a raise with nothing of yours in the pot yet, so
        the blinds and the straddle are out: their call is a defend off a
@@ -90,6 +90,10 @@ function hudCount(oppId, hands) {
            sample this app trusts. */
         if (sawThree && !sawFour) { opp4 = true; if (a.act === "4bet") did4 = true; }
         if (opener === me && sawThree) { oppF3 = true; if (a.act === "fold") didF3 = true; }
+        /* Folding to a 4-bet is his answer to the first one he faced. A later
+           5-bet is a second decision off a different price; letting it
+           overwrite this would file a 4-bet he called as a 4-bet he folded. */
+        if (did3 && sawFour && !oppF4) { oppF4 = true; didF4 = a.act === "fold"; }
       }
       if (a.act === "limp" && !mine) limpSeen = true;
       if (HUD_AGG.has(a.act)) {
@@ -107,6 +111,7 @@ function hudCount(oppId, hands) {
     if (opp3) { c.opp3b++; if (did3) c.n3b++; }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
+    if (oppF4) { c.oppF4b++; if (didF4) c.f4b++; }
     mark("vpip", vol, h.id);
     mark("pfr", aggPre, h.id);
     mark("pfr|" + myPos, aggPre, h.id);
@@ -116,6 +121,7 @@ function hudCount(oppId, hands) {
     if (opp3) mark("three", did3, h.id);
     if (opp4) mark("four", did4, h.id);
     if (oppF3) mark("f3b", didF3, h.id);
+    if (oppF4) mark("f4b", didF4, h.id);
     mark("limp|" + myPos, limped, h.id);
     if (limped) mark("lrr|" + myPos, limpThenRaise, h.id);
     if (limpFaced) mark("lfold|" + myPos, limpFold, h.id);
@@ -284,32 +290,41 @@ function hudCount(oppId, hands) {
    carries the street it belongs to, so the grid can be read as two blocks —
    how he enters a pot, then what he does once he is in one. */
 function hudStats(c) {
-  const mk = (street) => (key, label, n, d, tip) =>
-    ({ key, label, n, d, tip, street, pct: d ? (100 * n) / d : null, thin: d < HUD_MIN });
-  const r = mk("pre"), q = mk("post");
+  const mk = (street) => (grp) => (key, label, n, d, tip) =>
+    ({ key, label, n, d, tip, street, grp, pct: d ? (100 * n) / d : null, thin: d < HUD_MIN });
+  const pre = mk("pre"), post = mk("post");
+  /* Preflop splits the same way: how he enters a pot, then the raising war. */
+  const r = pre("pre1"), w = pre("pre2");
+  /* Postflop rows are grouped into families and the grid gives each one its own
+     line: how he continues, how he folds to it, when he check-raises, when he
+     stabs at a checked pot. A family that bled into the next line was four
+     numbers you had to hunt for (Phil). */
+  const q = post("cb"), f = post("fcb"), x = post("xr"), b = post("bxt");
   return [
     r("vpip", "VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
     r("pfr", "PFR", c.pfr, c.seats, "Raised preflop"),
     r("iso", "Iso", c.iso, c.oppIso, "Raised over a limp with the pot still unraised — over-limping, calling or folding behind is the same chance declined"),
     r("cc", "Cold call", c.cc, c.oppCc, "Called a raise with nothing of his in the pot yet — blind and straddle defends are not cold calls"),
-    r("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
-    r("four", "4-bet", c.n4b, c.opp4b, "4-bet when facing a 3-bet — cold 4-bets counted too"),
-    r("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
+    w("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
+    w("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
+    w("four", "4-bet", c.n4b, c.opp4b, "4-bet when facing a 3-bet — cold 4-bets counted too"),
+    w("f4b", "Fold v 4B", c.f4b, c.oppF4b, "3-bet, then folded to a 4-bet"),
     q("cbIp", "Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
     q("cbOop", "Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
     q("cbMw", "Cbet MWP", c.cbMw, c.oppCbMw, "Bet the flop as preflop aggressor, three or more players"),
-    q("fcbIp", "Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
-    q("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
-    q("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
-    q("xrF", "xR Flop", c.xrF, c.oppXrF, "Checked the flop, got bet into and raised"),
-    q("xrT", "xR Turn", c.xrT, c.oppXrT, "Checked the turn, got bet into and raised"),
-    q("xrR", "xR River", c.xrR, c.oppXrR, "Checked the river, got bet into and raised"),
-    q("bxtF", "Bxt Flop", c.bxtF, c.oppBxtF, "As the preflop caller, bet the flop after the raiser checked to him"),
-    q("bxtT", "Bxt Turn", c.bxtT, c.oppBxtT, "As the preflop caller, bet the turn after the raiser checked to him"),
-    q("bxtR", "Bxt River", c.bxtR, c.oppBxtR, "As the preflop caller, bet the river after the raiser checked to him"),
-    q("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
-    q("barR", "Barrel R", c.barR, c.oppBarR, "Bet the river after cbetting the flop and barrelling the turn"),
-    q("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
+    q("bar", "Cbet Turn", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
+    q("barR", "Cbet River", c.barR, c.oppBarR, "Bet the river after cbetting the flop and the turn"),
+    f("fcbIp", "Fold CB HU IP", c.fcbIp, c.oppFcbIp, "Folded facing a flop cbet, heads-up in position"),
+    f("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
+    f("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
+    f("ftb", "Fold CB Turn", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
+    f("frb", "Fold CB River", c.frb, c.oppFrb, "Called the flop and turn bets, then folded to the river bet"),
+    x("xrF", "xR Flop", c.xrF, c.oppXrF, "Checked the flop, got bet into and raised"),
+    x("xrT", "xR Turn", c.xrT, c.oppXrT, "Checked the turn, got bet into and raised"),
+    x("xrR", "xR River", c.xrR, c.oppXrR, "Checked the river, got bet into and raised"),
+    b("bxtF", "Bxt Flop", c.bxtF, c.oppBxtF, "As the preflop caller, bet the flop after the raiser checked to him"),
+    b("bxtT", "Bxt Turn", c.bxtT, c.oppBxtT, "As the preflop caller, bet the turn after the raiser checked to him"),
+    b("bxtR", "Bxt River", c.bxtR, c.oppBxtR, "As the preflop caller, bet the river after the raiser checked to him"),
   ];
 }
 

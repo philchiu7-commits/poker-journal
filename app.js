@@ -1564,8 +1564,8 @@ const HUD_DRILL_LABEL = {
   iso: ["Isolated the limper", "Limped along, called or folded"],
   cc: ["Cold called", "Raised or folded"],
   three: ["3-bet", "Did not 3-bet"], four: ["4-bet", "Did not 4-bet"],
-  f3b: ["Folded", "Did not fold"],
-  bar: ["Barrelled", "Gave up"], ftb: ["Folded", "Did not fold"],
+  f3b: ["Folded", "Did not fold"], f4b: ["Folded", "Did not fold"],
+  bar: ["Barrelled", "Gave up"], ftb: ["Folded", "Did not fold"], frb: ["Folded", "Did not fold"],
   xrF: ["Check-raised", "Checked and called or folded"],
   xrT: ["Check-raised", "Checked and called or folded"],
   xrR: ["Check-raised", "Checked and called or folded"],
@@ -1582,7 +1582,7 @@ const HUD_DRILL_LABEL = {
    Only hands he turned up can appear at all, so the foot says how many of them
    that is — most of a preflop stat's hands were never shown. */
 const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
-  f3b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
+  f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
 /* The other bucket gets a fill of its own where the action has a name worth
    seeing: on Iso the hands he did not raise are the ones he came along with,
    and a hollow ring is nearly invisible next to 168 other squares (Phil). */
@@ -3333,8 +3333,18 @@ function renderOppHud(o) {
        <b>${pct === null ? "—" : Math.round(pct) + "%"}</b>
        <span>${esc(label)}</span><i>${d}</i></button>`;
   const rows = hudStats(c);
-  const cellsFor = (st) => rows.filter((r) => r.street === st)
-    .map((r) => cell(r.key, r.label, r.pct, r.d, r.thin, r.tip)).join("");
+  /* One grid per postflop family, so a family always starts its own line and
+     never bleeds into the next: the tracks are the same width in every grid,
+     a short family just leaves the tail of its line empty. */
+  const gridsFor = (st) => {
+    const out = [];
+    for (const r of rows.filter((x) => x.street === st)) {
+      const g = out.length && out[out.length - 1].k === r.grp ? out[out.length - 1]
+        : (out.push({ k: r.grp, html: "" }), out[out.length - 1]);
+      g.html += cell(r.key, r.label, r.pct, r.d, r.thin, r.tip);
+    }
+    return out;
+  };
   const af = hudAF(c);
   const afN = af ? af.n : 0;
   const afCell = `<button class="hudcell${!af || af.n < HUD_MIN ? " thin" : ""}${afN ? "" : " dead"}"${afN ? ` data-hud="af"` : ""}
@@ -3369,9 +3379,10 @@ function renderOppHud(o) {
      in one are read at different moments, and the limp table below belongs to
      the preflop half, so it sits with it. */
   box.innerHTML = `<div class="glabel">Preflop</div>
-    <div class="hudgrid">${cellsFor("pre")}</div>${posTable}
+    ${gridsFor("pre").map((g) => `<div class="hudgrid">${g.html}</div>`).join("")}${posTable}
     <div class="glabel" style="margin-top:14px">Postflop</div>
-    <div class="hudgrid">${cellsFor("post")}${afCell}</div>${sizing3HTML(o)}`;
+    ${gridsFor("post").map((g) => `<div class="hudgrid">${g.html}</div>`).join("")}
+    <div class="hudgrid">${afCell}</div>${sizing3HTML(o)}`;
 }
 
 function renderOppDetail(id) {

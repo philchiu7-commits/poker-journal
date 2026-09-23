@@ -968,6 +968,7 @@ textarea.noteedit { margin-bottom: 0; }
    instead of stretching three cells across it, and the sample size rides on
    the label's line instead of claiming a third one. */
 .hudgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:4px; }
+.hudgrid + .hudgrid { margin-top:4px; }
 .hudcell { background:#161a22; border:1px solid #232a36; border-radius:8px;
   padding:4px 3px; text-align:center; width:100%; font:inherit; cursor:pointer;
   /* The cell's own font-size is what sizes the label's line box — leave it at
