@@ -1547,7 +1547,8 @@ function openReadProof(o, label, ids, sub, other) {
 const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lfold: "Limp-fold", af: "Agg factor" };
 const HUD_DRILL_LABEL = {
   vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
-  three: ["3-bet", "Did not 3-bet"], f3b: ["Folded", "Did not fold"],
+  three: ["3-bet", "Did not 3-bet"], four: ["4-bet", "Did not 4-bet"],
+  f3b: ["Folded", "Did not fold"],
   bar: ["Barrelled", "Gave up"], ftb: ["Folded", "Did not fold"],
   af: ["Bet or raised more", "Called more"],
   limp: ["Limped", "Did not limp"], lrr: ["Limp-reraised", "Just limped"],

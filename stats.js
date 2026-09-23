@@ -14,7 +14,7 @@ const HUD_MIN = 15;
 
 function hudCount(oppId, hands) {
   const c = {
-    seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, f3b: 0, oppF3b: 0,
+    seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, xr: 0, oppXr: 0, rAgg: 0, rCall: 0,
@@ -42,13 +42,14 @@ function hudCount(oppId, hands) {
 
     // ---- preflop walk. Flags flip *after* an action so a player never counts
     // as having faced their own raise.
-    let sawRaise = false, sawThree = false, opener = null, lastAgg = null;
+    let sawRaise = false, sawThree = false, sawFour = false, opener = null, lastAgg = null;
     let limped = false, limpThenRaise = false, limpFaced = false, limpFold = false;
     /* Preflop counts are per HAND, not per action. A villain who limps and then
        calls a raise took two voluntary actions in one seat — incrementing on
        each pushed VPIP over 100% and made the drill-down disagree with the
        number above it, so the walk sets flags and the counters move once. */
     let vol = false, aggPre = false, opp3 = false, did3 = false, oppF3 = false, didF3 = false;
+    let opp4 = false, did4 = false;
     for (const a of pre) {
       const mine = a.actor === me;
       if (mine) {
@@ -62,22 +63,30 @@ function hudCount(oppId, hands) {
            than he does. */
         else if (limpFaced && a.act === "fold") limpFold = true;
         if (sawRaise && !sawThree) { opp3 = true; if (a.act === "3bet") did3 = true; }
+        /* Everyone who gets a turn against a live 3-bet, not just the man who
+           opened it — a cold 4-bet is still a 4-bet, and 20 of the 52 on record
+           are cold. Opener-only would leave most of his opponents under the
+           sample this app trusts. */
+        if (sawThree && !sawFour) { opp4 = true; if (a.act === "4bet") did4 = true; }
         if (opener === me && sawThree) { oppF3 = true; if (a.act === "fold") didF3 = true; }
       }
       if (HUD_AGG.has(a.act)) {
         if (limped && !mine) limpFaced = true;
         lastAgg = a.actor;
-        if (a.act === "3bet" || a.act === "4bet" || a.act === "5bet") sawThree = true;
+        if (a.act === "4bet" || a.act === "5bet") sawThree = sawFour = true;
+        else if (a.act === "3bet") sawThree = true;
         else if (!sawRaise) { sawRaise = true; opener = a.actor; }
       }
     }
     if (vol) c.vpip++;
     if (aggPre) c.pfr++;
     if (opp3) { c.opp3b++; if (did3) c.n3b++; }
+    if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
     mark("vpip", vol, h.id);
     mark("pfr", aggPre, h.id);
     if (opp3) mark("three", did3, h.id);
+    if (opp4) mark("four", did4, h.id);
     if (oppF3) mark("f3b", didF3, h.id);
     mark("limp|" + myPos, limped, h.id);
     if (limped) mark("lrr|" + myPos, limpThenRaise, h.id);
@@ -179,6 +188,7 @@ function hudStats(c) {
     r("vpip", "VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
     r("pfr", "PFR", c.pfr, c.seats, "Raised preflop"),
     r("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
+    r("four", "4-bet", c.n4b, c.opp4b, "4-bet when facing a 3-bet — cold 4-bets counted too"),
     r("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
     r("cbIp", "Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
     r("cbOop", "Cbet HU OOP", c.cbOop, c.oppCbOop, "Bet the flop as preflop aggressor, heads-up out of position"),
