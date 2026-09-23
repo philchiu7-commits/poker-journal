@@ -17,6 +17,7 @@ function hudCount(oppId, hands) {
     seats: 0, vpip: 0, pfr: 0, n3b: 0, opp3b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
+    frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, xr: 0, oppXr: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
@@ -97,8 +98,8 @@ function hudCount(oppId, hands) {
     let hAgg = 0, hCall = 0;
     for (const a of A) {
       if (a.actor !== me || a.street === "pre") continue;
-      if (HUD_BET.has(a.act)) { c.agg++; hAgg++; }
-      else if (a.act === "call") { c.calls++; hCall++; }
+      if (HUD_BET.has(a.act)) { c.agg++; hAgg++; if (a.street === "river") c.rAgg++; }
+      else if (a.act === "call") { c.calls++; hCall++; if (a.street === "river") c.rCall++; }
     }
     if (hAgg || hCall) mark("af", hAgg > hCall, h.id);
 
@@ -113,10 +114,26 @@ function hudCount(oppId, hands) {
     // cbet + second barrel, when our player is the preflop aggressor
     if (lastAgg === me) {
       c["oppCb" + k]++;
-      const first = flop.find((a) => a.actor === me);
+      const fi = flop.findIndex((a) => a.actor === me);
+      const first = fi < 0 ? null : flop[fi];
       const didCb = !!first && first.act === "bet";
       if (didCb) c["cb" + k]++;
       mark("cb" + k, didCb, h.id);
+      /* Both halves of "what happens after his first flop decision": raised off
+         his cbet, or bet into after he checked. The chance only counts once he
+         actually got a turn to answer it, so a raise he never acted on (all-in
+         behind, hand over) stays out of the denominator. */
+      const after = (idx, act) => {
+        const j = flop.findIndex((a, i) => i > idx && a.actor !== me && a.act === act);
+        return j < 0 ? null : flop.slice(j + 1).find((a) => a.actor === me) || null;
+      };
+      if (didCb) {
+        const back = after(fi, "raise");
+        if (back) { c.oppFxr++; if (back.act === "fold") c.fxr++; mark("fxr", back.act === "fold", h.id); }
+      } else if (first && first.act === "check") {
+        const back = after(fi, "bet");
+        if (back) { c.oppXr++; if (back.act === "raise") c.xr++; mark("xr", back.act === "raise", h.id); }
+      }
       if (didCb && turn.length) {
         const t = turn.find((a) => a.actor === me);
         if (t) { c.oppBar++; if (t.act === "bet") c.bar++; mark("bar", t.act === "bet", h.id); }
@@ -140,7 +157,17 @@ function hudCount(oppId, hands) {
     if (!tResp) continue;
     c.oppFtb++;
     mark("ftb", tResp.act === "fold", h.id);
-    if (tResp.act === "fold") c.ftb++;
+    if (tResp.act === "fold") { c.ftb++; continue; }
+    if (tResp.act !== "call") continue;
+    // called the turn barrel too — did they fold to the river bet?
+    const river = A.filter((a) => a.street === "river");
+    const rBet = river.findIndex((a) => a.actor === lastAgg && a.act === "bet");
+    if (rBet < 0) continue;
+    const rResp = river.slice(rBet + 1).find((a) => a.actor === me);
+    if (!rResp) continue;
+    c.oppFrb++;
+    mark("frb", rResp.act === "fold", h.id);
+    if (rResp.act === "fold") c.frb++;
   }
   return c;
 }
@@ -162,6 +189,32 @@ function hudStats(c) {
     r("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
     r("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
   ];
+}
+
+/* The stat reads Phil used to fill in by hand, answered off the same walk.
+   Each one carries the opportunity count it came off — a stat read that hides
+   its n is the same lie a HUD that hides n tells. Null means the hands on
+   record never put him in that spot, and the read falls back to a box he can
+   type in: most of his opponents are live and have no imported hands at all. */
+function hudDerived(c) {
+  const p = (n, d) => (d ? { pct: (100 * n) / d, n: d, thin: d < HUD_MIN } : null);
+  const cb = c.cbIp + c.cbOop + c.cbMw, oppCb = c.oppCbIp + c.oppCbOop + c.oppCbMw;
+  const fcb = c.fcbIp + c.fcbOop + c.fcbMw, oppFcb = c.oppFcbIp + c.oppFcbOop + c.oppFcbMw;
+  const rn = c.rAgg + c.rCall;
+  return {
+    cbet: p(cb, oppCb),
+    foldXr: p(c.fxr, c.oppFxr),
+    // he was the preflop raiser, heads-up out of position, and checked instead
+    checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
+    xrPfr: p(c.xr, c.oppXr),
+    barrel: p(c.bar, c.oppBar),
+    foldCbF: p(fcb, oppFcb),
+    foldCbT: p(c.ftb, c.oppFtb),
+    foldCbR: p(c.frb, c.oppFrb),
+    // a factor, not a percentage; with no river calls on record the ratio has
+    // no denominator, and an infinite AF is not a reading
+    riverAf: c.rCall ? { v: c.rAgg / c.rCall, n: rn, thin: rn < HUD_MIN } : null,
+  };
 }
 
 /* Aggression factor is a ratio, not a percentage — postflop bets+raises per call. */

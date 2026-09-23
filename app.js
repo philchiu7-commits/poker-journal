@@ -71,6 +71,11 @@ const STAT_READS = new Set(
   (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "stat").map((t) => t.id));
 const isStatRead = (id) => STAT_READS.has(id);
 const statUnit = (id) => TAG_BY_ID[id]?.unit ?? "%";
+/* A stat read that names a `calc` key is answered by the hand histories rather
+   than typed in. The box only goes away when there is actually a number: most
+   of Phil's opponents are live and have no imported hands, and a read he can't
+   fill in and the app can't either is worse than the box he had. */
+const statCalcKey = (id) => TAG_BY_ID[id]?.calc || null;
 /* A plain read on a line shows its state in words; as a chip the label is the
    text and the colour carries the state. */
 const STATE_WORD = {
@@ -127,11 +132,12 @@ const readChip = (id, state) => {
    doesn't. */
 const wb = (bet, x) => [{ label: "When Bet", lines: true, ids: bet }, { label: "When Check", lines: true, ids: x }];
 const READ_LAYOUT = [
-  /* liveOnly rows are the limp / LRR / squid machinery — a live table's
-     preflop, not an online one. They stay listed here so the Uncategorized
-     catch-all counts them as placed and doesn't drag them back in at the
-     bottom; the Online tab just doesn't draw them. All of them are on the
-     Live tab, so nothing is lost. */
+  /* No catch-all: this tab draws the streets and nothing else, so a read with
+     no row here simply isn't on the Online tab. Every read still has a home on
+     the Live tab, which does carry one, so nothing can go missing — but a new
+     tag that belongs on a street has to be named in a row below or it won't
+     appear here. liveOnly rows are the limp / LRR / squid machinery, a live
+     table's preflop rather than an online one. */
   { title: "Preflop", subs: [{ rows: [
     { label: "Opening", ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
     { matrix: "First raise", liveOnly: true },
@@ -144,24 +150,20 @@ const READ_LAYOUT = [
     { label: "MWP limp", rows: [{ lines: true, ids: ["mwl-oop-probe", "mwl-xr", "mwl-ip-stab"] }] },
   ] },
   { title: "Flop exploit", subs: [
-    { label: "As PFR", rows: wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-freq-pfr", "protect-disadv-board"]) },
-    { label: "As PFC", rows: [{ lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] }] },
+    { label: "As PFR", rows: wb(["f-cbet-freq", "f-fold-to-xr", "force-squid"], ["f-oop-x-range", "f-xr-freq-pfr", "protect-disadv-board"]) },
+    { label: "As PFC", rows: [
+      { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
+      { label: "Streets vs Him", lines: true, ids: ["fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
+    ] },
   ] },
   { title: "Turn exploit", subs: [
     { label: "As PFR", rows: wb(["t-barrel2-freq", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr"]) },
-    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-bet-vol", "t-call-style"] }] },
+    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]) },
-    { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands"] }] },
+    { label: "As PFR", rows: wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal", "force-squid"], ["r-traps", "punchbag-r-pfr"]) },
+    { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bluff-xt-r", "Bluff XT"]] }] },
   ] },
-  { title: "Uncategorized", catchAll: true, subs: [{ rows: [
-    { label: "Range shape", ids: ["merged", "polar", "bad-polar", "sp-dis-board", "oop-protect", "bet-merged-mwp"] },
-    { label: "Preflop sizing", ids: ["preflop-sizing", "3bet-sizing"] },
-    { label: "Postflop sizing", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
-    { label: "Physical / timing", ids: ["timing-tells", "snap-call-weak", "talks-when-strong"] },
-    { label: "Mental state", ids: ["tilts", "bluffcatch-losing", "force-squid"] },
-  ] }] },
 ];
 
 /* The four position reads in a section are really a 2×2 — value vs bluff,
@@ -203,18 +205,18 @@ const LIVE_LAYOUT = [
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", "protect-disadv-board"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
       { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
-      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f"] },
+      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["barrels-off", "Barrels"]] },
       { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr"] },
-      { label: "As PFC", lines: true, ids: ["t-bet-vol", "t-call-style"] },
+      { label: "As PFC", lines: true, ids: ["t-bet-vol", "t-call-style", "have-lead-t"] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq"] },
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
       { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-traps", "punchbag-r-pfr"] },
-      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands"] },
+      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r"] },
       { label: "HUD", onlineOnly: true, ids: ["r-af"] },
     ] },
     { label: "All streets", rows: [
@@ -2639,6 +2641,7 @@ async function createOpponent(name, group) {
 function renderOppReads(o) {
   $("od-card-preview").innerHTML = cardChipsHTML(o);
   const reads = oppReads(o);
+  const calc = hudDerived(hudFor(o.id, HANDS));
   /* Controls only — the label is the row's job now, so every read in the tree
      lines up in the same two columns. `compact` is the matrix cell. */
   const readBtn = (id, lbl, compact) => {
@@ -2668,6 +2671,17 @@ function renderOppReads(o) {
     }
     if (isStatRead(id)) {
       const u = statUnit(id);
+      const d = calc[statCalcKey(id)];
+      if (d) {
+        // off the hands, so it reads out rather than types in — and it carries
+        // the opportunity count, greyed below the sample where a % is noise
+        const v = d.pct != null ? Math.round(d.pct) : d.v.toFixed(1);
+        return `<div class="bubbles"><span class="statcalc${d.thin ? " thin" : ""}"` +
+          ` title="${esc(lbl)} — ${v}${u} off ${d.n} spot${d.n === 1 ? "" : "s"} in the imported hands` +
+          `${d.thin ? `, under the ${HUD_MIN} this app trusts` : ""}">${v}</span>` +
+          (u ? `<span class="statunit">${esc(u)}</span>` : "") +
+          `<span class="statn">n${d.n}</span></div>`;
+      }
       return `<div class="bubbles"><input class="statinput" type="number" inputmode="decimal" step="any" placeholder="–"` +
         ` value="${st == null ? "" : esc(String(st))}" data-statinput="${id}">` +
         (u ? `<span class="statunit">${esc(u)}</span>` : "") + `</div>`;
@@ -2705,7 +2719,7 @@ function renderOppReads(o) {
   if (showReadPicker) {
     const layout = readTab === "live" ? LIVE_LAYOUT : READ_LAYOUT;
     const live = (id) => { const t = TAG_BY_ID[id]; return t && !RETIRED_TAG_IDS.has(id) ? t : null; };
-    // a row's id may be ["id", "Short"] — the label override, Live-tab rows only
+    // a row's id may be ["id", "Short"] — the label override
     const idOf = (x) => (Array.isArray(x) ? x[0] : x);
     const labelOf = (x) => (Array.isArray(x) ? x[1] : TAG_BY_ID[x].label);
     const placed = new Set(layout.flatMap((c) => c.subs.flatMap((sb) => sb.rows.flatMap((r) =>

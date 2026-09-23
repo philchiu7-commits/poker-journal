@@ -1087,6 +1087,17 @@ textarea.noteedit { margin-bottom: 0; }
 .statinput::-webkit-outer-spin-button, .statinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .statinput:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .statunit { font-size: 13px; color: var(--muted); }
+/* The computed twin of .statinput: same box, so a row that mixes a number the
+   app worked out with one Phil typed doesn't look like two different controls.
+   It reads out — no border cue that invites a tap — and wears its sample size,
+   greyed under the count where a percentage is still noise. */
+.statcalc {
+  min-width: 56px; padding: 7px 4px; font-size: 13px; font-weight: 600; line-height: 16px;
+  color: var(--text); background: var(--panel2); border: 1px solid transparent;
+  border-radius: 9px; text-align: center;
+}
+.statcalc.thin { color: var(--muted); }
+.statn { font-size: 11px; color: var(--muted); }
 .tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
 .bubble.tallyclr { padding-left: 9px; padding-right: 9px; color: var(--muted); }
 
