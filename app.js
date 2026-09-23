@@ -55,7 +55,7 @@ const CHOICE_READS = new Set(
   (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "choice").map((t) => t.id));
 const isChoiceRead = (id) => CHOICE_READS.has(id);
 const choiceOptions = (id) => TAG_BY_ID[id]?.options || [];                  // [[value, label], …]
-const choiceLabel = (id, v) => (choiceOptions(id).find((o) => o[0] === v) || [v, v])[1];
+const choiceLabel = (id, v) => (choiceOptions(id).find((o) => o[0] === v || o[0] === readBase(v)) || [v, v])[1];
 const POSITION_READS = new Set(
   (typeof TENDENCY_TAGS !== "undefined" ? TENDENCY_TAGS : []).filter((t) => t.kind === "position").map((t) => t.id));
 const isPositionRead = (id) => POSITION_READS.has(id);
@@ -2942,7 +2942,9 @@ function renderOppReads(o) {
     }
     if (isChoiceRead(id)) {
       const opts = choiceOptions(id).map(([v, l]) =>
-        `<button class="bubble${st === v ? " on schoice" : ""}" data-choice="${id}" data-val="${v}">${esc(l)}</button>`).join("");
+        /* readBase so a read converted from yes/no still lights up for anyone
+           who had stored the emphatic yes!/no! before the conversion. */
+        `<button class="bubble${st === v || readBase(st) === v ? " on schoice" : ""}" data-choice="${id}" data-val="${v}">${esc(l)}</button>`).join("");
       return `<div class="bubbles">${opts}</div>`;
     }
     if (isStatRead(id)) {

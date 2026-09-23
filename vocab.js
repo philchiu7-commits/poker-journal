@@ -145,7 +145,10 @@ const TENDENCY_TAGS = [
   { id: "ld-draws",             cat: "postflop", label: "Lead draws" },
   { id: "ld-tp",                cat: "postflop", label: "Lead TP" },
   { id: "ld-2p",                cat: "postflop", label: "Lead 2P+" },
-  { id: "raise-nuts-f",         cat: "postflop", label: "Raise nuts F" },
+  /* Two boxes rather than one cycling chip: at the table the answer is Yes
+     or No and nothing else, and tapping the lit one takes it back. */
+  { id: "raise-nuts-f",         cat: "postflop", label: "Raise nuts F", kind: "choice",
+    options: [["yes", "Yes"], ["no", "No"]] },
   { id: "raise-nuts-t",         cat: "postflop", label: "Raise nuts T" },
   { id: "raise-nuts-r",         cat: "postflop", label: "Raise nuts R" },
   { id: "bluff-till-f",         cat: "postflop", label: "Bluff till F" },
