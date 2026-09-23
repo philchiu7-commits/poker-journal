@@ -1219,6 +1219,11 @@ button.statcalc:active { color: var(--accent); }
   border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 700; cursor: pointer; }
 .chktag:hover, .chktitle:hover { color: var(--accent); }
 .chktag:hover { border-color: var(--accent); }
+/* The HUD's hover chart is the same square grid the range peek draws, so it
+   takes the same width; the legend sits inside the panel rather than under it. */
+.rpeek.hudpk .hudchart { margin: 0 0 6px; }
+.rpeek.hudpk .rglegend { margin: 0; }
+
 /* A stat's hands: rows, so it sizes like a list and caps its own height —
    a peek taller than the screen can't be scrolled without losing the pointer. */
 .rpeek.stpk { width: min(340px, calc(100vw - 20px)); }

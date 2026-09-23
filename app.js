@@ -1596,10 +1596,10 @@ function hudChartHTML(o, stat, hands, yes, no) {
       <span class="rglegitem"><span class="rgswatch hudoppsw"></span>${esc(no)}</span>
       <span class="rglegnote">${foot}</span></div>`;
 }
-function openHudDrill(o, key) {
+function hudDrillHands(o, key) {
   const c = hudFor(o.id, HANDS);
   const evs = (c.ev || {})[key] || [];
-  if (!evs.length) return;
+  if (!evs.length) return null;
   const [stat, seat] = key.split("|");
   // The heading says the same thing the cell did, so the sheet is obviously
   // the number you just tapped and not some other slice.
@@ -1614,11 +1614,34 @@ function openHudDrill(o, key) {
     const h = byId.get(e.id);
     if (h) hands.push({ h, ok: e.ok });
   }
-  const [yes, no] = HUD_DRILL_LABEL[key.split("|")[0]] || ["Counted", "Did not"];
+  if (!hands.length) return null;
+  const [yes, no] = HUD_DRILL_LABEL[stat] || ["Counted", "Did not"];
+  return { stat, label, hands, yes, no };
+}
+function openHudDrill(o, key) {
+  const d = hudDrillHands(o, key);
+  if (!d) return;
   /* Preflop stats get the grid above the list — which hands he does this with
      is the question the number raises. Postflop ones are about a street, not a
      starting hand, so they stay a list. */
-  openDrillSheet(o, label, hands, yes, no, stat in HUD_CHART_ACT ? hudChartHTML(o, stat, hands, yes, no) : "");
+  openDrillSheet(o, d.label, d.hands, d.yes, d.no,
+    d.stat in HUD_CHART_ACT ? hudChartHTML(o, d.stat, d.hands, d.yes, d.no) : "");
+}
+/* Hovering a HUD number shows the same chart the tap opens, without the sheet
+   (Phil). Postflop numbers have no chart to show, so they peek as their hands. */
+function showHudPeek(btn) {
+  const o = oppById(curOppId);
+  if (!o) return;
+  const d = hudDrillHands(o, btn.dataset.hud);
+  if (!d) return;
+  const head = `<div class="rpkhead">${esc(d.label)} · ${d.hands.filter((x) => x.ok).length} of ${d.hands.length}</div>`;
+  if (d.stat in HUD_CHART_ACT) {
+    openPeek(btn, head + hudChartHTML(o, d.stat, d.hands, d.yes, d.no)
+      + `<div class="rpkfoot"><span>Tap the number for the hands</span></div>`, "hudpk");
+    return;
+  }
+  openPeek(btn, head + drillRowsHTML(o, d.hands, d.yes, d.no)
+    + `<div class="rpkfoot"><span>Tap the number for all of them</span></div>`, "stpk");
 }
 /* One sheet for every "show me the hands behind this number", wherever the
    number was tapped: [{h, ok}] in, hit over miss out. */
@@ -1681,6 +1704,14 @@ function statPeekHTML(o, id) {
   const d = statDrillHands(o, id);
   if (!d) return "";
   const { spec, hands } = d;
+  const hit = hands.filter((x) => x.ok);
+  return `<div class="rpkhead">${esc(TAG_BY_ID[id]?.label || id)} \u00b7 ${hit.length} of ${hands.length}</div>`
+    + drillRowsHTML(o, hands, spec.yes, spec.no)
+    + `<div class="rpkfoot"><span>Tap the number for all of them</span></div>`;
+}
+/* The hit block over the miss block, newest first, capped — shared by every peek
+   that lists hands. */
+function drillRowsHTML(o, hands, yes, no) {
   const block = (ttl, list) => {
     if (!list.length) return "";
     const rows = list.slice().sort((a, b) => b.h.ts - a.h.ts);
@@ -1688,10 +1719,8 @@ function statPeekHTML(o, id) {
       + rows.slice(0, ST_PEEK_MAX).map((x) => handRowHTML(x.h, o.id)).join("")
       + (rows.length > ST_PEEK_MAX ? `<div class="stpkmore">+${rows.length - ST_PEEK_MAX} more</div>` : "");
   };
-  const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
-  return `<div class="rpkhead">${esc(TAG_BY_ID[id]?.label || id)} \u00b7 ${hit.length} of ${hands.length}</div>
-    <div class="list stpklist">${block(spec.yes, hit)}${block(spec.no, miss)}</div>
-    <div class="rpkfoot"><span>Tap the number for all of them</span></div>`;
+  return `<div class="list stpklist">${block(yes, hands.filter((x) => x.ok))}${
+    block(no, hands.filter((x) => !x.ok))}</div>`;
 }
 function showStatPeek(btn) {
   const o = oppById(curOppId);
@@ -6116,12 +6145,12 @@ function bindStatic() {
   for (const hh of [$("od-sizing"), $("od-hud")]) {     // 3-bet sizes moved under the HUD
     hh.addEventListener("pointerover", (e) => {
       if (!matchMedia("(hover: hover)").matches) return;
-      const b = e.target.closest("[data-szsplit],[data-sz3]");
-      if (b && b !== peekBtn) (b.dataset.sz3 ? showSize3 : showSizeSplit)(b);
+      const b = e.target.closest("[data-szsplit],[data-sz3],[data-hud]");
+      if (b && b !== peekBtn) (b.dataset.hud ? showHudPeek : b.dataset.sz3 ? showSize3 : showSizeSplit)(b);
     });
     hh.addEventListener("pointerout", (e) => {
       if (!matchMedia("(hover: hover)").matches) return;
-      const b = e.target.closest("[data-szsplit],[data-sz3]");
+      const b = e.target.closest("[data-szsplit],[data-sz3],[data-hud]");
       if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
     });
   }
@@ -6138,7 +6167,8 @@ function bindStatic() {
   document.addEventListener("click", (e) => {
     if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")
       && !e.target.closest("[data-check]") && !e.target.closest("[data-szsplit]")
-      && !e.target.closest("[data-statdrill]") && !e.target.closest("[data-sz3]")) hideRangePeek();
+      && !e.target.closest("[data-statdrill]") && !e.target.closest("[data-hud]")
+      && !e.target.closest("[data-sz3]")) hideRangePeek();
   }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
   window.addEventListener("scroll", () => hideRangePeek(), true);
