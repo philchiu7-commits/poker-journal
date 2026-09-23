@@ -461,7 +461,7 @@ const sizeStepFor = (r, act) =>
    missing and name the hand. "Some of my hands aren't in here" should be a
    question the panel answers, not one Phil has to bring to me. */
 function sizingAuto(oppId, hands) {
-  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount", "badRaise", "turnNoBarrel"];
+  const K = ["noCards", "badCards", "noAmount", "noPot", "badAmount", "badRaise", "turnFlopCheck"];
   const rows = {}, split = {}, skipped = {}, why = {};
   const bump = (cell, step, id) => {
     const c = (cell[step] = cell[step] || { n: 0, ids: [] });
@@ -511,15 +511,15 @@ function sizingAuto(oppId, hands) {
           : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
       // A jam needs no rung, so it is counted even when the fraction can't be.
       if (ratio === null && a.act !== "jam") { miss(isR && e.pot > 0 ? "badRaise" : "noPot"); continue; }
-      /* Second pair on the turn is a bluff only when it is the second barrel —
-         he bet the flop and bet it again. Bet after the flop checked through,
-         or after he called someone else's flop bet, it is neither value nor a
-         bluff, and a hand that is neither belongs out of the grid rather than
-         in a column that misreads him (Phil, v178). */
+      /* Second pair on the turn is a bluff — barrelled, raised, or led after
+         calling the flop, they all say the same thing about the hand. The one
+         exception is a flop nobody bet: there is nothing in front of him to
+         read the turn bet against, so it is neither value nor bluff and stays
+         out of the grid rather than sitting in a column that misreads him
+         (Phil, v179). */
       if (k === "V2" && a.street === "turn") {
-        const barrel = !isR && (h.actions || []).some((x) =>
-          x.street === "flop" && x.actor === a.actor && SZ_AGG.has(x.act));
-        if (!barrel) { miss("turnNoBarrel"); continue; }
+        const flopBet = (h.actions || []).some((x) => x.street === "flop" && SZ_AGG.has(x.act));
+        if (!flopBet) { miss("turnFlopCheck"); continue; }
         k = "B";
       }
       if (k === "V2") k = "V";

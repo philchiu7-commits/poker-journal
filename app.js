@@ -2854,7 +2854,7 @@ const SZ_SKIPS = [
   ["noPot", "the pot can't be rebuilt — no blinds, or an earlier amount missing"],
   ["badAmount", "the amount can't be true — over 3× the pot"],
   ["badRaise", "a raise on record for no more than the bet it faced"],
-  ["turnNoBarrel", "second pair on the turn with no flop barrel behind it — neither value nor bluff"],
+  ["turnFlopCheck", "second pair on the turn after nobody bet the flop — neither value nor bluff"],
 ];
 const SZ_SKIP_BY_ID = Object.fromEntries(SZ_SKIPS.map((x) => [x[0], x[1]]));
 
@@ -2939,10 +2939,9 @@ function renderOppSizing(o) {
   const defHTML = `<div class="sizedef${sizeDefShut ? " shut" : ""}">
     <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${auto.n} bet${auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record — what counts as what</button>
     <div class="sizenote">Value is two pair or better, or top or second pair; everything under that
-      counts as a bluff, draws included. Second pair on the turn is the one exception: it is a bluff
-      only when it is the second barrel — he bet the flop and bet it again. Bet after the flop checked
-      through, or after he called someone else's flop bet, it is neither value nor a bluff and stays
-      out of the grid. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
+      counts as a bluff, draws included. Second pair on the turn is the one exception: it counts as a
+      bluff, however he got there — barrelled, raised, or led after calling the flop. Only a turn bet
+      after nobody bet the flop is left out, as neither value nor bluff. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
       On the raise rows the rung is what he put in <i>on top of the call</i> as a share of the pot he
       raised into — B50 means the raise itself was half that pot. Those two rows hold all three
       streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
