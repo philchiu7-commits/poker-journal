@@ -174,6 +174,7 @@ const TENDENCY_TAGS = [
   { id: "sp-dis-board",         cat: "postflop", label: "SP dis board" },
   { id: "oop-protect",          cat: "postflop", label: "OOP protect" },
   { id: "protect-disadv-board", cat: "postflop", label: "Protect DisAdv. Board" },
+  { id: "f-bf-disadv-board",   cat: "postflop", label: "Bf" },
   { id: "check-oop-limped",     cat: "postflop", label: "Check OOP limped" },
   { id: "bet-merged-mwp",       cat: "postflop", label: "Bet merged mwp" },
   { id: "protected-block",      cat: "postflop", label: "Protected block" }, // yes = medium/protection, no = polar (nuts or bluff)
