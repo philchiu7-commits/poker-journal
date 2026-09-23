@@ -168,7 +168,7 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr"]) },
+    { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr", "t-hero-fold"]) },
     { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
   ] },
   { title: "River exploit", subs: [
@@ -221,7 +221,7 @@ const LIVE_LAYOUT = [
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr"] },
+      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr", "t-hero-fold"] },
       { label: "As PFC", lines: true, ids: ["t-probe", "t-bet-vol", "t-call-style", "have-lead-t"] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq", "t-fold-to-xr"] },
     ] },
@@ -903,6 +903,12 @@ const cardsSeen = (h, oppId) => {
   const v = (h.villains || []).find((x) => x.opponentId === oppId);
   return !!(v && (v.cards || []).some(Boolean));
 };
+/* Every list of hands leads with the ones you can actually read: his cards on
+   record first, then hands that reached a showdown without his, then the rest
+   — newest first inside each block. Most of a drill is hands nobody showed,
+   and sorted by date alone the two worth opening sit anywhere in the list. */
+const sdRank = (h, oppId) => (cardsSeen(h, oppId) ? 2 : h.showdown ? 1 : 0);
+const bySeen = (oppId) => (a, b) => sdRank(b, oppId) - sdRank(a, oppId) || b.ts - a.ts;
 /* Villain seat → coarse bucket for filtering (BTN/CO/HJ/EP/Blinds/Straddle). */
 function posBucket(pos) {
   if (!pos) return null;
@@ -1509,7 +1515,7 @@ function openRangeDrill(o) {
       .map(([a, n]) => `<span class="rdact"><i style="background:${notchColor(a)}"></i>${esc(a)}${n > 1 ? ` ×${n}` : ""}</span>`)
       .join("");
     return `<div class="rdhead"><b>${esc(c)}</b><span class="spacer"></span>${mix || `<span class="rdact muted">no preflop action logged</span>`}</div>`
-      + e.hands.slice().sort((a, b) => b.ts - a.ts).map((h) => handRowHTML(h, o.id)).join("");
+      + e.hands.slice().sort(bySeen(o.id)).map((h) => handRowHTML(h, o.id)).join("");
   }).join("");
   const scope = esc(rangeSpotTitle(rangeSquid, rangeSitSel, rangeSitPos));
   sheetGroup = "__rdrill__";
@@ -1526,7 +1532,7 @@ function openRangeDrill(o) {
 function openReadProof(o, label, ids, sub, other) {
   const byId = new Map(HANDS.map((h) => [h.id, h]));
   const pick = (list) => [...new Set(list || [])].map((id) => byId.get(id)).filter(Boolean)
-    .sort((a, b) => b.ts - a.ts);
+    .sort(bySeen(o.id));
   const hands = pick(ids), miss = pick(other && other.ids);
   if (!hands.length && !miss.length) return;
   /* Both sides when there are two. The hands he did it in are the claim; the
@@ -1634,7 +1640,7 @@ function hudChartHTML(o, stat, hands, yes, no, label) {
    into it — a sheet holding one row is a tap you did not need. */
 function openChartCellHands(o, label, cls, ids) {
   const byId = new Map(HANDS.map((h) => [h.id, h]));
-  const hands = [...new Set(ids)].map((i) => byId.get(i)).filter(Boolean).sort((a, b) => b.ts - a.ts);
+  const hands = [...new Set(ids)].map((i) => byId.get(i)).filter(Boolean).sort(bySeen(o.id));
   if (!hands.length) return;
   hideRangePeek();
   if (hands.length === 1) { hideSheet(); location.hash = "#handview/" + hands[0].id; return; }
@@ -1708,7 +1714,7 @@ function showHudPeek(btn) {
 function openDrillSheet(o, label, hands, yes, no, chart) {
   const block = (ttl, list) => list.length
     ? `<div class="rdhead"><b>${esc(ttl)}</b><span class="spacer"></span><span class="rdact muted">${list.length}</span></div>`
-      + list.slice().sort((a, b) => b.h.ts - a.h.ts).map((x) => handRowHTML(x.h, o.id)).join("")
+      + list.slice().sort((x, y) => bySeen(o.id)(x.h, y.h)).map((x) => handRowHTML(x.h, o.id)).join("")
     : "";
   const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
   sheetGroup = "__rdrill__";                    // same row → #handview handler
@@ -1772,12 +1778,12 @@ function statPeekHTML(o, id) {
     + drillRowsHTML(o, hands, spec.yes, spec.no)
     + `<div class="rpkfoot"><span>Tap the number for all of them</span></div>`;
 }
-/* The hit block over the miss block, newest first, capped — shared by every peek
-   that lists hands. */
+/* The hit block over the miss block, shown hands first, capped — shared by
+   every peek that lists hands. */
 function drillRowsHTML(o, hands, yes, no) {
   const block = (ttl, list) => {
     if (!list.length) return "";
-    const rows = list.slice().sort((a, b) => b.h.ts - a.h.ts);
+    const rows = list.slice().sort((x, y) => bySeen(o.id)(x.h, y.h));
     return `<div class="stpkh">${esc(ttl)}<span>${list.length}</span></div>`
       + rows.slice(0, ST_PEEK_MAX).map((x) => handRowHTML(x.h, o.id)).join("")
       + (rows.length > ST_PEEK_MAX ? `<div class="stpkmore">+${rows.length - ST_PEEK_MAX} more</div>` : "");
