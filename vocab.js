@@ -215,6 +215,7 @@ const TENDENCY_TAGS = [
   // river
   { id: "r-bluff-lines",  cat: "postflop", label: "Bluff lines (can?)", kind: "tally", options: [["bbb", "BBB"], ["bxb", "BXB"], ["xbb", "XBB"], ["xxb", "XXB"]] },
   { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands",     kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
+  { id: "r-barrel3-freq", cat: "postflop", label: "3rd barrel freq", kind: "stat", calc: "barrelR" },
   { id: "r-af",           cat: "postflop", label: "River AF",        kind: "stat", unit: "", calc: "riverAf" },
   { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
   { id: "r-traps",        cat: "postflop", label: "Have traps?" },

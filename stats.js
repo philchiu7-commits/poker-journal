@@ -20,7 +20,7 @@ function hudCount(oppId, hands) {
   const c = {
     seats: 0, vpip: 0, pfr: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
-    fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, ftb: 0, oppFtb: 0,
+    fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0,
     probeT: 0, oppProbeT: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
@@ -158,9 +158,19 @@ function hudCount(oppId, hands) {
         const back = after(fi, "bet");
         if (back) { c.oppXr++; if (back.act === "raise") c.xr++; mark("xr", back.act === "raise", h.id); }
       }
+      let barreled = false;
       if (didCb && turn.length) {
         const t = turn.find((a) => a.actor === me);
-        if (t) { c.oppBar++; if (t.act === "bet") c.bar++; mark("bar", t.act === "bet", h.id); }
+        if (t) { c.oppBar++; barreled = t.act === "bet"; if (barreled) c.bar++; mark("bar", barreled, h.id); }
+      }
+      /* Third barrel. Only off the line that earned it — cbet, then barrel:
+         a river bet after a check somewhere is a different decision, and
+         hanging it off the same number would make "he fires three" mean
+         nothing. */
+      if (barreled) {
+        const rvr = A.filter((a) => a.street === "river");
+        const rv = rvr.find((a) => a.actor === me);
+        if (rv) { c.oppBarR++; if (rv.act === "bet") c.barR++; mark("barR", rv.act === "bet", h.id); }
       }
       /* The flop read one street on: he bet the turn, somebody came over the
          top, and he had a turn to answer it. Not conditioned on a flop cbet —
@@ -236,6 +246,7 @@ function hudStats(c) {
     r("fcbOop", "Fold CB HU OOP", c.fcbOop, c.oppFcbOop, "Folded facing a flop cbet, heads-up out of position"),
     r("fcbMw", "Fold CB MWP", c.fcbMw, c.oppFcbMw, "Folded facing a flop cbet, three or more players"),
     r("bar", "Barrel T", c.bar, c.oppBar, "Bet the turn after cbetting the flop"),
+    r("barR", "Barrel R", c.barR, c.oppBarR, "Bet the river after cbetting the flop and barrelling the turn"),
     r("ftb", "Fold v T", c.ftb, c.oppFtb, "Called the flop cbet, then folded to the turn bet"),
   ];
 }
@@ -259,6 +270,7 @@ function hudDerived(c) {
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),
     barrel: p(c.bar, c.oppBar),
+    barrelR: p(c.barR, c.oppBarR),
     foldCbF: p(fcb, oppFcb),
     foldCbT: p(c.ftb, c.oppFtb),
     foldCbR: p(c.frb, c.oppFrb),

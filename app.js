@@ -172,7 +172,7 @@ const READ_LAYOUT = [
     { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"]] }] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: [...wb(["r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]),
+    { label: "As PFR", rows: [...wb(["r-barrel3-freq", "r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal"], ["r-traps", "punchbag-r-pfr"]),
       { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bluff-xt-r", "Bluff XT"]] }] },
   ] },
@@ -229,7 +229,7 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
       { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-traps", "punchbag-r-pfr"] },
       { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r"] },
-      { label: "HUD", onlineOnly: true, ids: ["r-af"] },
+      { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq", "r-af"] },
     ] },
     { label: "All streets", rows: [
       { label: "Lead", ids: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
@@ -1734,6 +1734,7 @@ const STAT_DRILL = {
   checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
   xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
   barrel:   { ev: ["bar"],                          yes: "Barrelled",          no: "Gave up" },
+  barrelR:  { ev: ["barR"],                         yes: "Fired the river",    no: "Gave up" },
   foldCbF:  { ev: ["fcbIp", "fcbOop", "fcbMw"],     yes: "Folded",             no: "Did not fold" },
   foldCbT:  { ev: ["ftb"],                          yes: "Folded",             no: "Did not fold" },
   foldCbR:  { ev: ["frb"],                          yes: "Folded",             no: "Did not fold" },
@@ -1901,14 +1902,34 @@ function openPeek(btn, html, cls) {
   /* Fixed to the thing hovered, clamped to the screen. The grid is square and nearly
      as wide as a phone, so "below the badge" is usually a lie — flip it above
      whenever the room underneath cannot hold it. */
-  const r = btn.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
-  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
-  const below = r.bottom + 8, above = r.top - 8 - h;
-  const top = below + h <= window.innerHeight - 8 ? below : above >= 8 ? above : below;
-  p.style.left = left + "px";
-  // Neither side always has room for a square grid on a phone; the chart being
-  // whole beats it clearing the badge, so clamp rather than let it run off.
-  p.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, top)) + "px";
+  const r = btn.getBoundingClientRect();
+  const GAP = 8, EDGE = 8, MIN_GRID = 150;
+  const roomBelow = window.innerHeight - r.bottom - GAP - EDGE;
+  const roomAbove = r.top - GAP - EDGE;
+  const goesBelow = roomBelow >= roomAbove;
+  const room = Math.max(roomBelow, roomAbove);
+  /* A peek that lands on top of the row it came from makes every other seat in
+     that row unreachable — the pointer can never get back down to them, which
+     is the whole of hovering Limp-RR at one seat and wanting the next. The grid
+     is square, so trading its width for height is the one lever that keeps the
+     peek clear of its own row; shrink it until it fits the roomier side. */
+  const grid = p.querySelector(".hudchart") || p.querySelector(".rggrid");
+  if (grid) {
+    grid.style.maxWidth = "";
+    const over = p.offsetHeight - room;
+    if (over > 0) {
+      grid.style.maxWidth = Math.max(MIN_GRID, grid.offsetWidth - over) + "px";
+      grid.style.marginInline = "auto";
+    }
+  }
+  const w = p.offsetWidth, h = p.offsetHeight;
+  p.style.left = Math.max(EDGE, Math.min(window.innerWidth - w - EDGE, r.left + r.width / 2 - w / 2)) + "px";
+  const top = goesBelow ? r.bottom + GAP : r.top - GAP - h;
+  /* On a screen too short for even the floored grid, a chart clipped at the
+     edge still beats one parked on the row it came from. Peeks with no grid to
+     shrink keep the old clamp — they are hand lists, and there the trigger is
+     not what you reach for next. */
+  p.style.top = (grid ? top : Math.max(EDGE, Math.min(window.innerHeight - h - EDGE, top))) + "px";
 }
 /* The old behaviour of the badge, now reachable from inside the chart. */
 function openRangeSpot(sq, sit, pg) {
