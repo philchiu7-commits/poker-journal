@@ -4334,6 +4334,7 @@ function parseNoteToDraft(text, opponentId) {
     Ld:    { act: "limp",    who: "v0" },
     Lb:    { act: "limp",    who: "v0" },
     limp:  { act: "limp",    who: "v0" },
+    Limp:  { act: "limp",    who: "v0" },
     L:     { act: "limp",    who: "v0" },
     oL:    { act: "limp",    who: "v0" },   // overlimp — same act, different context marker
     Ls:    { act: "limp",    who: "v0" },
@@ -4344,7 +4345,11 @@ function parseNoteToDraft(text, opponentId) {
   // swallow a following number as their size — those actions are un-sized in
   // Phil's shorthand, and a following "88" is almost always a holding.
   const SIZED_CHAIN_RX = /\b(Open|open|raise|Raise|Iso|3b|4b|cc|call)(?:\s*(\d{1,4})[Kk]?\b|\s*(\d(?:\.\d+)?)[xX]\b)?/g;
-  const UNSIZED_CHAIN_RX = /\b(Lrr|Lc|Ld|Lb|Ls|oL|limp|L)\b/g;
+  /* Capitalised Limp is listed the way Open/open and raise/Raise already are:
+     a note that starts "CO Limp AQo" is the common shape, and a token the walk
+     skips leaves the hand with no preflop action at all — the range grid then
+     paints it grey as No Action. */
+  const UNSIZED_CHAIN_RX = /\b(Lrr|Lc|Ld|Lb|Ls|oL|limp|Limp|L)\b/g;
   // Walk both regexes and merge by match index so tokens stay in source order.
   const raw = [];
   let cmm;
