@@ -26,7 +26,7 @@ function hudCount(oppId, hands) {
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
-  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, iso: 0, isoOpp: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
+  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, iso: 0, isoOpp: 0, three: 0, opp3: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
   /* Every stat also keeps the hands it was counted off — one entry per hand it
      had a chance in, flagged with whether that chance was taken — so tapping a
      number can show you the hands behind it instead of asking you to trust it.
@@ -108,7 +108,7 @@ function hudCount(oppId, hands) {
     if (aggPre) { c.pfr++; pos(myPos).pfr++; }
     if (oppIso) { c.oppIso++; pos(myPos).isoOpp++; if (didIso) { c.iso++; pos(myPos).iso++; } }
     if (oppCc) { c.oppCc++; if (didCc) c.cc++; }
-    if (opp3) { c.opp3b++; if (did3) c.n3b++; }
+    if (opp3) { c.opp3b++; pos(myPos).opp3++; if (did3) { c.n3b++; pos(myPos).three++; } }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
     if (oppF4) { c.oppF4b++; if (didF4) c.f4b++; }
@@ -119,6 +119,7 @@ function hudCount(oppId, hands) {
     if (oppIso) mark("iso", didIso, h.id);
     if (oppCc) mark("cc", didCc, h.id);
     if (opp3) mark("three", did3, h.id);
+    if (opp3) mark("three|" + myPos, did3, h.id);
     if (opp4) mark("four", did4, h.id);
     if (oppF3) mark("f3b", didF3, h.id);
     if (oppF4) mark("f4b", didF4, h.id);

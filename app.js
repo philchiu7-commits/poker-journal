@@ -3366,9 +3366,10 @@ function renderOppHud(o) {
   const seats = POSITIONS.filter((p) => hasSeat(p) && !posHidden.has(p));
   const hidSeats = POSITIONS.filter((p) => hasSeat(p) && posHidden.has(p));
   /* Each row carries its own denominator — raising and limping are out of the
-     seats he was dealt, isolating is out of the hands somebody limped into
-     ahead of him, what he did after his own limp is out of those limps, and
-     whether he folded is out of the limps somebody actually raised. The count
+     seats he was dealt, 3-betting is out of the hands he faced a live raise in,
+     isolating is out of the hands somebody limped into ahead of him, what he
+     did after his own limp is out of those limps, and whether he folded is out
+     of the limps somebody actually raised. The count
      rides under every cell so two rows are never read off one base. */
   const row = (label, key, den, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
     const b = c.byPos[p], d = b[den] || 0;
@@ -3387,6 +3388,7 @@ function renderOppHud(o) {
     ? `<div class="hudpos">${!seats.length ? "" : `<table>
          <tr><th></th>${seats.map((p) => `<td data-poscol="${p}" title="Hide the ${p} column">${p}</td>`).join("")}</tr>
          ${row("PFR", "pfr", "seats", "Raised preflop")}
+         ${row("3bet", "three", "opp3", "3-bet the first raise he faced")}
          ${row("Iso", "iso", "isoOpp", "Raised over a limp with the pot unraised")}
          ${row("Limp", "limp", "seats", "Limped")}
          ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
