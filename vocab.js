@@ -192,7 +192,7 @@ const TENDENCY_TAGS = [
      Postflop general / Flop / Turn / River outline. Placement is READ_LAYOUT.
      `stat` reads hold the number off his HUD, not a 0-100 feel. */
   // postflop general — multiway limped pot
-  { id: "mwl-oop-probe",  cat: "postflop", label: "Probe OOP",       kind: "tally",  options: [["rangex", "RangeX"], ["draw", "Draw"], ["merge", "Merge"], ["topp", "TopP+"]] },
+  { id: "mwl-oop-probe",  cat: "postflop", label: "Probe OOP",       kind: "tally",  options: [["rangex", "RangeX"], ["draw", "Draw"], ["merge", "Merge"], ["wktp", "WKTp"], ["topp", "TopP+"]] },
   { id: "mwl-xr",         cat: "postflop", label: "xR",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
   { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
   // flop
