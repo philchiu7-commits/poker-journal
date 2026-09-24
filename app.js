@@ -2963,6 +2963,16 @@ function renderOppReads(o) {
           (u ? `<span class="statunit">${esc(u)}</span>` : "") +
           `<span class="statn">n${d.n}</span></div>`;
       }
+      /* Once a villain has imported hands the calc-backed reads are answered by
+         those hands or not at all: a box to type in beside them would let a
+         guessed number sit where a measured one belongs, and no later hand
+         would ever correct it. Villains with no hands keep the box. */
+      if (statCalcKey(id) && calc.seats) {
+        return `<div class="bubbles"><span class="statcalc thin"` +
+          ` title="${esc(lbl)} — no spot for it in the imported hands yet">–</span>` +
+          (u ? `<span class="statunit">${esc(u)}</span>` : "") +
+          `<span class="statn">n0</span></div>`;
+      }
       return `<div class="bubbles"><input class="statinput" type="number" inputmode="decimal" step="any" placeholder="–"` +
         ` value="${st == null ? "" : esc(String(st))}" data-statinput="${id}">` +
         (u ? `<span class="statunit">${esc(u)}</span>` : "") + `</div>`;

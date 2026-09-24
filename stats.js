@@ -385,14 +385,18 @@ function hudStats(c) {
 /* The stat reads Phil used to fill in by hand, answered off the same walk.
    Each one carries the opportunity count it came off — a stat read that hides
    its n is the same lie a HUD that hides n tells. Null means the hands on
-   record never put him in that spot, and the read falls back to a box he can
-   type in: most of his opponents are live and have no imported hands at all. */
+   record never put him in that spot. With no imported hands at all the read
+   falls back to a box he can type in — most of his opponents are live — but
+   once a villain has hands on record the stats answer off them or say n0. */
 function hudDerived(c) {
   const p = (n, d) => (d ? { pct: (100 * n) / d, n: d, thin: d < HUD_MIN } : null);
   const cb = c.cbIp + c.cbOop + c.cbMw, oppCb = c.oppCbIp + c.oppCbOop + c.oppCbMw;
   const fcb = c.fcbIp + c.fcbOop + c.fcbMw, oppFcb = c.oppFcbIp + c.oppFcbOop + c.oppFcbMw;
   const rn = c.rAgg + c.rCall;
   return {
+    /* Whether the hands can answer anything at all, so a read with a calc but
+       no spot yet can say "n0" instead of falling back to a typing box. */
+    seats: c.seats,
     cbet: p(cb, oppCb),
     foldXr: p(c.fxr, c.oppFxr),
     foldXrT: p(c.fxrT, c.oppFxrT),
