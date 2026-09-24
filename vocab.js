@@ -148,7 +148,7 @@ const TENDENCY_TAGS = [
   /* Two boxes rather than one cycling chip: at the table the answer is Yes
      or No and nothing else, and tapping the lit one takes it back. */
   { id: "raise-nuts-f",         cat: "postflop", label: "Raise nuts F", kind: "choice",
-    options: [["yes", "Yes"], ["no", "No"]] },
+    options: [["yes", "Yes"], ["no", "No"], ["yessp", "Yes&SP"]] },
   { id: "raise-nuts-t",         cat: "postflop", label: "Raise nuts T", kind: "choice",
     options: [["yes", "Yes"], ["no", "No"]] },
   { id: "raise-nuts-r",         cat: "postflop", label: "Raise nuts R", kind: "choice",
@@ -219,7 +219,6 @@ const TENDENCY_TAGS = [
   { id: "f-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrHu" },
   { id: "f-fold-to-xr-mw", cat: "postflop", label: "Fold to xR MWP", kind: "stat", calc: "foldXrMw" },
   { id: "f-oop-x-range-hu", cat: "postflop", label: "Check OOP HU",  kind: "stat", calc: "checkOopHu" },
-  { id: "f-oop-x-range-mw", cat: "postflop", label: "Check OOP MWP", kind: "stat", calc: "checkOopMw" },
   { id: "f-xr-freq-pfr",  cat: "postflop", label: "xR freq",         kind: "stat", calc: "xrPfr" },
   /* The same check-raises, split by what he held: both are counted over the
      ones his cards are known for, so they add up to 100% and share an n. */
@@ -230,9 +229,7 @@ const TENDENCY_TAGS = [
   { id: "fold-cbet-f-hu", cat: "postflop", label: "Fold flop cbet HU",  kind: "stat", calc: "foldCbFHu" },
   { id: "fold-cbet-f-mw", cat: "postflop", label: "Fold flop cbet MWP", kind: "stat", calc: "foldCbFMw" },
   { id: "fold-cbet-t-hu", cat: "postflop", label: "Fold turn cbet HU",  kind: "stat", calc: "foldCbTHu" },
-  { id: "fold-cbet-t-mw", cat: "postflop", label: "Fold turn cbet MWP", kind: "stat", calc: "foldCbTMw" },
   { id: "fold-cbet-r-hu", cat: "postflop", label: "Fold river cbet HU",  kind: "stat", calc: "foldCbRHu" },
-  { id: "fold-cbet-r-mw", cat: "postflop", label: "Fold river cbet MWP", kind: "stat", calc: "foldCbRMw" },
   { id: "f-xr-freq-pfc-hu", cat: "postflop", label: "xR freq HU",  kind: "stat", calc: "xrPfcHu" },
   { id: "f-xr-freq-pfc-mw", cat: "postflop", label: "xR freq MWP", kind: "stat", calc: "xrPfcMw" },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
@@ -243,9 +240,7 @@ const TENDENCY_TAGS = [
   { id: "f-float-ip",     cat: "postflop", label: "Float IP" },
   // turn
   { id: "t-barrel2-freq-hu", cat: "postflop", label: "2nd barrel freq HU",  kind: "stat", calc: "barrelHu" },
-  { id: "t-barrel2-freq-mw", cat: "postflop", label: "2nd barrel freq MWP", kind: "stat", calc: "barrelMw" },
   { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
-  { id: "t-fold-to-xr-mw", cat: "postflop", label: "Fold to xR MWP", kind: "stat", calc: "foldXrTMw" },
   { id: "t-bluff-hands",  cat: "postflop", label: "Bluffs",          kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
@@ -263,15 +258,13 @@ const TENDENCY_TAGS = [
   { id: "t-probe-hu",     cat: "postflop", label: "Probe T HU",      kind: "stat", calc: "probeTHu" },
   { id: "t-probe-mw",     cat: "postflop", label: "Probe T MWP",      kind: "stat", calc: "probeTMw" },
   { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
-  { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["wide", "Wide"]] },
+  { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["play", "Play"], ["wide", "Wide"]] },
   { id: "have-lead-t",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
   // river
   { id: "r-bluff-lines",  cat: "postflop", label: "Bluff lines (can?)", kind: "tally", options: [["bbb", "BBB"], ["bxb", "BXB"], ["xbb", "XBB"], ["xxb", "XXB"]] },
   { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands",     kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
   { id: "r-barrel3-freq-hu", cat: "postflop", label: "3rd barrel freq HU",  kind: "stat", calc: "barrelRHu" },
-  { id: "r-barrel3-freq-mw", cat: "postflop", label: "3rd barrel freq MWP", kind: "stat", calc: "barrelRMw" },
   { id: "r-af-hu", cat: "postflop", label: "River AF HU",  kind: "stat", unit: "", calc: "riverAfHu" },
-  { id: "r-af-mw", cat: "postflop", label: "River AF MWP", kind: "stat", unit: "", calc: "riverAfMw" },
   { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
   /* The value-side counterpart to the bluff reads: does he ever bet a hand that
      only beats a bluff-catcher, or is a river bet always two pair plus? */
@@ -338,6 +331,12 @@ const PLAYER_TYPE_BY_ID = Object.fromEntries(
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
 const RETIRED_TAG_IDS = new Set([
+  /* The multiway halves of the turn and river stats, and Check OOP's: by the
+     turn nearly every pot he plays is already heads-up, so those halves held
+     one or two spots each across the whole export (Phil). The HU half keeps
+     its suffix — it still counts heads-up spots only, and dropping the label
+     would make it read as if it counted every pot. */
+  "f-oop-x-range-mw", "fold-cbet-t-mw", "fold-cbet-r-mw", "t-barrel2-freq-mw", "t-fold-to-xr-mw", "r-barrel3-freq-mw", "r-af-mw",
   /* Split into an HU and an MWP half (Phil). Stat reads hold no stored value,
      so retiring the combined id drops a row and nothing else. */
   "f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-v-pfr", "f-xr-b-pfr", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r", "f-xr-freq-pfc", "t-barrel2-freq", "t-fold-to-xr", "r-barrel3-freq", "r-af",
