@@ -23,7 +23,7 @@ function hudCount(oppId, hands) {
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0, xrC: 0, oppXrC: 0,
     xrV: 0, xrB: 0, oppXrG: 0,
-    probeT: 0, oppProbeT: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
+    probeTHu: 0, oppProbeTHu: 0, probeTMw: 0, oppProbeTMw: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
@@ -279,11 +279,19 @@ function hudCount(oppId, hands) {
          cbet splits. The flop has to have gone through untouched: if anyone
          else bet it the pot already has an aggressor, and his turn bet is a
          lead into that, not a probe at a raiser who showed nothing. */
-      if (lastAgg && !flop.some((a) => HUD_BET.has(a.act)) && turn.length && turn[0].actor === me) {
-        c.oppProbeT++;
-        const probed = turn[0].act === "bet";
-        if (probed) c.probeT++;
-        mark("probeT", probed, h.id);
+      if (lastAgg && !flop.some((a) => HUD_BET.has(a.act)) && turn.length) {
+        const ri = turn.findIndex((a) => a.actor === lastAgg);
+        const mi = turn.findIndex((a) => a.actor === me);
+        /* He doesn't have to lead the turn off, but he has to act before the
+           raiser does (Phil) — that is what makes the bet a probe at him
+           rather than a stab behind him. Checking is the chance declined; a
+           bet in front of him ends it, he is answering that bet by then. */
+        if (ri >= 0 && mi >= 0 && mi < ri && !turn.slice(0, mi).some((a) => HUD_BET.has(a.act))) {
+          const w = order.length > 2 ? "Mw" : "Hu";
+          const probed = HUD_BET.has(turn[mi].act);
+          c["oppProbeT" + w]++; if (probed) c["probeT" + w]++;
+          mark("probeT" + w, probed, h.id);
+        }
       }
       continue;
     }
@@ -388,7 +396,8 @@ function hudDerived(c) {
     cbet: p(cb, oppCb),
     foldXr: p(c.fxr, c.oppFxr),
     foldXrT: p(c.fxrT, c.oppFxrT),
-    probeT: p(c.probeT, c.oppProbeT),
+    probeTHu: p(c.probeTHu, c.oppProbeTHu),
+    probeTMw: p(c.probeTMw, c.oppProbeTMw),
     // he was the preflop raiser, heads-up out of position, and checked instead
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),

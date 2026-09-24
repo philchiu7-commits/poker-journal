@@ -153,6 +153,11 @@ const TENDENCY_TAGS = [
     options: [["yes", "Yes"], ["no", "No"]] },
   { id: "raise-nuts-r",         cat: "postflop", label: "Raise nuts R", kind: "choice",
     options: [["yes", "Yes"], ["no", "No"]] },
+  /* Bet-small-to-induce, per street: the global `bsti` sizing read says he
+     does it, these say where. */
+  { id: "bsti-f",               cat: "postflop", label: "BSTI F" },
+  { id: "bsti-t",               cat: "postflop", label: "BSTI T" },
+  { id: "bsti-r",               cat: "postflop", label: "BSTI R" },
   { id: "bluff-till-f",         cat: "postflop", label: "Bluff till F" },
   { id: "bluff-till-t",         cat: "postflop", label: "Bluff till T" },
   { id: "bluff-till-r",         cat: "postflop", label: "Bluff till R" },
@@ -242,7 +247,10 @@ const TENDENCY_TAGS = [
   /* The turn brought a flush and he bet anyway: yes = that bet is a made hand
      charging the draw, not a barrel, so raising it as a bluff is burning money. */
   { id: "t-protect-flush", cat: "postflop", label: "Protect T Flush" },
-  { id: "t-probe",        cat: "postflop", label: "Probe T",         kind: "stat", calc: "probeT" },
+  /* Split heads-up from multiway: the same turn in a three-way limped-into
+     pot is a different bet from the same turn against one man. */
+  { id: "t-probe-hu",     cat: "postflop", label: "Probe T HU",      kind: "stat", calc: "probeTHu" },
+  { id: "t-probe-mw",     cat: "postflop", label: "Probe T MW",      kind: "stat", calc: "probeTMw" },
   { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
   { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["wide", "Wide"]] },
   { id: "have-lead-t",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
@@ -318,7 +326,7 @@ const PLAYER_TYPE_BY_ID = Object.fromEntries(
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
 const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak",
   "first-raise-ns", "first-raise-ws", "lrr-latest-ns", "lrr-latest-ws",
-  "limps-monster-ws", "limps-monster-ns"]);
+  "limps-monster-ws", "limps-monster-ns", "t-probe"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
 
 /* Auto-suggested exploits: map a set read to a concrete counter-strategy line.

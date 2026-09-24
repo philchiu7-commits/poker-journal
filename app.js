@@ -168,19 +168,19 @@ const READ_LAYOUT = [
     { label: "As PFR", rows: [...wb(["f-cbet-freq", "f-fold-to-xr"], ["f-oop-x-range", "f-xr-v-pfr", "f-xr-b-pfr", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }]),
       { lines: true, sep: true, ids: ["force-squid"] }] },
     { label: "As PFC", rows: [
-      { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc", ["raise-nuts-f", "Raise nuts"]] },
+      { lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc", ["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"]] },
       { label: "Float", lines: true, ids: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] },
       { label: "Streets vs Him", lines: true, ids: ["fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
     ] },
   ] },
   { title: "Turn exploit", subs: [
     { label: "As PFR", rows: wb(["t-barrel2-freq", "t-fold-to-xr", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
-    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "fold-cbet-t", "t-probe", "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], "t-protect-flush", ["raise-nuts-t", "Raise nuts"]] }] },
+    { label: "As PFC", rows: [{ lines: true, ids: ["floats-wide", "fold-cbet-t", ["t-probe-hu", "Probe T HU"], ["t-probe-mw", "Probe T MW"], "t-bet-vol", "t-call-style", "have-lead-t", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], "t-protect-flush", ["raise-nuts-t", "Raise nuts"], ["bsti-t", "BSTI"]] }] },
   ] },
   { title: "River exploit", subs: [
     { label: "As PFR", rows: [...wb(["r-barrel3-freq", "r-bluff-lines", "r-bluff-hands", "r-af", "r-bluff-bal", "r-thin"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]),
       { lines: true, sep: true, ids: ["force-squid"] }] },
-    { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bluff-xt-r", "Bluff XT"], ["raise-nuts-r", "Raise nuts"]] }] },
+    { label: "As PFC", rows: [{ lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bluff-xt-r", "Bluff XT"], ["raise-nuts-r", "Raise nuts"], ["bsti-r", "BSTI"]] }] },
   ] },
 ];
 
@@ -223,19 +223,19 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board", "f-bf-disadv-board"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc"] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc", "punchbag-f-pfc", ["bsti-f", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-freq-pfr", "f-xr-v-pfr", "f-xr-b-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r"] },
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
       { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
-      { label: "As PFC", lines: true, ids: ["t-probe", "t-bet-vol", "t-call-style", "have-lead-t", "t-protect-flush"] },
+      { label: "As PFC", lines: true, ids: [["t-probe-hu", "Probe T HU"], ["t-probe-mw", "Probe T MW"], "t-bet-vol", "t-call-style", "have-lead-t", "t-protect-flush", ["bsti-t", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq", "t-fold-to-xr"] },
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
       { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-thin", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
-      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r"] },
+      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bsti-r", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq", "r-af"] },
     ] },
     { label: "All streets", rows: [
@@ -1764,7 +1764,8 @@ const STAT_DRILL = {
   cbet:     { ev: ["cbIp", "cbOop", "cbMw"],       yes: "Cbet",               no: "Checked it back or gave up" },
   foldXr:   { ev: ["fxr"],                          yes: "Folded to the raise", no: "Did not fold" },
   foldXrT:  { ev: ["fxrT"],                         yes: "Folded to the raise", no: "Did not fold" },
-  probeT:   { ev: ["probeT"],                       yes: "Probed the turn",   no: "Checked it to him" },
+  probeTHu: { ev: ["probeTHu"],                     yes: "Probed the turn",   no: "Checked it to him" },
+  probeTMw: { ev: ["probeTMw"],                     yes: "Probed the turn",   no: "Checked it to him" },
   checkOop: { ev: ["cbOop"], flip: true,            yes: "Checked",            no: "Bet" },
   xrPfr:    { ev: ["xr"],                           yes: "Check-raised",       no: "Did not" },
   xrVPfr:   { ev: ["xrV"],                          yes: "Check-raised value", no: "Check-raised a bluff" },
