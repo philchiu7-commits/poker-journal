@@ -239,6 +239,7 @@ const TENDENCY_TAGS = [
   { id: "t-barrel2-freq-hu", cat: "postflop", label: "2nd barrel freq HU",  kind: "stat", calc: "barrelHu" },
   { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
   { id: "t-bluff-hands",  cat: "postflop", label: "Barrels",         kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"], ["tight", "Tight"]] },
+  { id: "t-low-boards",   cat: "postflop", label: "Low boards",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
   { id: "t-hero-fold",    cat: "postflop", label: "Can Hero Fold?" },
