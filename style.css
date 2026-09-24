@@ -1149,7 +1149,11 @@ button.sizecol:active { color: var(--text); }
 .rolehead, .readcat .rslabel, .roleblk .chiprow, .roleblk .posmx, .roleblk .chipnote { grid-column: 1 / -1; }
 .rolehead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
   color: var(--accent); margin: 0; padding: 2px 0 4px; }
-.readcat .rslabel { margin: 0; padding: 8px 0 3px; }
+/* WHEN BET / WHEN CHECK / OOP / IP are the dividers between groups of reads —
+   at muted 10px they read as a caption on the row below rather than a heading
+   over it, so the groups ran together (Phil). */
+.readcat .rslabel { margin: 0; padding: 10px 0 3px; font-size: 11px; font-weight: 800;
+  letter-spacing: .09em; color: var(--text); opacity: .78; }
 .roleblk .chiprow { padding: 5px 0; }
 .readlines > :nth-child(n+3) { border-top: 1px solid var(--line); }
 .rllab { font-size: 13px; line-height: 1.25; color: var(--muted); padding: 6px 0; }
@@ -1263,3 +1267,11 @@ button.statcalc:active { color: var(--accent); }
 .implog { align-items: center; gap: 10px; }
 .implog > div { flex: 1 1 auto; min-width: 0; }
 .implog > button { width: auto; flex: none; padding: 11px 16px; }
+
+/* A stat's variants on one line: the row label names the reading once and each
+   number wears a two-letter cap. "Cbet freq HU" and "Cbet freq MWP" as two
+   full rows spent four lines saying the word twice. */
+.rlgrp { display: inline-flex; align-items: center; gap: 4px; }
+.rlctl > .rlgrp + .rlgrp { margin-left: 10px; }
+.scap { font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); }

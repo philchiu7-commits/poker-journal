@@ -222,10 +222,6 @@ const TENDENCY_TAGS = [
   { id: "f-xr-freq-pfr",  cat: "postflop", label: "xR freq",         kind: "stat", calc: "xrPfr" },
   /* The same check-raises, split by what he held: both are counted over the
      ones his cards are known for, so they add up to 100% and share an n. */
-  { id: "f-xr-v-pfr-hu", cat: "postflop", label: "xR V HU",  kind: "stat", calc: "xrVPfrHu" },
-  { id: "f-xr-v-pfr-mw", cat: "postflop", label: "xR V MWP", kind: "stat", calc: "xrVPfrMw" },
-  { id: "f-xr-b-pfr-hu", cat: "postflop", label: "xR B HU",  kind: "stat", calc: "xrBPfrHu" },
-  { id: "f-xr-b-pfr-mw", cat: "postflop", label: "xR B MWP", kind: "stat", calc: "xrBPfrMw" },
   { id: "fold-cbet-f-hu", cat: "postflop", label: "Fold flop cbet HU",  kind: "stat", calc: "foldCbFHu" },
   { id: "fold-cbet-f-mw", cat: "postflop", label: "Fold flop cbet MWP", kind: "stat", calc: "foldCbFMw" },
   { id: "fold-cbet-t-hu", cat: "postflop", label: "Fold turn cbet HU",  kind: "stat", calc: "foldCbTHu" },
@@ -233,6 +229,7 @@ const TENDENCY_TAGS = [
   { id: "f-xr-freq-pfc-hu", cat: "postflop", label: "xR freq HU",  kind: "stat", calc: "xrPfcHu" },
   { id: "f-xr-freq-pfc-mw", cat: "postflop", label: "xR freq MWP", kind: "stat", calc: "xrPfcMw" },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
+  { id: "let-realize-f",  cat: "postflop", label: "Let me Realize" },
   /* Floating in and out of position are different plays, not one habit at two
      prices: OOP he has to lead or check-raise the turn to ever win it, IP the
      float is free when checked to. `floats-wide` stays the one-line summary. */
@@ -331,6 +328,10 @@ const PLAYER_TYPE_BY_ID = Object.fromEntries(
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
 const RETIRED_TAG_IDS = new Set([
+  /* Back to one xR stat on As PFR when he checks (Phil). The value/bluff split
+     needs his hole cards to grade the raise, and no villain in the export has
+     ever check-raised a flop and shown down, so all four halves read n0. */
+  "f-xr-v-pfr-hu", "f-xr-v-pfr-mw", "f-xr-b-pfr-hu", "f-xr-b-pfr-mw",
   /* The multiway halves of the turn and river stats, and Check OOP's: by the
      turn nearly every pot he plays is already heads-up, so those halves held
      one or two spots each across the whole export (Phil). The HU half keeps

@@ -145,7 +145,7 @@ const READ_LAYOUT = [
   /* Squid first: it is the thing that changes every other read below it,
      so it sits above the streets rather than inside Preflop (Phil). */
   { title: "Squid exploit", subs: [{ rows: [
-    { label: "SlowP Open", lines: true, ids: [["slowp-open-ws", "wSquid"], ["slowp-open-ns", "nSquid"]] },
+    { lines: true, ids: [{ label: "SlowP Open", subs: [["slowp-open-ws", "wSquid"], ["slowp-open-ns", "nSquid"]] }] },
   ] }] },
   { title: "Preflop", subs: [{ rows: [
     /* Opening is off both tabs (Phil): the HUD answers how wide he opens better
@@ -163,33 +163,32 @@ const READ_LAYOUT = [
     { label: "MWP limp", rows: [{ lines: true, ids: ["mwl-oop-probe", "mwl-xr", "mwl-ip-stab"] }] },
   ] },
   { title: "Flop exploit", subs: [
-    /* Force squid is not a when-bet read — it says what he does to the game, not
-       what he does to a flop. Its own line at the foot of As PFR (Phil). */
-    { label: "As PFR", rows: [...wb(["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw"], ["f-oop-x-range-hu", "f-xr-v-pfr-hu", "f-xr-v-pfr-mw", "f-xr-b-pfr-hu", "f-xr-b-pfr-mw", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }, "punchbag-f-pfc"]),
-      { lines: true, sep: true, ids: ["force-squid"] }] },
+    { label: "As PFR", rows: wb([{ label: "Cbet freq", subs: [["f-cbet-freq-hu", "HU"], ["f-cbet-freq-mw", "MWP"]] },
+      { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid"], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
-      { lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw"] },
-      { label: "Streets vs Him", lines: true, ids: ["fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
-      { label: "Float", lines: true, ids: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] },
-      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"]] },
+      { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
+      { label: "Streets vs Him", lines: true, ids: [
+        { label: "HU", subs: [["fold-cbet-f-hu", "F"], ["fold-cbet-t-hu", "T"], ["fold-cbet-r-hu", "R"]] },
+        { label: "MWP", subs: [["fold-cbet-f-mw", "F"]] }] },
+      { lines: true, ids: [{ label: "Float", subs: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] }] },
+      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", "t-bluff-hands", "t-call-range"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
+    { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", "t-bluff-hands"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
     /* Whether he is in or out of position changes what a turn read means, so
        As PFC is asked three ways: the reads that hold either way stay up top,
        the rest sit under the seat they belong to (Phil). */
     { label: "As PFC", rows: [
       { lines: true, ids: ["floats-wide", "fold-cbet-t-hu", "t-call-style", ["raise-nuts-t", "Raise nuts"], ["bsti-t", "BSTI"]] },
-      { label: "OOP", lines: true, ids: ["t-probe-hu", "t-probe-mw", "have-lead-t", "t-protect-flush"] },
+      { label: "OOP", lines: true, ids: [{ label: "Probe T", subs: [["t-probe-hu", "HU"], ["t-probe-mw", "MWP"]] }, "have-lead-t", "t-protect-flush"] },
       { label: "IP", lines: true, ids: ["t-bet-vol", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] },
     ] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: [...wb(["r-barrel3-freq-hu", "r-bluff-lines", "r-bluff-hands", "r-af-hu", "r-bluff-bal", "r-thin"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]),
-      { lines: true, sep: true, ids: ["force-squid"] }] },
+    { label: "As PFR", rows: wb(["r-barrel3-freq-hu", "r-bluff-lines", "r-bluff-hands", "r-af-hu", "r-bluff-bal", "r-thin", "force-squid"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]) },
     { label: "As PFC", rows: [
-      { lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-can-raise", "r-call-range", "r-call-hands", ["raise-nuts-r", "Raise nuts"]] },
+      { lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", ["raise-nuts-r", "Raise nuts"]] },
       { label: "OOP", lines: true, ids: ["have-lead-r", ["bsti-r", "BSTI"]] },
       { label: "IP", lines: true, ids: ["r-bet-vol", ["bluff-xt-r", "Bluff XT"]] },
     ] },
@@ -235,19 +234,19 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board", "f-bf-disadv-board"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "punchbag-f-pfc", ["bsti-f", "BSTI"]] },
-      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "f-xr-v-pfr-hu", "f-xr-v-pfr-mw", "f-xr-b-pfr-hu", "f-xr-b-pfr-mw", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
+      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-call-range", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
+      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
       { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", "t-bet-vol", "t-call-style", "have-lead-t", "t-protect-flush", ["bsti-t", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq-hu", "t-fold-to-xr-hu"] },
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
       { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-thin", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
-      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "r-call-range", "r-call-hands", "have-lead-r", ["bsti-r", "BSTI"]] },
+      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", "have-lead-r", ["bsti-r", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq-hu", "r-af-hu"] },
     ] },
     { label: "All streets", rows: [
@@ -3044,14 +3043,20 @@ function renderOppReads(o) {
     const layout = readTab === "live" ? LIVE_LAYOUT : READ_LAYOUT;
     const live = (id) => { const t = TAG_BY_ID[id]; return t && !RETIRED_TAG_IDS.has(id) ? t : null; };
     // a row's id may be ["id", "Short"] — the label override
-    const idOf = (x) => (Array.isArray(x) ? x[0] : typeof x === "object" ? x.id : x);
+    const idOf = (x) => (Array.isArray(x) ? x[0]
+      : typeof x === "object" ? (x.subs ? idOf(x.subs[0]) : x.id) : x);
     const labelOf = (x) => (Array.isArray(x) ? x[1]
       : typeof x === "object" ? (x.label || TAG_BY_ID[x.id].label) : TAG_BY_ID[x].label);
     /* A row item may carry companions: one label, its own control, then the
        companions as chips beside it. Two questions about the same spot belong
        on one line — a second line repeats the label to ask half of it. */
     const alsoOf = (x) => (x && !Array.isArray(x) && typeof x === "object" ? x.also || [] : []);
-    const idsOf = (x) => [idOf(x), ...alsoOf(x).map(idOf)];
+    /* Variants of one stat — HU and MWP, or flop / turn / river — read as one
+       line with the stat named once and a two-letter cap over each number.
+       Four full rows that each repeat "Cbet freq" is the same reading told
+       four times, and it pushed the streets below off the screen. */
+    const subsOf = (x) => (x && !Array.isArray(x) && typeof x === "object" && x.subs) || null;
+    const idsOf = (x) => (subsOf(x) ? subsOf(x).map(idOf) : [idOf(x), ...alsoOf(x).map(idOf)]);
     const placed = new Set(layout.flatMap((c) => c.subs.flatMap((sb) => sb.rows.flatMap((r) =>
       r.matrix ? POS_MATRIX[r.matrix].rows.flatMap((m) => m[1]) : r.ids.flatMap(idsOf)))));
     /* Two shapes, never mixed inside a row: a read that carries its own
@@ -3080,12 +3085,23 @@ function renderOppReads(o) {
       /* A tally with four or more options can't share a line with its label on
          a phone — the bubbles wrap and the ✕ ends up stranded. Those take the
          full width: label on top, bubbles across underneath. */
-      const wide = (x) => isTallyRead(idOf(x)) && choiceOptions(idOf(x)).length >= 4 ? " rlwide" : "";
-      const lines = items.filter(asLine).map((x) =>
-        `<span class="rllab${isSet(idOf(x)) ? " on" : ""}${wide(x)}">${esc(labelOf(x))}</span>` +
-        `<div class="rlctl${wide(x)}">${readBtn(idOf(x), labelOf(x), true)}` +
-        alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("") +
-        `</div>`).join("");
+      /* A pair of stats side by side needs more room than the control column
+         has once a long label like "Protect DisAdv. Board" has set its width,
+         so a grouped line of numbers takes the whole row and puts its label
+         above. Grouped chips are narrow enough to stay beside theirs. */
+      const wide = (x) => (subsOf(x) ? (subsOf(x).length >= 2 && subsOf(x).every((v) => isStatRead(idOf(v))) ? " rlwide" : "")
+        : isTallyRead(idOf(x)) && choiceOptions(idOf(x)).length >= 4 ? " rlwide" : "");
+      const lines = items.filter(asLine).map((x) => {
+        const sb = subsOf(x);
+        const body = sb
+          ? sb.filter((v) => live(idOf(v))).map((v) =>
+              `<span class="rlgrp"><span class="scap">${esc(labelOf(v))}</span>` +
+              `${readBtn(idOf(v), TAG_BY_ID[idOf(v)].label, true)}</span>`).join("")
+          : readBtn(idOf(x), labelOf(x), true) +
+            alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("");
+        return `<span class="rllab${idsOf(x).some(isSet) ? " on" : ""}${wide(x)}">${esc(labelOf(x))}</span>` +
+          `<div class="rlctl${wide(x)}">${body}</div>`;
+      }).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
       return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
         (lines ? `<div class="readlines">${lines}</div>` : "") +
