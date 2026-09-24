@@ -27,6 +27,12 @@ function hudCount(oppId, hands) {
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
     agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpFold: 0, byPos: {}, ev: {},
   };
+  /* The tree stats again, each asked once of the heads-up pots and once of the
+     multiway ones. In a loop because thirty more `: 0,` above would bury the
+     counters that carry their own meaning. */
+  for (const w of ["Hu", "Mw"])
+    for (const k of ["cbF", "xOop", "fxr", "xrV", "xrB", "xrG", "xrC", "fcbF", "bar", "fxrT", "ftb", "barR", "frb", "rAgg", "rCall"])
+      c[k + w] = c["opp" + k[0].toUpperCase() + k.slice(1) + w] = 0;
   const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, iso: 0, isoOpp: 0, three: 0, opp3: 0, limp: 0, lrr: 0, faced: 0, lfold: 0 });
   /* Every stat also keeps the hands it was counted off — one entry per hand it
      had a chance in, flagged with whether that chance was taken — so tapping a
@@ -147,12 +153,21 @@ function hudCount(oppId, hands) {
     if (!flop.length) continue;
     const sawFlop = flop.some((a) => a.actor === me);
     if (!sawFlop) continue;
+    /* Heads-up or multiway is asked per street, not per hand (Phil): three
+       players on the flop with one of them gone by the turn is a multiway flop
+       and a heads-up turn, and the turn decision is the one being read. Same
+       test the cbet split already applies to the flop, applied three times.
+       Someone who folds *during* a street acted on it, so the street he folded
+       on still counts at its opening width — which is the width the others
+       were looking at when they acted. */
+    const wOf = (acts) => (new Set(acts.map((a) => a.actor)).size > 2 ? "Mw" : "Hu");
+    const wF = wOf(flop), wT = wOf(turn), wR = wOf(river);
 
     let hAgg = 0, hCall = 0;
     for (const a of A) {
       if (a.actor !== me || a.street === "pre") continue;
-      if (HUD_BET.has(a.act)) { c.agg++; hAgg++; if (a.street === "river") c.rAgg++; }
-      else if (a.act === "call") { c.calls++; hCall++; if (a.street === "river") c.rCall++; }
+      if (HUD_BET.has(a.act)) { c.agg++; hAgg++; if (a.street === "river") { c.rAgg++; c["rAgg" + wR]++; } }
+      else if (a.act === "call") { c.calls++; hCall++; if (a.street === "river") { c.rCall++; c["rCall" + wR]++; } }
     }
     if (hAgg || hCall) mark("af", hAgg > hCall, h.id);
 
@@ -211,6 +226,16 @@ function hudCount(oppId, hands) {
       const didCb = !!first && first.act === "bet";
       if (didCb) c["cb" + k]++;
       mark("cb" + k, didCb, h.id);
+      c["oppCbF" + wF]++; if (didCb) c["cbF" + wF]++;
+      mark("cbF" + wF, didCb, h.id);
+      /* Check OOP, widened: first to act with the betting lead and no bet.
+         Out of position is the flop order's answer, the same way the cbet
+         split reads it — in a multiway pot it is still whoever acts first. */
+      if (order[0] === me) {
+        const xd = !!first && first.act === "check";
+        c["oppXOop" + wF]++; if (xd) c["xOop" + wF]++;
+        mark("xOop" + wF, xd, h.id);
+      }
       /* Both halves of "what happens after his first flop decision": raised off
          his cbet, or bet into after he checked. The chance only counts once he
          actually got a turn to answer it, so a raise he never acted on (all-in
@@ -221,7 +246,11 @@ function hudCount(oppId, hands) {
       };
       if (didCb) {
         const back = after(fi, "raise");
-        if (back) { c.oppFxr++; if (back.act === "fold") c.fxr++; mark("fxr", back.act === "fold", h.id); }
+        if (back) {
+          const fd = back.act === "fold";
+          c.oppFxr++; if (fd) c.fxr++; mark("fxr", fd, h.id);
+          c["oppFxr" + wF]++; if (fd) c["fxr" + wF]++; mark("fxr" + wF, fd, h.id);
+        }
       } else if (first && first.act === "check") {
         const back = after(fi, "bet");
         if (back) {
@@ -241,6 +270,10 @@ function hudCount(oppId, hands) {
               if (g === "B") c.xrB++; else c.xrV++;
               mark("xrV", g !== "B", h.id);
               mark("xrB", g === "B", h.id);
+              c["oppXrG" + wF]++;
+              if (g === "B") c["xrB" + wF]++; else c["xrV" + wF]++;
+              mark("xrV" + wF, g !== "B", h.id);
+              mark("xrB" + wF, g === "B", h.id);
             }
           }
         }
@@ -248,7 +281,10 @@ function hudCount(oppId, hands) {
       let barreled = false;
       if (didCb && turn.length) {
         const t = turn.find((a) => a.actor === me);
-        if (t) { c.oppBar++; barreled = t.act === "bet"; if (barreled) c.bar++; mark("bar", barreled, h.id); }
+        if (t) {
+          c.oppBar++; barreled = t.act === "bet"; if (barreled) c.bar++; mark("bar", barreled, h.id);
+          c["oppBar" + wT]++; if (barreled) c["bar" + wT]++; mark("bar" + wT, barreled, h.id);
+        }
       }
       /* Third barrel. Only off the line that earned it — cbet, then barrel:
          a river bet after a check somewhere is a different decision, and
@@ -256,7 +292,11 @@ function hudCount(oppId, hands) {
          nothing. */
       if (barreled) {
         const rv = river.find((a) => a.actor === me);
-        if (rv) { c.oppBarR++; if (rv.act === "bet") c.barR++; mark("barR", rv.act === "bet", h.id); }
+        if (rv) {
+          const b3 = rv.act === "bet";
+          c.oppBarR++; if (b3) c.barR++; mark("barR", b3, h.id);
+          c["oppBarR" + wR]++; if (b3) c["barR" + wR]++; mark("barR" + wR, b3, h.id);
+        }
       }
       /* The flop read one street on: he bet the turn, somebody came over the
          top, and he had a turn to answer it. Not conditioned on a flop cbet —
@@ -265,7 +305,11 @@ function hudCount(oppId, hands) {
       if (ti >= 0 && turn[ti].act === "bet") {
         const rj = turn.findIndex((a, i) => i > ti && a.actor !== me && a.act === "raise");
         const tBack = rj < 0 ? null : turn.slice(rj + 1).find((a) => a.actor === me) || null;
-        if (tBack) { c.oppFxrT++; if (tBack.act === "fold") c.fxrT++; mark("fxrT", tBack.act === "fold", h.id); }
+        if (tBack) {
+          const fd = tBack.act === "fold";
+          c.oppFxrT++; if (fd) c.fxrT++; mark("fxrT", fd, h.id);
+          c["oppFxrT" + wT]++; if (fd) c["fxrT" + wT]++; mark("fxrT" + wT, fd, h.id);
+        }
       }
       continue;                             // can't fold to your own cbet
     }
@@ -287,7 +331,7 @@ function hudCount(oppId, hands) {
            rather than a stab behind him. Checking is the chance declined; a
            bet in front of him ends it, he is answering that bet by then. */
         if (ri >= 0 && mi >= 0 && mi < ri && !turn.slice(0, mi).some((a) => HUD_BET.has(a.act))) {
-          const w = order.length > 2 ? "Mw" : "Hu";
+          const w = wT;
           const probed = HUD_BET.has(turn[mi].act);
           c["oppProbeT" + w]++; if (probed) c["probeT" + w]++;
           mark("probeT" + w, probed, h.id);
@@ -311,13 +355,17 @@ function hudCount(oppId, hands) {
         const did = back.act === "raise" || back.act === "jam";
         c.oppXrC++; if (did) c.xrC++;
         mark("xrC", did, h.id);
+        c["oppXrC" + wF]++; if (did) c["xrC" + wF]++;
+        mark("xrC" + wF, did, h.id);
       }
     }
     const resp = flop.slice(cbIdx + 1).find((a) => a.actor === me);
     if (!resp) continue;
     c["oppFcb" + k]++;
     mark("fcb" + k, resp.act === "fold", h.id);
-    if (resp.act === "fold") { c["fcb" + k]++; continue; }
+    c["oppFcbF" + wF]++;
+    mark("fcbF" + wF, resp.act === "fold", h.id);
+    if (resp.act === "fold") { c["fcb" + k]++; c["fcbF" + wF]++; continue; }
     if (resp.act !== "call") continue;
     // called the flop cbet — did they fold to the turn barrel?
     const tBet = turn.findIndex((a) => a.actor === lastAgg && a.act === "bet");
@@ -326,7 +374,9 @@ function hudCount(oppId, hands) {
     if (!tResp) continue;
     c.oppFtb++;
     mark("ftb", tResp.act === "fold", h.id);
-    if (tResp.act === "fold") { c.ftb++; continue; }
+    c["oppFtb" + wT]++;
+    mark("ftb" + wT, tResp.act === "fold", h.id);
+    if (tResp.act === "fold") { c.ftb++; c["ftb" + wT]++; continue; }
     if (tResp.act !== "call") continue;
     // called the turn barrel too — did they fold to the river bet?
     const rBet = river.findIndex((a) => a.actor === lastAgg && a.act === "bet");
@@ -335,7 +385,9 @@ function hudCount(oppId, hands) {
     if (!rResp) continue;
     c.oppFrb++;
     mark("frb", rResp.act === "fold", h.id);
-    if (rResp.act === "fold") c.frb++;
+    c["oppFrb" + wR]++;
+    mark("frb" + wR, rResp.act === "fold", h.id);
+    if (rResp.act === "fold") { c.frb++; c["frb" + wR]++; }
   }
   return c;
 }
@@ -393,15 +445,13 @@ function hudDerived(c) {
   const cb = c.cbIp + c.cbOop + c.cbMw, oppCb = c.oppCbIp + c.oppCbOop + c.oppCbMw;
   const fcb = c.fcbIp + c.fcbOop + c.fcbMw, oppFcb = c.oppFcbIp + c.oppFcbOop + c.oppFcbMw;
   const rn = c.rAgg + c.rCall;
-  return {
+  const out = {
     /* Whether the hands can answer anything at all, so a read with a calc but
        no spot yet can say "n0" instead of falling back to a typing box. */
     seats: c.seats,
     cbet: p(cb, oppCb),
     foldXr: p(c.fxr, c.oppFxr),
     foldXrT: p(c.fxrT, c.oppFxrT),
-    probeTHu: p(c.probeTHu, c.oppProbeTHu),
-    probeTMw: p(c.probeTMw, c.oppProbeTMw),
     // he was the preflop raiser, heads-up out of position, and checked instead
     checkOop: p(c.oppCbOop - c.cbOop, c.oppCbOop),
     xrPfr: p(c.xr, c.oppXr),
@@ -417,6 +467,28 @@ function hudDerived(c) {
     // no denominator, and an infinite AF is not a reading
     riverAf: c.rCall ? { v: c.rAgg / c.rCall, n: rn, thin: rn < HUD_MIN } : null,
   };
+  /* The same reads split by the width of the street they happen on. Each half
+     stands on its own denominator — the two n's add up to the combined stat's,
+     so a thin pair is thin honestly rather than by rounding. */
+  for (const w of ["Hu", "Mw"]) {
+    out["cbet" + w] = p(c["cbF" + w], c["oppCbF" + w]);
+    out["checkOop" + w] = p(c["xOop" + w], c["oppXOop" + w]);
+    out["foldXr" + w] = p(c["fxr" + w], c["oppFxr" + w]);
+    out["xrVPfr" + w] = p(c["xrV" + w], c["oppXrG" + w]);
+    out["xrBPfr" + w] = p(c["xrB" + w], c["oppXrG" + w]);
+    out["xrPfc" + w] = p(c["xrC" + w], c["oppXrC" + w]);
+    out["foldCbF" + w] = p(c["fcbF" + w], c["oppFcbF" + w]);
+    out["barrel" + w] = p(c["bar" + w], c["oppBar" + w]);
+    out["foldXrT" + w] = p(c["fxrT" + w], c["oppFxrT" + w]);
+    out["foldCbT" + w] = p(c["ftb" + w], c["oppFtb" + w]);
+    out["barrelR" + w] = p(c["barR" + w], c["oppBarR" + w]);
+    out["foldCbR" + w] = p(c["frb" + w], c["oppFrb" + w]);
+    const rw = c["rAgg" + w] + c["rCall" + w];
+    out["riverAf" + w] = c["rCall" + w] ? { v: c["rAgg" + w] / c["rCall" + w], n: rw, thin: rw < HUD_MIN } : null;
+  }
+  out.probeTHu = p(c.probeTHu, c.oppProbeTHu);
+  out.probeTMw = p(c.probeTMw, c.oppProbeTMw);
+  return out;
 }
 
 /* Aggression factor is a ratio, not a percentage — postflop bets+raises per call. */

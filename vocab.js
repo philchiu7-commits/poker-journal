@@ -214,18 +214,27 @@ const TENDENCY_TAGS = [
   { id: "mwl-xr",         cat: "postflop", label: "xR",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
   { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
   // flop
-  { id: "f-cbet-freq",    cat: "postflop", label: "Cbet freq",       kind: "stat", calc: "cbet" },
-  { id: "f-fold-to-xr",   cat: "postflop", label: "Fold to xR",      kind: "stat", calc: "foldXr" },
-  { id: "f-oop-x-range",  cat: "postflop", label: "Check OOP",       kind: "stat", calc: "checkOop" },
+  { id: "f-cbet-freq-hu", cat: "postflop", label: "Cbet freq HU",  kind: "stat", calc: "cbetHu" },
+  { id: "f-cbet-freq-mw", cat: "postflop", label: "Cbet freq MWP", kind: "stat", calc: "cbetMw" },
+  { id: "f-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrHu" },
+  { id: "f-fold-to-xr-mw", cat: "postflop", label: "Fold to xR MWP", kind: "stat", calc: "foldXrMw" },
+  { id: "f-oop-x-range-hu", cat: "postflop", label: "Check OOP HU",  kind: "stat", calc: "checkOopHu" },
+  { id: "f-oop-x-range-mw", cat: "postflop", label: "Check OOP MWP", kind: "stat", calc: "checkOopMw" },
   { id: "f-xr-freq-pfr",  cat: "postflop", label: "xR freq",         kind: "stat", calc: "xrPfr" },
   /* The same check-raises, split by what he held: both are counted over the
      ones his cards are known for, so they add up to 100% and share an n. */
-  { id: "f-xr-v-pfr",     cat: "postflop", label: "xR V",            kind: "stat", calc: "xrVPfr" },
-  { id: "f-xr-b-pfr",     cat: "postflop", label: "xR B",            kind: "stat", calc: "xrBPfr" },
-  { id: "fold-cbet-f",    cat: "postflop", label: "Fold flop cbet",  kind: "stat", calc: "foldCbF" },
-  { id: "fold-cbet-t",    cat: "postflop", label: "Fold turn cbet",  kind: "stat", calc: "foldCbT" },
-  { id: "fold-cbet-r",    cat: "postflop", label: "Fold river cbet", kind: "stat", calc: "foldCbR" },
-  { id: "f-xr-freq-pfc",  cat: "postflop", label: "xR freq",         kind: "stat", calc: "xrPfc" },
+  { id: "f-xr-v-pfr-hu", cat: "postflop", label: "xR V HU",  kind: "stat", calc: "xrVPfrHu" },
+  { id: "f-xr-v-pfr-mw", cat: "postflop", label: "xR V MWP", kind: "stat", calc: "xrVPfrMw" },
+  { id: "f-xr-b-pfr-hu", cat: "postflop", label: "xR B HU",  kind: "stat", calc: "xrBPfrHu" },
+  { id: "f-xr-b-pfr-mw", cat: "postflop", label: "xR B MWP", kind: "stat", calc: "xrBPfrMw" },
+  { id: "fold-cbet-f-hu", cat: "postflop", label: "Fold flop cbet HU",  kind: "stat", calc: "foldCbFHu" },
+  { id: "fold-cbet-f-mw", cat: "postflop", label: "Fold flop cbet MWP", kind: "stat", calc: "foldCbFMw" },
+  { id: "fold-cbet-t-hu", cat: "postflop", label: "Fold turn cbet HU",  kind: "stat", calc: "foldCbTHu" },
+  { id: "fold-cbet-t-mw", cat: "postflop", label: "Fold turn cbet MWP", kind: "stat", calc: "foldCbTMw" },
+  { id: "fold-cbet-r-hu", cat: "postflop", label: "Fold river cbet HU",  kind: "stat", calc: "foldCbRHu" },
+  { id: "fold-cbet-r-mw", cat: "postflop", label: "Fold river cbet MWP", kind: "stat", calc: "foldCbRMw" },
+  { id: "f-xr-freq-pfc-hu", cat: "postflop", label: "xR freq HU",  kind: "stat", calc: "xrPfcHu" },
+  { id: "f-xr-freq-pfc-mw", cat: "postflop", label: "xR freq MWP", kind: "stat", calc: "xrPfcMw" },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
   /* Floating in and out of position are different plays, not one habit at two
      prices: OOP he has to lead or check-raise the turn to ever win it, IP the
@@ -233,8 +242,10 @@ const TENDENCY_TAGS = [
   { id: "f-float-oop",    cat: "postflop", label: "Float OOP" },
   { id: "f-float-ip",     cat: "postflop", label: "Float IP" },
   // turn
-  { id: "t-barrel2-freq", cat: "postflop", label: "2nd barrel freq", kind: "stat", calc: "barrel" },
-  { id: "t-fold-to-xr", cat: "postflop", label: "Fold to xR", kind: "stat", calc: "foldXrT" },
+  { id: "t-barrel2-freq-hu", cat: "postflop", label: "2nd barrel freq HU",  kind: "stat", calc: "barrelHu" },
+  { id: "t-barrel2-freq-mw", cat: "postflop", label: "2nd barrel freq MWP", kind: "stat", calc: "barrelMw" },
+  { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
+  { id: "t-fold-to-xr-mw", cat: "postflop", label: "Fold to xR MWP", kind: "stat", calc: "foldXrTMw" },
   { id: "t-bluff-hands",  cat: "postflop", label: "Bluffs",          kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
@@ -250,15 +261,17 @@ const TENDENCY_TAGS = [
   /* Split heads-up from multiway: the same turn in a three-way limped-into
      pot is a different bet from the same turn against one man. */
   { id: "t-probe-hu",     cat: "postflop", label: "Probe T HU",      kind: "stat", calc: "probeTHu" },
-  { id: "t-probe-mw",     cat: "postflop", label: "Probe T MW",      kind: "stat", calc: "probeTMw" },
+  { id: "t-probe-mw",     cat: "postflop", label: "Probe T MWP",      kind: "stat", calc: "probeTMw" },
   { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
   { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["wide", "Wide"]] },
   { id: "have-lead-t",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
   // river
   { id: "r-bluff-lines",  cat: "postflop", label: "Bluff lines (can?)", kind: "tally", options: [["bbb", "BBB"], ["bxb", "BXB"], ["xbb", "XBB"], ["xxb", "XXB"]] },
   { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands",     kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
-  { id: "r-barrel3-freq", cat: "postflop", label: "3rd barrel freq", kind: "stat", calc: "barrelR" },
-  { id: "r-af",           cat: "postflop", label: "River AF",        kind: "stat", unit: "", calc: "riverAf" },
+  { id: "r-barrel3-freq-hu", cat: "postflop", label: "3rd barrel freq HU",  kind: "stat", calc: "barrelRHu" },
+  { id: "r-barrel3-freq-mw", cat: "postflop", label: "3rd barrel freq MWP", kind: "stat", calc: "barrelRMw" },
+  { id: "r-af-hu", cat: "postflop", label: "River AF HU",  kind: "stat", unit: "", calc: "riverAfHu" },
+  { id: "r-af-mw", cat: "postflop", label: "River AF MWP", kind: "stat", unit: "", calc: "riverAfMw" },
   { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
   /* The value-side counterpart to the bluff reads: does he ever bet a hand that
      only beats a bluff-catcher, or is a river bet always two pair plus? */
@@ -324,7 +337,11 @@ const PLAYER_TYPE_BY_ID = Object.fromEntries(
   PLAYER_TYPES.concat(RETIRED_PLAYER_TYPES).map((t) => [t.id, t]));
 /* Retired reads: no longer offered, but an opponent who still holds one sees
    it under "Other" as "(retired)" so it can be cleared — never silently dropped. */
-const RETIRED_TAG_IDS = new Set(["3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak",
+const RETIRED_TAG_IDS = new Set([
+  /* Split into an HU and an MWP half (Phil). Stat reads hold no stored value,
+     so retiring the combined id drops a row and nothing else. */
+  "f-cbet-freq", "f-fold-to-xr", "f-oop-x-range", "f-xr-v-pfr", "f-xr-b-pfr", "fold-cbet-f", "fold-cbet-t", "fold-cbet-r", "f-xr-freq-pfc", "t-barrel2-freq", "t-fold-to-xr", "r-barrel3-freq", "r-af",
+  "3bet-linear", "3bet-polar", "3bet-bluff", "limp-caller", "lp-limp-weak",
   "first-raise-ns", "first-raise-ws", "lrr-latest-ns", "lrr-latest-ws",
   "limps-monster-ws", "limps-monster-ns", "t-probe"]);
 const TAG_BY_ID = Object.fromEntries(TENDENCY_TAGS.map((t) => [t.id, t]));
