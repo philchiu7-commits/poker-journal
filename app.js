@@ -919,9 +919,11 @@ function route() {
    trip into a hand and back; only a different opponent clears them, and the
    Clear-filters button is showing the whole time any are on. */
 let handFiltersFor = null;                 // whose filters these are
-let handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), post: new Set(), sd: false, cards: false };
-const resetHandFilters = () => { handFilters = { pos: new Set(), pot: new Set(), squid: new Set(), role: new Set(), post: new Set(), sd: false, cards: false }; };
-const handFiltersActive = () => handFilters.pos.size || handFilters.pot.size || handFilters.squid.size || handFilters.role.size || handFilters.post.size || handFilters.sd || handFilters.cards;
+const HF_DIMS = ["pos", "pot", "field", "squid", "role", "post"];
+const blankHandFilters = () => ({ ...Object.fromEntries(HF_DIMS.map((d) => [d, new Set()])), sd: false, cards: false });
+let handFilters = blankHandFilters();
+const resetHandFilters = () => { handFilters = blankHandFilters(); };
+const handFiltersActive = () => HF_DIMS.some((d) => handFilters[d].size) || handFilters.sd || handFilters.cards;
 /* Hands where we never saw this player's cards sit in their own group, below
    the ones you can review. Open by default: four hands in five are imported
    with no cards on this villain, so collapsing the group hides most of what
@@ -1046,6 +1048,10 @@ function handMatchesFilters(h, oppId) {
     if (!f.pot.has(b)) return false;
     if (b === "3BP" && !in3betPot(h, oppId)) return false;
   }
+  if (f.field.size) {
+    const b = fieldBucket(h);
+    if (!b || !f.field.has(b)) return false;
+  }
   if (f.squid.size && !f.squid.has(squidBucket(h))) return false;
   if (f.role.size) {
     if (!villainRoles(h, oppId).some((r) => f.role.has(r))) return false;
@@ -1063,7 +1069,17 @@ function handMatchesFilters(h, oppId) {
 const POS_BUCKETS_ALL = ["BTN", "CO", "HJ", "EP", "SB", "BB", "STD"];
 const posBuckets = (allHands) => POS_BUCKETS_ALL.filter((b) =>
   b !== "STD" || allHands.some((h) => (h.villains || []).some((v) => v.pos === "STD")));
+/* How many players actually saw the flop. Counted off the flop action stream,
+   not the preflop one: every fold is on record, so preflop the table is 7 or 8
+   handed in every hand and the number says nothing. A hand that never reached
+   a flop answers to neither chip. (Measured on the 2026-09-21 export: the flop
+   stream and "who hadn't folded preflop" agree on 650 of 652 hands.) */
+function fieldBucket(h) {
+  const n = new Set((h.actions || []).filter((a) => a.street === "flop").map((a) => a.actor)).size;
+  return n ? (n === 2 ? "HU" : "MW") : null;
+}
 const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
+const FIELD_BUCKETS = ["HU", "MW"];
 const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
 const ROLE_BUCKETS = ["PFR", "PFC", "Limp", "LRR", "3b", "c3b"];
 const POST_BUCKETS = ["R", "xR"];
@@ -1072,7 +1088,7 @@ function renderHandFilters(oppId, allHands) {
   /* Live counts for each chip — reflect *what would remain* if this chip flipped,
      with every OTHER dimension's current filter still applied. */
   const countIf = (dim, val) => {
-    const trial = { ...f, pos: new Set(f.pos), pot: new Set(f.pot), squid: new Set(f.squid), role: new Set(f.role), post: new Set(f.post) };
+    const trial = { ...f, ...Object.fromEntries(HF_DIMS.map((d) => [d, new Set(f[d])])) };
     if (dim === "sd" || dim === "cards") trial[dim] = val;
     /* Flip, don't add — on an already-lit chip `add` was a no-op, so every lit
        chip in a row showed the same union count instead of what's left without
@@ -1084,7 +1100,8 @@ function renderHandFilters(oppId, allHands) {
     handFilters = save;
     return n;
   };
-  const HF_TIP = { "3BP": "Hands where he 3-bet or called a 3-bet",
+  const HF_TIP = { HU: "Two players saw the flop", MW: "Three or more saw the flop",
+    "3BP": "Hands where he 3-bet or called a 3-bet",
     "3b": "He 3-bet preflop", c3b: "He called somebody's 3-bet preflop",
     R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
   const chip = (dim, val, label) => {
@@ -1098,6 +1115,7 @@ function renderHandFilters(oppId, allHands) {
   $("od-handfilters").innerHTML =
     row("Pos", "pos", posBuckets(allHands)) +
     row("Pot", "pot", POT_BUCKETS) +
+    row("Field", "field", FIELD_BUCKETS) +
     row("Squid", "squid", SQUID_BUCKETS) +
     row("Role", "role", ROLE_BUCKETS) +
     row("Post", "post", POST_BUCKETS) +
