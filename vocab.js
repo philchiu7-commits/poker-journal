@@ -278,7 +278,7 @@ const TENDENCY_TAGS = [
   { id: "r-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
   { id: "r-can-raise",    cat: "postflop", label: "Can raise?",      kind: "tally",  options: [["bluff", "Bluff"], ["thin", "Thin"]] },
   { id: "r-call-range",   cat: "postflop", label: "Call range",      kind: "choice", options: [["wide", "Wide"], ["tight", "Tight"]] },
-  { id: "r-call-hands",   cat: "postflop", label: "Bluff catch",     kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
+  { id: "r-call-hands",   cat: "postflop", label: "Bluff catch",     kind: "tally",  options: [["light", "Light"], ["tight", "Tight"]] },
   { id: "have-lead-r",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
   { id: "timing-tells",         cat: "live",     label: "Timing tells" },
   { id: "snap-call-weak",       cat: "live",     label: "Snap-call = weak" },
