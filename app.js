@@ -812,16 +812,28 @@ const tileHTML = (c, prev) => c
   ? `<span class="ctile${prev ? " prev" : ""} ${suitOf(c).cls}">${c.slice(0, -1)}<span class="suit">${suitOf(c).sym}</span></span>` : "";
 const tilesHTML = (cs) => (cs || []).filter(Boolean).map((c) => tileHTML(c)).join("");
 
-/* ---------- action phrasing (hand-history style: "opens to 40K") ---------- */
-/* Hands imported from external replayers store raw chip counts (200 = 200 chips,
-   not 200K). Detect them so the display doesn't inflate blinds and bets 1000×. */
-const isRawSize = (h) => !!(h && h.imported && (h.imported.noK || h.imported.source === "hnlbds"));
-const sizeLabel = (s, raw = false) => !s ? "" :
-  raw
-    ? (/^\$?\d/.test(s) ? String(s).replace(/^\$/, "") : s)
-    : /^\$\d/.test(s) ? s.slice(1) + "K" :
-      /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() :
-      /^(\d+(?:\.\d+)?)(%)$/.test(s) ? s.replace(/%$/, "") : s;
+/* ---------- action phrasing (hand-history style: "opens to 40,000") ---------- */
+/* Every amount in the app is the number of chips actually in play — no K.
+   DX imports keep the blinds in thousands (a 0.4 big blind is a 400-chip
+   blind) while writing the sizes in chips or in k, so one tell, a fractional
+   big blind, scales anything quoted in blind units: the blinds themselves, the
+   effective stack, the estimated pot. It is potWalk's tell, so the written
+   hand, the sizing grid and the replayer can never quote different money.
+   Sizes need no tell at all — sizeAmount already resolves "2.9k" and "$2350"
+   to the same chips. */
+const chipUnit = (h) => (h && h.blinds && h.blinds.bb > 0 && h.blinds.bb < 1) ? 1000 : 1;
+const chipStr = (n) => {
+  const v = Math.round(Number(n));
+  return isFinite(v) ? (Math.abs(v) >= 10000 ? v.toLocaleString("en-US") : String(v)) : "";
+};
+/* A written size as the chips it was. Pot-relative shorthand ("50%", "4x",
+   "pot") has no chip count without a pot, so it is left as written rather
+   than turned into a number it isn't. */
+const sizeLabel = (s) => {
+  if (!s) return "";
+  const n = sizeAmount(s);
+  return n === null ? String(s) : chipStr(n);
+};
 function actVerb(a) {
   switch (a.act) {
     case "fold":  return "folds";
@@ -840,13 +852,13 @@ function actVerb(a) {
 /* Verb + size split for rendering; "bet/raise sized Jam" reads as "jams".
    "to" only fits absolute sizes ("opens to 40K", "3-bets to 4x") — not
    pot-relative ones ("raises pot", "bets 50%"). */
-function actParts(a, raw = false) {
-  let verb = actVerb(a), sz = a.size ? sizeLabel(a.size, raw) : null;
+function actParts(a) {
+  let verb = actVerb(a), sz = a.size ? sizeLabel(a.size) : null;
   if (sz === "Jam") { verb = "jams"; sz = null; }
   return { verb, sz, to: !!sz && verb !== "bets" && !/%|pot|over/i.test(sz) };
 }
-function actPhrase(a, raw = false) {
-  const { verb, sz, to } = actParts(a, raw);
+function actPhrase(a) {
+  const { verb, sz, to } = actParts(a);
   return verb + (sz ? (to ? " to " : " ") + sz : "");
 }
 
@@ -3651,12 +3663,11 @@ function actorLabel(h, actor) {
 }
 function handSummary(h) {
   if (h.note) return h.note;
-  const raw = isRawSize(h);
   const bits = [];
   for (const st of STREETS) {
     const acts = (h.actions || []).filter((a) => a.street === st);
     if (!acts.length) continue;
-    const s = acts.map((a) => `${actorLabel(h, a.actor)} ${actPhrase(a, raw)}`).join(", ");
+    const s = acts.map((a) => `${actorLabel(h, a.actor)} ${actPhrase(a)}`).join(", ");
     bits.push(st === "pre" ? s : st.toUpperCase() + ": " + s);
   }
   return bits.join("  ·  ") || cardsStr(h.board) || "—";
@@ -3682,12 +3693,12 @@ function actionSeq(h, actor) {
     .join("");
   return seq && lastStreet !== "pre" ? seq + ` (${lastStreet})` : seq;
 }
-/* Compact action code for list rows: "R40K", "3B4x", "B50%", "Jam (turn)". */
+/* Compact action code for list rows: "R40000", "3B4x", "B50%", "Jam (turn)". */
 const ACT_ABBR = { fold: "F", check: "X", call: "C", limp: "L", bet: "B", raise: "R", "3bet": "3B", "4bet": "4B", "5bet": "5B", jam: "Jam" };
-function abbrevAct(a, raw = false) {
+function abbrevAct(a) {
   const street = a.street !== "pre" ? ` (${a.street})` : "";
   if (a.act === "jam" || a.size === "Jam") return "Jam" + street;
-  const sz = a.size ? sizeLabel(a.size, raw) : "";
+  const sz = a.size ? sizeLabel(a.size) : "";
   const code = ACT_ABBR[a.act] || a.act;
   return code + (sz ? (/^\d/.test(sz) ? "" : " ") + sz : "") + street;
 }
@@ -3696,24 +3707,14 @@ function abbrevAct(a, raw = false) {
    fold". Multipliers ("3x") and pot-percent sizes ("50%") are resolved to
    chip amounts via estimatePot so every visible size is a K count. Actor
    labels are omitted — order alone reads clearly in a two-player context. */
-function fmtK(n, raw = false) {
+function fmtK(n, u = 1) {
   if (!n) return "";
-  if (raw) return String(Math.round(n));
-  if (n >= 10) return Math.round(n) + "K";
-  return (Math.round(n * 10) / 10) + "K";
+  return chipStr(n * u);
 }
-/* Sizing fallback that preserves % / x markers so a percent-pot size never
-   renders as a bare "50" (which reads as chip count). Only used when the
-   pot estimator can't resolve to a K amount. */
-const sizeLabelKeepMarker = (s, raw = false) => !s ? "" :
-  raw
-    ? (/^\$?\d/.test(s) ? String(s).replace(/^\$/, "") : s)
-    : /^\$\d/.test(s) ? s.slice(1) + "K" :
-      /^\d+(\.\d+)?k$/i.test(s) ? s.toUpperCase() : s;
 function handHistoryLineHTML(h, focusActor) {
   const acts = h.actions || [];
   if (!acts.length) return "";
-  const raw = isRawSize(h);
+  const u = chipUnit(h);
   const pe = estimatePot(h, acts);
   const uniqActors = new Set(acts.map((a) => a.actor));
   // Focus mode (opponent-page rows): in a multiway hand show only that
@@ -3734,7 +3735,7 @@ function handHistoryLineHTML(h, focusActor) {
     if (a.act === "jam" || a.size === "Jam") return "jam";
     if (a.act === "fold")  return "fold";
     if (a.act === "check") return "check";
-    const amt = pe.perAct[i] ? fmtK(pe.perAct[i], raw) : (a.size ? sizeLabelKeepMarker(a.size, raw) : "");
+    const amt = pe.perAct[i] ? fmtK(pe.perAct[i], u) : (a.size ? sizeLabel(a.size) : "");
     switch (a.act) {
       case "call":  return amt ? "call " + amt : "call";
       case "limp":  return "limp";
@@ -3834,22 +3835,21 @@ function boardFor(h, street) {
 }
 
 /* Plain-text hand render — also the future LLM serialization format. */
-const kAmt = (n, raw = false) => raw ? String(n) : (n + "K");
+const kAmt = (n, u = 1) => chipStr(n * u);
 /* Blinds line: "50/100/200(200)" — straddle joins the blinds, bracket = ante. */
-function blindsStr(h, raw) {
+function blindsStr(h) {
   if (!h.blinds) return "";
+  const u = chipUnit(h);
   const b = [];
-  if (h.blinds.sb) b.push(kAmt(h.blinds.sb, raw));
-  if (h.blinds.bb) b.push(kAmt(h.blinds.bb, raw));
-  if (h.blinds.std) b.push(kAmt(h.blinds.std, raw));
+  if (h.blinds.sb) b.push(kAmt(h.blinds.sb, u));
+  if (h.blinds.bb) b.push(kAmt(h.blinds.bb, u));
+  if (h.blinds.std) b.push(kAmt(h.blinds.std, u));
   let bl = b.join("/");
-  if (h.blinds.ante) bl += `(${kAmt(h.blinds.ante, raw)})`;
+  if (h.blinds.ante) bl += `(${kAmt(h.blinds.ante, u)})`;
   return bl;
 }
-/* Compact chip-stack label for raw imported counts: 424224 → "424K". */
-const stackStr = (n) =>
-  n >= 1e6 ? (Math.round(n / 1e5) / 10) + "M" :
-  n >= 1000 ? Math.round(n / 1000) + "K" : String(n);
+/* A stack is already a chip count. */
+const stackStr = (n) => chipStr(n);
 /* Rich hand-view render — classic hand-history layout: a matchup header,
    then one block per street (board so far, new cards bright), then one
    line per action: position · name · (hole cards on first preflop line)
@@ -3868,7 +3868,7 @@ function rungHTML(rg) {
 }
 
 function handHTML(h) {
-  const raw = isRawSize(h);
+  const u = chipUnit(h);
   const posOf = (actor) => actor === "hero" ? h.heroPos : h.villains?.[Number(actor.slice(1))]?.pos;
   const cardsOf = (actor) => actor === "hero" ? h.heroCards : h.villains?.[Number(actor.slice(1))]?.cards;
   const posB = (actor) => posOf(actor) ? `<span class="hv-pos">${esc(posOf(actor))}</span>` : "";
@@ -3885,9 +3885,9 @@ function handHTML(h) {
   let html = `<div class="hv-seats">${seats.join("")}</div>`;
 
   const ctx = [];
-  const bl = blindsStr(h, raw);
+  const bl = blindsStr(h);
   if (bl) ctx.push(bl);
-  if (h.effStack) ctx.push(`${kAmt(h.effStack, raw)} eff`);
+  if (h.effStack) ctx.push(`${kAmt(h.effStack, u)} eff`);
   if (h.squid) {
     const s = [];
     if (h.squid.have != null) s.push(`${h.squid.have}🦑`);
@@ -3924,16 +3924,16 @@ function handHTML(h) {
     const lines = acts.map(({ a, i }) => {
       const cs = st === "pre" && !shownCards.has(a.actor) ? cardsOf(a.actor) : null;
       if (st === "pre") shownCards.add(a.actor);
-      const { verb, sz, to } = actParts(a, raw);
+      const { verb, sz, to } = actParts(a);
       // relative sizes (%, pot, x) also show the resolved chip amount
       const amt = sz && /%|pot|over|x$/i.test(a.size || "") && pe.perAct[i]
-        ? ` <span class="hv-amt">${potStr(pe.perAct[i], raw)}</span>` : "";
+        ? ` <span class="hv-amt">${potStr(pe.perAct[i], u)}</span>` : "";
       return `<div class="hv-line">${posB(a.actor)}<b>${esc(actorLabel(h, a.actor))}</b>${hole(cs)}` +
         `<span class="hv-verb">${esc(verb)}${to ? " to" : ""}</span>` +
         (sz ? `<b class="hv-size">${esc(sz)}</b>` : "") + amt + rungHTML(rungs.get(a)) + `</div>`;
     }).join("");
     const potH = st !== "pre" && pe.atStart[st] > 0
-      ? `<span class="hv-pot">${potStr(pe.atStart[st], raw)}</span>` : "";
+      ? `<span class="hv-pot">${potStr(pe.atStart[st], u)}</span>` : "";
     blocks.push(`<div class="hv-block">
       <div class="hv-sthead"><span class="hv-st">${st === "pre" ? "PREFLOP" : st.toUpperCase()}</span>` +
       (boardH ? `<span class="hv-board">${boardH}</span>` : "") + potH + `</div>${lines}</div>`);
@@ -3975,6 +3975,36 @@ function renderHandView(id) {
   renderHandPager(id);
 }
 
+/* The hand after this one in the run, or null at the end of it. The replayer's
+   Next-hand button and the pager are the same hop. */
+function hvNextId(d) {
+  const ids = handPlay?.ids || [];
+  const i = ids.indexOf(curHandId);
+  return i < 0 ? null : (ids[i + d] || null);
+}
+function hvStep(d) {
+  const id = hvNextId(d);
+  if (id) location.hash = "#handview/" + id;
+}
+
+/* One row of the run, laid out like the hand list in the app the hands come
+   from: number, the cards the player you are reading turned up, his seat, how
+   many were dealt in, the stakes. The cards are his and not Hero's because the
+   run is a run through one opponent's hands. */
+let hvListOpen = false;
+function hvRowHTML(h, n, cur) {
+  const vi = (h.villains || []).findIndex((v) => v.opponentId === handPlay.oppId);
+  const who = vi >= 0 ? h.villains[vi] : (h.hero === false ? null : { pos: h.heroPos, cards: h.heroCards });
+  const cards = (who?.cards || []).filter(Boolean);
+  const seats = (h.villains || []).filter((v) => v.pos).length + (h.hero === false ? 0 : 1);
+  return `<button class="hvrow${cur ? " on" : ""}" data-hvgo="${esc(h.id)}">` +
+    `<span class="hvn">${n}</span>` +
+    `<span class="hvc">${cards.length ? tilesHTML(cards) : `<span class="hvnc">··</span>`}</span>` +
+    `<span class="hvp">${esc(who?.pos || "")}</span>` +
+    `<span class="hvs">${seats || ""}</span>` +
+    `<span class="hvb">${esc(blindsStr(h))}</span></button>`;
+}
+
 /* The playlist is re-checked against HANDS on every hop rather than trusted,
    so a hand deleted mid-run drops out of the run instead of dead-ending it. */
 function renderHandPager(id) {
@@ -3983,13 +4013,22 @@ function renderHandPager(id) {
   const ids = (handPlay?.ids || []).filter((x) => HANDS.some((h) => h.id === x));
   const i = ids.indexOf(id);
   box.classList.toggle("hidden", i < 0);
+  box.classList.toggle("open", hvListOpen);
   if (i < 0) return;
   handPlay.ids = ids;
   const o = oppById(handPlay.oppId);
   box.innerHTML =
-    `<button class="chip mini" data-hvstep="-1"${i === 0 ? " disabled" : ""}>‹ Prev</button>` +
-    `<span class="hvpos">${o ? esc(o.name) + " · " : ""}${i + 1} / ${ids.length}${handPlay.filtered ? " · filtered" : ""}</span>` +
-    `<button class="chip mini" data-hvstep="1"${i === ids.length - 1 ? " disabled" : ""}>Next ›</button>`;
+    `<div class="hvpbar">` +
+      `<button class="chip mini" data-hvstep="-1"${i === 0 ? " disabled" : ""}>‹</button>` +
+      `<button class="hvpos" data-hvlist>${o ? esc(o.name) + " · " : ""}${i + 1} / ${ids.length}${handPlay.filtered ? " · filtered" : ""} <i>${hvListOpen ? "⌃" : "⌄"}</i></button>` +
+      `<button class="chip mini" data-hvstep="1"${i === ids.length - 1 ? " disabled" : ""}>›</button>` +
+    `</div>` +
+    (hvListOpen ? `<div class="hvlist">${ids.map((x, k) => {
+      const hh = HANDS.find((y) => y.id === x);
+      return hh ? hvRowHTML(hh, k + 1, x === id) : "";
+    }).join("")}</div>` : "");
+  const box2 = box.querySelector(".hvlist"), cur = box2 && box2.querySelector(".hvrow.on");
+  if (box2 && cur) box2.scrollTop = Math.max(0, cur.offsetTop - box2.clientHeight / 2 + cur.offsetHeight / 2);
 }
 
 /* ================= Data / backup ================= */
@@ -4696,7 +4735,7 @@ function lineText(d) {
   if (heroPresent(d) && (d.heroPos || d.heroCards.some(Boolean)))
     parts.push("Hero" + (d.heroPos ? " " + d.heroPos : "") +
       (d.heroCards.some(Boolean) ? " " + cardsStr(d.heroCards) : ""));
-  if (d.effStack) parts.push("eff " + d.effStack + "K");
+  if (d.effStack) parts.push("eff " + d.effStack);
   if (d.squidHave || d.squidLeft)
     parts.push("squid " + (d.squidHave || "?") + "/" + (d.squidLeft || "?"));
   for (const st of STREETS) {
@@ -5059,10 +5098,7 @@ function estimatePot(src, actions) {
   }
   return { atStart, now: potNow(), curBet, perAct };
 }
-const potStr = (n, raw = false) => !n ? "" :
-  raw
-    ? "≈" + Math.round(n)
-    : "≈" + (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + "K";
+const potStr = (n, u = 1) => !n ? "" : "≈" + chipStr(n * u);
 
 /* Size options depend on the action: open raise = chip amounts, 3bet+ = multipliers. */
 function sizesFor(a) {
@@ -5342,7 +5378,7 @@ function renderActionPad() {
     if (isOpenRaise(last) && bb > 0) {
       btns = openSizeButtons(bb).map(({ n, chips }) =>
         `<button class="sizebtn" data-size="$${chips}" data-bbsize="${n}">` +
-        `<span class="sz">${chips}K</span><span class="amt">${n}bb</span></button>`).join("") +
+        `<span class="sz">${chipStr(chips)}</span><span class="amt">${n}bb</span></button>`).join("") +
       `<button class="sizebtn" data-size="Jam"><span class="sz">Jam</span></button>`;
     } else {
       btns = sizesFor(last).map((s) => {
@@ -6048,12 +6084,15 @@ function bindStatic() {
     $("hv-textbtn").textContent = on ? "Show the written hand" : "Hide the written hand";
   };
   $("hv-pager").onclick = (e) => {
+    if (e.target.closest("[data-hvlist]")) {
+      hvListOpen = !hvListOpen; renderHandPager(curHandId); return;
+    }
+    const g = e.target.closest("[data-hvgo]");
+    if (g) { location.hash = "#handview/" + g.dataset.hvgo; return; }
     const b = e.target.closest("[data-hvstep]");
-    if (!b || b.disabled) return;
-    const ids = handPlay?.ids || [];
-    const i = ids.indexOf(curHandId) + Number(b.dataset.hvstep);
-    if (i >= 0 && i < ids.length) location.hash = "#handview/" + ids[i];
+    if (b && !b.disabled) hvStep(Number(b.dataset.hvstep));
   };
+  $("hv-log").onclick = rpClick;
 
   // opponents list
   $("opp-search").oninput = renderOpponents;
@@ -6865,7 +6904,12 @@ function bindStatic() {
 function handListClick(e) {
   if (e.target.closest("[data-nocards]")) { noCardsOpen = !noCardsOpen; if (curOppId) renderOppDetail(curOppId); return; }
   const r = e.target.closest("[data-hand]");
-  if (r) location.hash = "#handview/" + r.dataset.hand;
+  if (!r) return;
+  /* Opening a hand from a list puts you in that list's run, so the replayer's
+     Next hand and the hand list beside it always have somewhere to go. */
+  if (curOppId && oppListIds.includes(r.dataset.hand))
+    handPlay = { oppId: curOppId, ids: [...oppListIds], filtered: handFiltersActive() };
+  location.hash = "#handview/" + r.dataset.hand;
 }
 
 async function loadBlindsDefault() {
