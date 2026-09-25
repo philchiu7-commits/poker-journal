@@ -736,6 +736,30 @@ const SZ_JAM_OVER = 1.5;
 const sizeStepFor = (r, act) =>
   act === "jam" || r > SZ_JAM_OVER ? "jam"
     : (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[SZ_CUTS.length - 1])[1];
+/* Which of Phil's own B33/B50/B66/B75/B100/B150 buttons each aggressive action
+   would have been, keyed by the action object so a bet is never matched to
+   another bet of the same size on the same street. The arithmetic is the
+   Sizings grid's, deliberately: a bet against the pot it went into, a raise
+   against the pot with the call already in it — 89% of his raises land on a
+   rung that way against 27% for the size he raises *to*. An action whose
+   amount or pot can't be rebuilt gets no rung rather than a guessed one; a jam
+   keeps its column whatever it cost. */
+function handRungs(h) {
+  const priced = new Map(betsVsPot(h).map((e) => [e.a, e]));
+  const out = new Map();
+  for (const a of h.actions || []) {
+    if (!SZ_AGG.has(a.act)) continue;
+    const e = priced.get(a);
+    if (!e || e.bad) { if (a.act === "jam") out.set(a, { step: "jam", ratio: null, raise: false }); continue; }
+    const raise = !!e.raise;
+    const ratio = e.ratio !== null && e.ratio !== undefined ? e.ratio
+      : raise ? (e.potAfterCall > 0 && e.over > 0 ? e.over / e.potAfterCall : null)
+        : (e.pot > 0 && e.bet > 0 ? e.bet / e.pot : null);
+    if (ratio === null && a.act !== "jam") continue;
+    out.set(a, { step: sizeStepFor(ratio, a.act), ratio, raise });
+  }
+  return out;
+}
 /* → { rows: { "flop-v": { "50": {n, ids:[]} … } }, split, n, skipped:{…}, why:{…} }
    Walks *his* postflop bets rather than the entries the money-walk managed to
    produce, so every bet that doesn't reach the grid can say which thing was

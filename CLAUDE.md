@@ -151,11 +151,24 @@ for (const f of ["index.html","vocab.js","stats.js","pinyin.js","db.js","app.js"
   for a 200 big blind) while every action `size` is in chips, so 148 of 347
   hands were reading their pot ~1000x too small and filing a 59%-pot turn bet
   under B100. A chip denomination is a whole number, so `b.bb < 1` is the tell
-  and the blinds are scaled by 1000. The `ante` is now counted too — **once for
-  the table, not once per seat**: these are big-blind-ante games, and Phil's own
-  known 66% turn bet comes out B50 under a per-seat reading and B66 under this
-  one. Any new import source must land in chips or in sub-1 k-units, nothing in
-  between.
+  and the blinds are scaled by 1000. The `ante` is counted too — **once per seat
+  dealt in, not once for the table** (Phil, confirmed 2026-09-26; the v147 note
+  here claimed the opposite and was wrong). Measured against his own
+  B33/B50/B66/B75/B100 buttons across 961 postflop bets, per seat lands 97% of
+  them within a point of a rung and one ante for the table lands 7% — the
+  buttons size off the real pot, so a pot rebuilt light shows a B50 as a 59%.
+  Same answer on his hand-typed hands, so it is not a DX quirk, and 34% of
+  postflop bets change rung between the two rules. Worked example, an 8-handed
+  50/100/200 with a 200 ante: antes 8x200 = 1600 plus blinds 350 = 1950, a 2350
+  open and two calls make it 8800, and the 4400 flop bet is a clean B50; one
+  ante for the table makes that pot 7400 and the same bet reads 59.5% -> B66.
+  A straddle is only live when a seat is recorded in `STD`: `std` is a property
+  of the table, not of the hand, and 15 hands in the export carry one with
+  nobody sitting there. `estimatePot` (app.js), which draws the written hand's
+  per-street pot headers and the hand-entry % buttons, follows both rules so the
+  two money models never quote different pots — they agree on every flop, turn
+  and river pot in the export. Any new import source must land in chips or in
+  sub-1 k-units, nothing in between.
   **The DX screen-reader drops decimal points**, and `SZ_MAX_POT` (v148) is the
   guard: a non-jam postflop bet over 3x the pot is treated as a corrupt amount
   and ends the hand's walk, exactly as a missing one does. `19.72K` comes back

@@ -812,6 +812,14 @@ textarea.noteedit { margin-bottom: 0; }
 
 .hv-pot { color: var(--muted); font-size: 12px; font-weight: 600; margin-left: auto; }
 .hv-amt { color: var(--muted); font-size: 12px; font-weight: 600; }
+/* The B33/B50/… rung beside a bet. A raise is priced off a different pot —
+   the one with the call in it — so it gets its own colour rather than reading
+   as the same measurement the bets carry. */
+.rung { font-size: 10px; font-weight: 800; letter-spacing: .03em;
+  color: var(--blue); border: 1px solid var(--line); border-radius: 999px;
+  padding: 0 5px; margin-left: 2px; white-space: nowrap; }
+.rung.raise { color: #f0b849; }
+.rpbub .rung { color: inherit; border-color: transparent; background: rgba(0,0,0,.17); }
 #he-sizes .chip i { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 4px; font-weight: 600; }
 .hv-result { margin-top: 8px; font-size: 14px; font-weight: 600; }
 .hv-result.won { color: var(--good); }

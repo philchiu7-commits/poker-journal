@@ -3854,6 +3854,19 @@ const stackStr = (n) =>
    then one block per street (board so far, new cards bright), then one
    line per action: position · name · (hole cards on first preflop line)
    · "opens to 40K". */
+/* The B33/B50/… button each bet or raise would have been, off `handRungs`.
+   Shown on raises too, which is the whole point: the number written down is
+   what he raised *to*, and the rung is the share he put in on top of the call,
+   so "raise to 6.8K" and "B50" are two different readings of one action. */
+function rungHTML(rg) {
+  if (!rg) return "";
+  const pct = rg.ratio === null || rg.ratio === undefined ? null : Math.round(rg.ratio * 100);
+  const lbl = (SIZING_STEP_BY_ID[rg.step] || {}).label || rg.step;
+  const tip = pct === null ? "All in"
+    : `${pct}% of the pot${rg.raise ? " with the call in it" : ""}`;
+  return ` <span class="rung${rg.raise ? " raise" : ""}" title="${esc(tip)}">${esc(lbl)}</span>`;
+}
+
 function handHTML(h) {
   const raw = isRawSize(h);
   const posOf = (actor) => actor === "hero" ? h.heroPos : h.villains?.[Number(actor.slice(1))]?.pos;
@@ -3896,6 +3909,7 @@ function handHTML(h) {
   }
 
   const pe = estimatePot(h, h.actions);
+  const rungs = handRungs(h);
   const b = h.board || [];
   const upTo = { flop: 3, turn: 4, river: 5 };   // board shown cumulatively per street
   const newAt = { pre: 0, flop: 0, turn: 3, river: 4 };
@@ -3916,7 +3930,7 @@ function handHTML(h) {
         ? ` <span class="hv-amt">${potStr(pe.perAct[i], raw)}</span>` : "";
       return `<div class="hv-line">${posB(a.actor)}<b>${esc(actorLabel(h, a.actor))}</b>${hole(cs)}` +
         `<span class="hv-verb">${esc(verb)}${to ? " to" : ""}</span>` +
-        (sz ? `<b class="hv-size">${esc(sz)}</b>` : "") + amt + `</div>`;
+        (sz ? `<b class="hv-size">${esc(sz)}</b>` : "") + amt + rungHTML(rungs.get(a)) + `</div>`;
     }).join("");
     const potH = st !== "pre" && pe.atStart[st] > 0
       ? `<span class="hv-pot">${potStr(pe.atStart[st], raw)}</span>` : "";
@@ -4987,14 +5001,32 @@ function heroResultFrom(h, win) {
 function estimatePot(src, actions) {
   const num = (v) => { const n = Number(v); return isFinite(n) && n > 0 ? n : 0; };
   const sb = num(src.sb ?? src.blinds?.sb), bb = num(src.bb ?? src.blinds?.bb), std = num(src.std ?? src.blinds?.std);
+  /* The ante is dead money like the blinds, and it is posted by every seat
+     dealt in, not once for the table — measured against Phil's own sizing
+     buttons in potWalk. Leaving it out read an 8-handed 50/100 game with a 200
+     ante as a 350 preflop pot instead of 1950, which made every street pot in
+     the written hand several times too small.
+     No unit conversion here, unlike potWalk: this works in whatever unit the
+     hand is written in, and the two never mix — across the export every hand
+     with a fractional big blind writes its sizes in k ("2.9k") and every hand
+     with a whole one writes them in chips ("$2350"), 882 of 882. */
+  const ante = num(src.ante ?? src.blinds?.ante);
   const eff = num(src.effStack);
-  const unit = std || bb;                        // price of entry preflop
+  const dealt = new Set((src.villains || []).map((v) => v.pos).filter(Boolean));
+  if (src.heroPos) dealt.add(src.heroPos);
+  /* `std` is a property of the table, not of the hand, so it only counts as
+     real money once somebody is sitting in the seat that posts it — potWalk's
+     rule, mirrored here so the written hand and the sizing grid never quote
+     two different pots. 15 hands in the export carry a straddle in `blinds`
+     with nobody in STD, and they were the only ones the two disagreed on. */
+  const straddle = dealt.has("STD") ? std : 0;
+  const unit = straddle || bb;                   // price of entry preflop
   let street = "pre", contrib = {}, curBet = unit;
   // Blinds posted by players in the hand are their preflop contribution (so
   // SB completing or BB calling isn't counted twice); the rest is dead money.
   const posOf = (p) => p === "hero" ? (src.hero === false ? null : src.heroPos) : src.villains?.[Number(p.slice(1))]?.pos;
-  const blindOf = { SB: sb, BB: bb, STD: std }, claimed = new Set();
-  let dead = sb + bb + std;
+  const blindOf = { SB: sb, BB: bb, STD: straddle }, claimed = new Set();
+  let dead = sb + bb + straddle + ante * Math.max(1, dealt.size);
   for (const p of ["hero", ...(src.villains || []).map((_, i) => "v" + i)]) {
     const pos = posOf(p);
     if (!blindOf[pos] || claimed.has(pos)) continue;

@@ -1,5 +1,5 @@
 /* Service worker: cache the app shell so it runs offline once installed. */
-const CACHE = "journal-v232";
+const CACHE = "journal-v233";
 const PREFIX = "journal-";   // other apps share this origin on GitHub Pages
 const ASSETS = [
   ".", "index.html", "style.css", "app.js", "replay.js", "db.js", "vocab.js", "stats.js", "pinyin.js",

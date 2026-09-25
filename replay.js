@@ -66,9 +66,10 @@ function rpBuild(h) {
   const folded = new Set();
   const streetOf = () => Object.values(inv).reduce((s, v) => s + v, 0);
 
+  const rungs = handRungs(h);
   const frames = [];
-  const snap = (street, note, actor) => frames.push({
-    street, note, actor, money,
+  const snap = (street, note, actor, rung) => frames.push({
+    street, note, actor, rung, money,
     pot: settled + streetOf(),
     inv: { ...inv }, folded: new Set(folded),
     boardN: Math.min(RP_BOARD_N[street], board.length),
@@ -101,7 +102,7 @@ function rpBuild(h) {
       } else if (a.act === "call" || a.act === "limp") {
         if (money) inv[a.actor] = level;
       }
-      snap(st, rpActText(a, raw), a.actor);
+      snap(st, rpActText(a, raw), a.actor, rungs.get(a));
     }
   }
   /* The runout is on record even when the betting stopped early, so the last
@@ -166,7 +167,7 @@ function rpDraw() {
     const inFront = f.money ? (f.inv[s.actor] || 0) : 0;
     const cards = s.cards.length ? s.cards.map((c) => tileHTML(c)).join("") : `<span class="rpback"></span><span class="rpback"></span>`;
     return `<div class="rpseat${out ? " out" : ""}${live ? " live" : ""}" style="left:${x}%;top:${y}%">
-      ${live && f.note ? `<div class="rpbub">${esc(f.note)}</div>` : ""}
+      ${live && f.note ? `<div class="rpbub">${esc(f.note)}${rungHTML(f.rung)}</div>` : ""}
       <div class="rpcards">${cards}</div>
       <div class="rpname"><span class="rppos">${esc(s.pos)}</span>${esc(s.name)}</div>
       ${s.chips ? `<div class="rpstack">${rpAmt(Number(s.chips), r.raw)}</div>` : ""}
