@@ -3955,7 +3955,7 @@ function renderImportLog() {
       box.innerHTML = `<div class="muted sub2">Nothing yet — every import from here on leaves a receipt, and you can take it back out again from this panel.</div>`;
       return;
     }
-    box.innerHTML = `<div class="muted sub2">Remove takes an import back out — what it added goes, what it wrote over comes back. Anything you've edited since is left alone.</div>` + log.map((e) => {
+    box.innerHTML = `<div class="muted sub2">Receipts stay until you clear them. Remove takes an import back out — what it added goes, what it wrote over comes back. Anything you've edited since is left alone. Clear drops the receipt and leaves the data.</div>` + log.map((e) => {
       const n = (c, w) => (c ? `${c} ${w}${c === 1 ? "" : "s"}` : null);
       const bits = [n(e.counts.opponents, "new opp"), n(e.counts.merged, "merged opp"),
         n(e.counts.hands, "hand"), n(e.counts.sessions, "session"), n(e.counts.ranges, "range")]
@@ -3966,7 +3966,8 @@ function renderImportLog() {
       return `<div class="row implog">
         <div><div>${esc(e.src || "Imported JSON")}</div>
           <div class="muted sub2">${ago} · ${bits}</div></div>
-        <button class="secondary" data-undoimp="${e.id}">Remove</button></div>`;
+        <div class="implogbtns"><button class="secondary" data-forgetimp="${e.id}">Clear</button>
+          <button class="secondary" data-undoimp="${e.id}">Remove</button></div></div>`;
     }).join("");
   });
 }
@@ -6732,6 +6733,8 @@ function bindStatic() {
   $("data-imports").onclick = (e) => {
     const b = e.target.closest("[data-undoimp]");
     if (b) removeImport(b.dataset.undoimp);
+    const f = e.target.closest("[data-forgetimp]");
+    if (f) forgetImport(f.dataset.forgetimp).then(() => { toast("Receipt cleared — data untouched"); renderData(); });
   };
   $("data-import").onclick = () => $("data-importfile").click();
   $("data-importfile").onchange = async (e) => {

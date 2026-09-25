@@ -259,7 +259,11 @@ function shortDeckReason(data) {
    only the last few are kept. Device-local on purpose: it is not in
    EXPORT_META_KEYS, and a receipt from another phone would name records this
    one never imported. */
-const IMPORT_LOG_KEEP = 4;
+/* Receipts are kept until Phil clears them, not for a set time — four was a
+   cap he could hit in one evening of logging, and the receipt he wanted was
+   always the one that had just been pushed off. The number is a storage guard
+   now, not a policy. */
+const IMPORT_LOG_KEEP = 25;
 const IMP_STORES = ["opponents", "hands", "sessions"];
 const copyRec = (r) => JSON.parse(JSON.stringify(r));
 const markOf = (r) => (r && (r.updatedAt || r.ts || 0)) || 0;
@@ -323,6 +327,13 @@ async function undoImport(logId) {
   }
   await metaSet("importLog", log.filter((l) => l.id !== logId));
   return res;
+}
+
+/* Drop a receipt without touching any data: the import stays, you just stop
+   being offered the undo. */
+async function forgetImport(logId) {
+  const log = (await metaGet("importLog")) || [];
+  await metaSet("importLog", log.filter((l) => l.id !== logId));
 }
 
 /* Merge by id (newer wins); when an incoming opponent's id is new but its NAME

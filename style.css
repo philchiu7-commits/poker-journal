@@ -1275,3 +1275,7 @@ button.statcalc:active { color: var(--accent); }
 .rlctl > .rlgrp + .rlgrp { margin-left: 10px; }
 .scap { font-size: 10px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); }
+
+/* The two receipt actions sit together, Clear first: the one you reach for when
+   the import was fine is also the one that cannot lose anything. */
+.implogbtns { display: flex; gap: 6px; flex-shrink: 0; }
