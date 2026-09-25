@@ -18,6 +18,10 @@ function applySwUpdate() {
   location.reload();
 }
 let curOppId = null, curHandId = null;
+/* Stepping through one player's showdowns without walking back to the list
+   between hands. View state, like which fold is open: what you are reading
+   right now, not something about the player, so it is not stored. */
+let oppSeenIds = [], handPlay = null;
 let editNoteId = null, editExploitId = null;
 let storageDurable = false;
 let showSuggestedExploits = {};   // per-opponent toggle for suggested exploits (oppId -> bool)
@@ -3593,7 +3597,14 @@ function renderOppDetail(id) {
   // collapsed group so they don't bury the reviewable spots.
   const seen = hands.filter((h) => cardsSeen(h, id));
   const noCards = hands.filter((h) => !cardsSeen(h, id));
-  const seenHTML = seen.map((h) => handRowHTML(h, id)).join("");
+  oppSeenIds = seen.map((h) => h.id);
+  const seenHead = seen.length > 1
+    ? `<div class="grouphead seenhead">
+         <span class="tagcat">Cards seen</span>
+         <span class="gcount">${seen.length}</span>
+         <button class="chip mini playbtn" data-playhands title="Open the first and step through them">▶ Play through</button>
+       </div>` : "";
+  const seenHTML = seenHead + seen.map((h) => handRowHTML(h, id)).join("");
   const noCardsHTML = noCards.length
     ? `<div class="grouphead nocardshead">
          <button class="groupcollapse" data-nocards>
@@ -3925,6 +3936,24 @@ function renderHandView(id) {
   if (!h) { location.hash = "#opponents"; return; }
   curHandId = id;
   $("hv-text").innerHTML = handHTML(h);
+  renderHandPager(id);
+}
+
+/* The playlist is re-checked against HANDS on every hop rather than trusted,
+   so a hand deleted mid-run drops out of the run instead of dead-ending it. */
+function renderHandPager(id) {
+  const box = $("hv-pager");
+  if (!box) return;
+  const ids = (handPlay?.ids || []).filter((x) => HANDS.some((h) => h.id === x));
+  const i = ids.indexOf(id);
+  box.classList.toggle("hidden", i < 0);
+  if (i < 0) return;
+  handPlay.ids = ids;
+  const o = oppById(handPlay.oppId);
+  box.innerHTML =
+    `<button class="chip mini" data-hvstep="-1"${i === 0 ? " disabled" : ""}>‹ Prev</button>` +
+    `<span class="hvpos">${o ? esc(o.name) + " · " : ""}${i + 1} / ${ids.length}</span>` +
+    `<button class="chip mini" data-hvstep="1"${i === ids.length - 1 ? " disabled" : ""}>Next ›</button>`;
 }
 
 /* ================= Data / backup ================= */
@@ -5957,6 +5986,13 @@ function bindStatic() {
     b.onclick = () => { location.hash = "#" + b.dataset.tab; });
   document.querySelectorAll("[data-back]").forEach((b) =>
     b.onclick = () => history.back());
+  $("hv-pager").onclick = (e) => {
+    const b = e.target.closest("[data-hvstep]");
+    if (!b || b.disabled) return;
+    const ids = handPlay?.ids || [];
+    const i = ids.indexOf(curHandId) + Number(b.dataset.hvstep);
+    if (i >= 0 && i < ids.length) location.hash = "#handview/" + ids[i];
+  };
 
   // opponents list
   $("opp-search").oninput = renderOpponents;
@@ -6762,6 +6798,12 @@ function bindStatic() {
 
 function handListClick(e) {
   if (e.target.closest("[data-nocards]")) { noCardsOpen = !noCardsOpen; if (curOppId) renderOppDetail(curOppId); return; }
+  if (e.target.closest("[data-playhands]")) {
+    if (!oppSeenIds.length) return;
+    handPlay = { oppId: curOppId, ids: [...oppSeenIds] };
+    location.hash = "#handview/" + oppSeenIds[0];
+    return;
+  }
   const r = e.target.closest("[data-hand]");
   if (r) location.hash = "#handview/" + r.dataset.hand;
 }

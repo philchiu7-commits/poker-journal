@@ -1279,3 +1279,14 @@ button.statcalc:active { color: var(--accent); }
 /* The two receipt actions sit together, Clear first: the one you reach for when
    the import was fine is also the one that cannot lose anything. */
 .implogbtns { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* Stepping through a player's showdowns: the two taps that move you sit at the
+   thumb-reachable edges, the counter between them, pinned under the header so
+   a long hand does not scroll them away. */
+.hvpager { position: sticky; top: 0; z-index: 5; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; padding: 7px 10px; margin: 0 0 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.hvpager .hvpos { font-size: 12px; color: var(--muted); text-align: center; flex: 1; }
+.hvpager button[disabled] { opacity: .35; }
+.grouphead.seenhead { display: flex; align-items: center; gap: 8px; }
+.grouphead.seenhead .playbtn { margin-left: auto; }
