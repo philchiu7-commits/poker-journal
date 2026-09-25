@@ -1,8 +1,8 @@
 /* Service worker: cache the app shell so it runs offline once installed. */
-const CACHE = "journal-v230";
+const CACHE = "journal-v231";
 const PREFIX = "journal-";   // other apps share this origin on GitHub Pages
 const ASSETS = [
-  ".", "index.html", "style.css", "app.js", "db.js", "vocab.js", "stats.js", "pinyin.js",
+  ".", "index.html", "style.css", "app.js", "replay.js", "db.js", "vocab.js", "stats.js", "pinyin.js",
   "import.html", "convert.html",
   "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];

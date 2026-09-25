@@ -906,6 +906,7 @@ function route() {
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
   hideSheet();
+  if (v !== "handview" && typeof rpStop === "function") rpStop();
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
      table: renderTableTab, handview: () => renderHandView(arg), ranges: renderRangeLib,
      data: renderData })[v]();
@@ -3938,6 +3939,7 @@ function renderHandView(id) {
   if (!h) { location.hash = "#opponents"; return; }
   curHandId = id;
   $("hv-text").innerHTML = handHTML(h);
+  renderReplay(h);
   renderHandPager(id);
 }
 
@@ -5988,6 +5990,13 @@ function bindStatic() {
     b.onclick = () => { location.hash = "#" + b.dataset.tab; });
   document.querySelectorAll("[data-back]").forEach((b) =>
     b.onclick = () => history.back());
+  $("hv-transport").onclick = rpClick;
+  /* The written hand is still the fastest way to read a line you already know,
+     so it stays one tap under the table rather than being replaced by it. */
+  $("hv-textbtn").onclick = () => {
+    const t = $("hv-text"), on = t.classList.toggle("hidden");
+    $("hv-textbtn").textContent = on ? "Show the written hand" : "Hide the written hand";
+  };
   $("hv-pager").onclick = (e) => {
     const b = e.target.closest("[data-hvstep]");
     if (!b || b.disabled) return;
