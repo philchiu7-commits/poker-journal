@@ -1288,36 +1288,28 @@ button.statcalc:active { color: var(--accent); }
    the import was fine is also the one that cannot lose anything. */
 .implogbtns { display: flex; gap: 6px; flex-shrink: 0; }
 
-/* Stepping through a player's showdowns: the two taps that move you sit at the
-   thumb-reachable edges, the counter between them, pinned under the header so
-   a long hand does not scroll them away. */
-/* Pinned while it is one line; opened out it scrolls with the page, so the
-   list never sits on top of the felt. */
-.hvpager.open { position: static; }
-.hvpager { position: sticky; top: 0; z-index: 5; padding: 6px 8px; margin: 0 0 6px;
+/* The run as a strip: every hand in it, scrolling sideways, the open one lit. */
+.hvpager { padding: 4px 6px 6px; margin: 0 0 6px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .hvpbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.hvpager .hvpos { font-size: 12px; color: var(--muted); text-align: center; flex: 1;
-  background: none; border: 0; padding: 4px 0; }
-.hvpager .hvpos i { font-style: normal; color: var(--accent); margin-left: 2px; }
+.hvpager .hvpos { font-size: 11.5px; color: var(--muted); text-align: center; flex: 1; padding: 2px 0; }
 .hvpager button[disabled] { opacity: .35; }
-/* The run as a list, the way the app the hands came from shows it: number,
-   the cards he turned up, his seat, how many were dealt in, the stakes. */
-.hvlist { max-height: 210px; overflow-y: auto; margin-top: 6px;
-  border-top: 1px solid var(--line); }
-.hvrow { display: grid; grid-template-columns: 26px 62px 34px 20px 1fr;
-  align-items: center; gap: 6px; width: 100%; text-align: left; padding: 5px 4px;
-  background: none; border: 0; border-bottom: 1px solid rgba(255,255,255,.05);
-  font-size: 11.5px; color: var(--text); }
-.hvrow.on { background: #1d3050; }
-.hvrow .hvn { color: var(--muted); font-variant-numeric: tabular-nums; }
+.hvlist { display: flex; gap: 5px; overflow-x: auto; margin-top: 4px; padding: 2px 1px 4px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.hvrow { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 62px; padding: 4px 5px; scroll-snap-align: center;
+  background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 9px;
+  font-size: 10.5px; color: var(--text); }
+.hvrow.on { background: #1d3050; border-color: var(--accent); }
+.hvrow .hvn { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 10px; }
 .hvrow .hvc { display: flex; gap: 2px; }
-.hvrow .hvc .ctile { font-size: 11px; padding: 0 3px; box-shadow: none; }
-.hvrow .hvc .ctile .suit { font-size: 9px; }
+.hvrow .hvc .ctile { font-size: 12px; padding: 1px 4px; box-shadow: none; }
+.hvrow .hvc .ctile .suit { font-size: 10px; }
 .hvrow .hvnc { color: var(--muted); letter-spacing: 2px; }
+.hvrow .hvm { display: flex; gap: 4px; }
 .hvrow .hvp { color: var(--accent2); font-weight: 800; }
 .hvrow .hvs, .hvrow .hvb { color: var(--muted); font-variant-numeric: tabular-nums; }
-.hvrow .hvb { text-align: right; }
+.hvrow .hvb { font-size: 9.5px; white-space: nowrap; }
 /* The run is the list, so its button sits with the list's own controls. */
 .cardpanel-head .playbtn { margin: 0 auto 0 12px; color: var(--accent); }
 
@@ -1357,7 +1349,14 @@ button.statcalc:active { color: var(--accent); }
 .rpseat { position: absolute; transform: translate(-50%,-50%); width: 88px;
   display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .rpbody { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.rpseat.low .rpchip { order: -1; }
+.rpseat.low .rpfront { order: -1; }
+.rpfront { display: flex; align-items: center; gap: 4px; min-height: 18px; }
+/* The dealer button: a white disc by the button seat, the way it sits on the
+   felt, so who acts last is read off the table and not off the seat label. */
+.rpdealer { width: 18px; height: 18px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 11px; font-weight: 900;
+  color: #14161b; background: #fff; border: 2px solid #b9bfc9;
+  box-shadow: 0 1px 3px rgba(0,0,0,.55); }
 /* Folding dims the player, never his money: what he put in is still on the
    felt until the street is swept. */
 .rpseat.out .rpbody { opacity: .34; filter: grayscale(.7); }
@@ -1372,16 +1371,53 @@ button.statcalc:active { color: var(--accent); }
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 7px; }
 .rppos { color: var(--accent2); font-weight: 800; margin-right: 4px; }
 .rpseat.live .rppos { color: #0b0d10; }
-.rpstack { font-size: 9.5px; color: rgba(255,255,255,.55); }
+.rpstack { font-size: 10px; font-weight: 700; color: #cfe3ff; font-variant-numeric: tabular-nums; }
 /* What he has in front of him this street — the chips pushed toward the pot,
    and they stay there until the dealer sweeps them at the end of the street. */
-.rpchip { font-size: 10.5px; font-weight: 800; color: #1a1205; background: #ffd98a;
-  border: 1px solid #b98d2f; border-radius: 999px; padding: 1px 6px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.5); }
-/* The action itself, above the seat so it never covers the cards. */
+.rpchip { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800;
+  color: #fff; background: rgba(8,10,14,.82); border: 1px solid rgba(255,255,255,.18);
+  border-radius: 999px; padding: 1px 7px 1px 3px; box-shadow: 0 1px 3px rgba(0,0,0,.5);
+  --chipc: #4a7de0; }
+/* A real chip, not a label: a disc with the dashed edge every casino chip has,
+   coloured by what put it there — orange raise, amber bet, green call, blue
+   blind — so a raise is told from a call across the felt without reading. */
+.rpchip::before { content: ""; width: 13px; height: 13px; border-radius: 50%; flex: none;
+  background: var(--chipc); border: 2px dashed #fff; box-sizing: border-box;
+  box-shadow: 0 2px 0 -1px #000, 0 2px 0 0 var(--chipc); }
+.rpchip.c-bet { --chipc: #f0a020; }
+.rpchip.c-raise { --chipc: #e8452c; }
+.rpchip.c-jam { --chipc: #d61f69; }
+.rpchip.c-call, .rpchip.c-limp { --chipc: #2fb86a; }
+.rpchip.fresh { animation: rpchipin .42s cubic-bezier(.2,.9,.3,1.1) both; }
+@keyframes rpchipin { from { transform: translateY(-16px) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.rpseat.low .rpchip.fresh { animation-name: rpchipinlow; }
+@keyframes rpchipinlow { from { transform: translateY(16px) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+/* The action itself, above the seat so it never covers the cards, in the
+   colour of its kind: the same orange/amber/green as the chip it put in. */
 .rpbub { position: absolute; bottom: 100%; margin-bottom: 3px; white-space: nowrap;
-  font-size: 10.5px; font-weight: 700; color: #0b0d10; background: var(--accent);
-  border-radius: 999px; padding: 2px 8px; box-shadow: var(--shadow); }
+  font-size: 10.5px; font-weight: 800; color: #0b0d10; background: var(--accent);
+  border-radius: 999px; padding: 2px 8px; box-shadow: var(--shadow);
+  animation: rpbubin .25s ease-out both; }
+@keyframes rpbubin { from { transform: translateY(4px); opacity: 0; } to { transform: none; opacity: 1; } }
+.rpseat.k-bet .rpbub { background: #f0a020; }
+.rpseat.k-raise .rpbub { background: #e8452c; color: #fff; }
+.rpseat.k-jam .rpbub { background: #d61f69; color: #fff; }
+.rpseat.k-call .rpbub, .rpseat.k-limp .rpbub { background: #2fb86a; }
+.rpseat.k-check .rpbub { background: #c9d1dc; }
+.rpseat.k-fold .rpbub { background: #6b7280; color: #fff; }
+.rpseat.k-bet .rpname, .rpseat.k-bet .rppos { background: #f0a020; border-color: #f0a020; }
+.rpseat.k-raise .rpname { background: #e8452c; border-color: #e8452c; color: #fff; }
+.rpseat.k-raise .rppos { color: #fff; }
+.rpseat.k-jam .rpname { background: #d61f69; border-color: #d61f69; color: #fff; }
+.rpseat.k-jam .rppos { color: #fff; }
+.rpseat.k-call .rpname, .rpseat.k-limp .rpname { background: #2fb86a; border-color: #2fb86a; }
+.rpseat.k-fold .rpname { background: #6b7280; border-color: #6b7280; color: #fff; }
+.rpseat.k-fold .rppos { color: #fff; }
+/* The acting seat is ringed, so the eye finds it before it reads anything. */
+.rpseat.live .rpcards .ctile, .rpseat.live .rpback { box-shadow: 0 0 0 2px #fff, 0 0 10px 2px rgba(255,255,255,.55); }
+/* The pot lights up as the dealer sweeps a street in. */
+.rppot.swept { animation: rpsweep .55s ease-out both; }
+@keyframes rpsweep { 0% { transform: scale(1.18); background: #ffd98a; color: #1a1205; } 100% { transform: none; } }
 
 .rpfoot { display: flex; align-items: center; gap: 8px; padding: 6px 2px 0; }
 .rpstreet { font-size: 11px; font-weight: 800; letter-spacing: .09em; color: var(--muted); }
@@ -1404,23 +1440,78 @@ button.statcalc:active { color: var(--accent); }
   border-color: var(--accent); font-size: 15px; }
 .rptextbtn { display: block; margin: 0 0 8px; }
 
-/* ===== The running action list =====
+/* ===== The hand history =====
    The half of a replayer you actually read: the felt says where the money is,
-   this says how it got there. Tapping a line steps the table to it. */
-.rplog { max-height: 200px; overflow-y: auto; margin: 0 0 10px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 4px 6px; }
-.rplog-st { display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--muted); padding: 7px 4px 3px; border-bottom: 1px solid var(--line); }
-.rplog-st:first-child { padding-top: 3px; }
-.rplog-pot { letter-spacing: 0; text-transform: none; font-weight: 600; }
-.rplog-row { display: grid; grid-template-columns: 32px minmax(0,1fr) auto;
-  align-items: baseline; gap: 6px; width: 100%; text-align: left;
-  background: none; border: 0; padding: 4px; font-size: 12px; color: var(--text); }
-.rplog-row.on { background: #1d3050; border-radius: 8px; }
-.rplog-row.agg .rplog-act { color: var(--accent); font-weight: 700; }
-.rplog-pos { color: var(--accent2); font-weight: 800; font-size: 10.5px; }
-.rplog-nm { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rplog-act { justify-self: end; white-space: nowrap; }
-.rplog-empty { font-size: 11.5px; color: var(--muted); padding: 6px 4px; }
+   this says how it got there. One column per street, the pot that came into
+   it in the header, a card per action; the blinds up front, the showdown at
+   the end. Scrolls sideways — a phone fits two and a half streets across.
+   Tapping a card steps the table to it. */
+.rphh { margin: 0 0 10px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 6px 0 4px; }
+.rphh-title { font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding: 0 10px 5px; }
+.rphh-cols { position: relative; display: flex; gap: 8px; overflow-x: auto; padding: 0 8px 6px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.rphh-col { flex: 0 0 138px; display: flex; flex-direction: column; gap: 5px; scroll-snap-align: start; }
+.rphh-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
+  background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  padding: 2px 2px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); text-align: left; }
+.rphh-hd b { color: var(--accent2); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+/* One action. The left edge carries the action colour the felt uses — orange
+   is a raise wherever it appears — and the white pill is the action itself. */
+.rphh-card { display: block; width: 100%; text-align: left; background: #16233a;
+  border: 1px solid #243449; border-left: 3px solid var(--kc, #3a4a63); border-radius: 9px;
+  padding: 5px 7px 6px; color: var(--text); font: inherit; }
+.rphh-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rphh-who { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--muted); }
+.rphh-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rphh-pos { flex: none; background: #3a4a63; color: #fff; font-weight: 800; font-size: 9.5px;
+  padding: 1px 5px; border-radius: 6px; letter-spacing: .02em; }
+.rphh-pos.p-d { background: #e6b422; color: #1a1200; }
+.rphh-pos.p-b { background: #4a7de0; }
+.rphh-pos.p-s { background: #8b5cf6; }
+.rphh-act { display: block; margin-top: 4px; background: #f5f7fb; color: #121826; border-radius: 6px;
+  padding: 3px 6px; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.rphh-act .rung { margin-left: 4px; }
+.rphh-allin { display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 4px;
+  background: #d61f69; color: #fff; font-size: 9.5px; font-style: normal; vertical-align: 1px; }
+.rphh-card.k-raise { --kc: #e8452c; }
+.rphh-card.k-bet { --kc: #f0a020; }
+.rphh-card.k-jam { --kc: #d61f69; }
+.rphh-card.k-call, .rphh-card.k-limp { --kc: #2fb86a; }
+.rphh-card.k-check { --kc: #8a94a6; }
+.rphh-card.k-blind { --kc: #4a7de0; }
+.rphh-card.k-fold { --kc: #6b7280; opacity: .72; }
+.rphh-card.k-fold .rphh-act { background: #d7dbe3; color: #3c4351; font-weight: 600; }
+.rphh-card.k-sd { --kc: #cfe3ff; }
+.rphh-card.k-sd.won { border-color: #e6b422; }
+.rphh-sd { display: flex; align-items: center; gap: 3px; }
+.rphh-sd b { margin-left: auto; font-size: 11px; }
+.rphh-sd em { font-weight: 500; color: #6b7280; }
+.rphh-sd .ctile, .rphh-five .ctile { font-size: 11px; padding: 1px 3px; }
+.rphh-win { padding: 4px 2px 0; font-size: 12px; font-weight: 800; color: #e6b422; }
+.rphh-win small { font-weight: 600; color: var(--muted); }
+.rphh-five { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+.rphh-five small { margin-left: 3px; font-size: 10.5px; color: var(--text); font-weight: 600; }
+.rplog-empty { font-size: 11.5px; color: var(--muted); padding: 6px 10px; }
+
+/* The betting line in shorthand, one line, scrolls sideways when it must. */
+.rpline { display: flex; align-items: center; gap: 4px; overflow-x: auto; white-space: nowrap;
+  margin: 0 0 8px; padding: 5px 8px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rpline:empty { display: none; }
+.rpline-st { display: inline-flex; gap: 3px; }
+.rpline-cut { font-style: normal; color: var(--muted); padding: 0 3px; }
+.rptok { background: none; border: 0; padding: 2px 4px; border-radius: 6px; color: var(--muted);
+  font: inherit; }
+.rptok.agg { color: var(--text); }
+.rptok.on { background: var(--accent); color: #0b0d10; }
+/* An action read off the record rather than in it: dashed, so it is never
+   mistaken for something that was written down. */
+.rpbub.inferred { background: transparent; color: var(--accent); border: 1.5px dashed var(--accent); }
+.rphh-card.inferred { border-style: dashed; }
+.rphh-card.inferred .rphh-act { font-style: italic; font-weight: 600; }
+.rphh-card.inferred .rphh-act::after { content: " ?"; color: #b45309; font-style: normal; }

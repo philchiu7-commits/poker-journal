@@ -3983,16 +3983,22 @@ function hvNextId(d) {
   const i = ids.indexOf(curHandId);
   return i < 0 ? null : (ids[i + d] || null);
 }
+/* Hopping along the run swaps the hand in place rather than stacking history,
+   so the header's back arrow leaves the replayer in one tap however many hands
+   were watched; the run's own Prev button is what walks back. */
+function hvOpen(id) {
+  history.replaceState(null, "", "#handview/" + id);
+  route();
+}
 function hvStep(d) {
   const id = hvNextId(d);
-  if (id) location.hash = "#handview/" + id;
+  if (id) hvOpen(id);
 }
 
-/* One row of the run, laid out like the hand list in the app the hands come
+/* One hand of the run, laid out like the hand list in the app the hands come
    from: number, the cards the player you are reading turned up, his seat, how
    many were dealt in, the stakes. The cards are his and not Hero's because the
    run is a run through one opponent's hands. */
-let hvListOpen = false;
 function hvRowHTML(h, n, cur) {
   const vi = (h.villains || []).findIndex((v) => v.opponentId === handPlay.oppId);
   const who = vi >= 0 ? h.villains[vi] : (h.hero === false ? null : { pos: h.heroPos, cards: h.heroCards });
@@ -4001,35 +4007,37 @@ function hvRowHTML(h, n, cur) {
   return `<button class="hvrow${cur ? " on" : ""}" data-hvgo="${esc(h.id)}">` +
     `<span class="hvn">${n}</span>` +
     `<span class="hvc">${cards.length ? tilesHTML(cards) : `<span class="hvnc">··</span>`}</span>` +
-    `<span class="hvp">${esc(who?.pos || "")}</span>` +
-    `<span class="hvs">${seats || ""}</span>` +
+    `<span class="hvm"><span class="hvp">${esc(who?.pos || "")}</span><span class="hvs">${seats || ""}</span></span>` +
     `<span class="hvb">${esc(blindsStr(h))}</span></button>`;
 }
 
 /* The playlist is re-checked against HANDS on every hop rather than trusted,
    so a hand deleted mid-run drops out of the run instead of dead-ending it. */
+/* The run is always in view: a strip of every hand in it that scrolls sideways
+   and is scrolled to the one open, so the next hands are a glance and a tap
+   away. Sideways rather than a rail down the left because at phone width a
+   rail would take the felt down to 260px. */
 function renderHandPager(id) {
   const box = $("hv-pager");
   if (!box) return;
   const ids = (handPlay?.ids || []).filter((x) => HANDS.some((h) => h.id === x));
   const i = ids.indexOf(id);
   box.classList.toggle("hidden", i < 0);
-  box.classList.toggle("open", hvListOpen);
   if (i < 0) return;
   handPlay.ids = ids;
   const o = oppById(handPlay.oppId);
   box.innerHTML =
     `<div class="hvpbar">` +
       `<button class="chip mini" data-hvstep="-1"${i === 0 ? " disabled" : ""}>‹</button>` +
-      `<button class="hvpos" data-hvlist>${o ? esc(o.name) + " · " : ""}${i + 1} / ${ids.length}${handPlay.filtered ? " · filtered" : ""} <i>${hvListOpen ? "⌃" : "⌄"}</i></button>` +
+      `<span class="hvpos">${o ? esc(o.name) + " · " : ""}${i + 1} / ${ids.length}${handPlay.filtered ? " · filtered" : ""}</span>` +
       `<button class="chip mini" data-hvstep="1"${i === ids.length - 1 ? " disabled" : ""}>›</button>` +
     `</div>` +
-    (hvListOpen ? `<div class="hvlist">${ids.map((x, k) => {
+    `<div class="hvlist">${ids.map((x, k) => {
       const hh = HANDS.find((y) => y.id === x);
       return hh ? hvRowHTML(hh, k + 1, x === id) : "";
-    }).join("")}</div>` : "");
-  const box2 = box.querySelector(".hvlist"), cur = box2 && box2.querySelector(".hvrow.on");
-  if (box2 && cur) box2.scrollTop = Math.max(0, cur.offsetTop - box2.clientHeight / 2 + cur.offsetHeight / 2);
+    }).join("")}</div>`;
+  const list = box.querySelector(".hvlist"), cur = list.querySelector(".hvrow.on");
+  if (cur) list.scrollLeft = Math.max(0, cur.offsetLeft - list.clientWidth / 2 + cur.offsetWidth / 2);
 }
 
 /* ================= Data / backup ================= */
@@ -6085,11 +6093,8 @@ function bindStatic() {
     $("hv-textbtn").textContent = on ? "Show the written hand" : "Hide the written hand";
   };
   $("hv-pager").onclick = (e) => {
-    if (e.target.closest("[data-hvlist]")) {
-      hvListOpen = !hvListOpen; renderHandPager(curHandId); return;
-    }
     const g = e.target.closest("[data-hvgo]");
-    if (g) { location.hash = "#handview/" + g.dataset.hvgo; return; }
+    if (g) { hvOpen(g.dataset.hvgo); return; }
     const b = e.target.closest("[data-hvstep]");
     if (b && !b.disabled) hvStep(Number(b.dataset.hvstep));
   };
