@@ -3997,47 +3997,52 @@ function hvStep(d) {
 
 /* One hand of the run, laid out like the hand list in the app the hands come
    from: number, the cards the player you are reading turned up, his seat, how
-   many were dealt in, the stakes. The cards are his and not Hero's because the
-   run is a run through one opponent's hands. */
+   many were dealt in. The cards are his and not Hero's because the run is a
+   run through one opponent's hands — so the box goes green when *his* cards
+   won and red when they lost, read off the same winner the replayer settles
+   on (inferred river folds included). No colour when the hand has no winner
+   on record. */
 function hvRowHTML(h, n, cur) {
   const vi = (h.villains || []).findIndex((v) => v.opponentId === handPlay.oppId);
   const who = vi >= 0 ? h.villains[vi] : (h.hero === false ? null : { pos: h.heroPos, cards: h.heroCards });
+  const actor = vi >= 0 ? "v" + vi : (h.hero === false ? null : "hero");
   const cards = (who?.cards || []).filter(Boolean);
   const seats = (h.villains || []).filter((v) => v.pos).length + (h.hero === false ? 0 : 1);
-  return `<button class="hvrow${cur ? " on" : ""}" data-hvgo="${esc(h.id)}">` +
+  let res = "";
+  try {
+    const w = actor ? rpBuild(h).result : null;
+    // a fold is a loss whether or not the rest of the hand can be scored
+    if ((h.actions || []).some((a) => a.actor === actor && a.act === "fold")) res = " lost";
+    else if (w) res = !w.winners.includes(actor) ? " lost" : w.winners.length > 1 ? " chop" : " won";
+  } catch (e) { /* a hand the replayer cannot build stays uncoloured */ }
+  return `<button class="hvrow${cur ? " on" : ""}${res}" data-hvgo="${esc(h.id)}">` +
     `<span class="hvn">${n}</span>` +
     `<span class="hvc">${cards.length ? tilesHTML(cards) : `<span class="hvnc">··</span>`}</span>` +
-    `<span class="hvm"><span class="hvp">${esc(who?.pos || "")}</span><span class="hvs">${seats || ""}</span></span>` +
-    `<span class="hvb">${esc(blindsStr(h))}</span></button>`;
+    `<span class="hvm"><span class="hvp">${esc(who?.pos || "")}</span><span class="hvs">${seats || ""}</span></span></button>`;
 }
 
 /* The playlist is re-checked against HANDS on every hop rather than trusted,
    so a hand deleted mid-run drops out of the run instead of dead-ending it. */
-/* The run is always in view: a strip of every hand in it that scrolls sideways
-   and is scrolled to the one open, so the next hands are a glance and a tap
-   away. Sideways rather than a rail down the left because at phone width a
-   rail would take the felt down to 260px. */
+/* The run is always in view: a rail down the left of the felt listing every
+   hand in it top to bottom, scrolled to the one open. Prev/Next live in the
+   transport, so the rail only carries the count. */
 function renderHandPager(id) {
   const box = $("hv-pager");
   if (!box) return;
   const ids = (handPlay?.ids || []).filter((x) => HANDS.some((h) => h.id === x));
   const i = ids.indexOf(id);
   box.classList.toggle("hidden", i < 0);
+  box.parentElement.classList.toggle("rail", i >= 0);
   if (i < 0) return;
   handPlay.ids = ids;
-  const o = oppById(handPlay.oppId);
   box.innerHTML =
-    `<div class="hvpbar">` +
-      `<button class="chip mini" data-hvstep="-1"${i === 0 ? " disabled" : ""}>‹</button>` +
-      `<span class="hvpos">${o ? esc(o.name) + " · " : ""}${i + 1} / ${ids.length}${handPlay.filtered ? " · filtered" : ""}</span>` +
-      `<button class="chip mini" data-hvstep="1"${i === ids.length - 1 ? " disabled" : ""}>›</button>` +
-    `</div>` +
+    `<div class="hvpos">${i + 1}/${ids.length}${handPlay.filtered ? `<i>filtered</i>` : ""}</div>` +
     `<div class="hvlist">${ids.map((x, k) => {
       const hh = HANDS.find((y) => y.id === x);
       return hh ? hvRowHTML(hh, k + 1, x === id) : "";
     }).join("")}</div>`;
   const list = box.querySelector(".hvlist"), cur = list.querySelector(".hvrow.on");
-  if (cur) list.scrollLeft = Math.max(0, cur.offsetLeft - list.clientWidth / 2 + cur.offsetWidth / 2);
+  if (cur) list.scrollTop = Math.max(0, cur.offsetTop - list.clientHeight / 2 + cur.offsetHeight / 2);
 }
 
 /* ================= Data / backup ================= */
@@ -6095,8 +6100,6 @@ function bindStatic() {
   $("hv-pager").onclick = (e) => {
     const g = e.target.closest("[data-hvgo]");
     if (g) { hvOpen(g.dataset.hvgo); return; }
-    const b = e.target.closest("[data-hvstep]");
-    if (b && !b.disabled) hvStep(Number(b.dataset.hvstep));
   };
   $("hv-log").onclick = rpClick;
 

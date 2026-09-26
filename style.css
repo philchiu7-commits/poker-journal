@@ -1288,28 +1288,36 @@ button.statcalc:active { color: var(--accent); }
    the import was fine is also the one that cannot lose anything. */
 .implogbtns { display: flex; gap: 6px; flex-shrink: 0; }
 
-/* The run as a strip: every hand in it, scrolling sideways, the open one lit. */
-.hvpager { padding: 4px 6px 6px; margin: 0 0 6px;
+/* The run as a rail down the left of the felt: every hand in it top to
+   bottom, the open one lit, green where the read player's cards won and red
+   where they lost. Absolute so the felt alone sets the row's height and the
+   rail scrolls inside it. */
+.hvside { position: relative; }
+.hvside.rail #hv-table { margin-left: 74px; }
+.hvpager { position: absolute; left: 0; top: 0; bottom: 8px; width: 68px;
+  display: flex; flex-direction: column; padding: 3px 3px 4px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
-.hvpbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.hvpager .hvpos { font-size: 11.5px; color: var(--muted); text-align: center; flex: 1; padding: 2px 0; }
-.hvpager button[disabled] { opacity: .35; }
-.hvlist { display: flex; gap: 5px; overflow-x: auto; margin-top: 4px; padding: 2px 1px 4px;
-  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.hvpager .hvpos { font-size: 10.5px; color: var(--muted); text-align: center; padding: 1px 0 3px;
+  font-variant-numeric: tabular-nums; }
+.hvpager .hvpos i { display: block; font-style: normal; font-size: 9px; }
+.hvlist { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto;
+  scroll-snap-type: y proximity; -webkit-overflow-scrolling: touch; }
 .hvrow { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  min-width: 62px; padding: 4px 5px; scroll-snap-align: center;
-  background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 9px;
+  padding: 3px 2px; scroll-snap-align: center;
+  background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 8px;
   font-size: 10.5px; color: var(--text); }
-.hvrow.on { background: #1d3050; border-color: var(--accent); }
+.hvrow.won { background: rgba(63,185,80,.14); border-color: rgba(63,185,80,.55); }
+.hvrow.lost { background: rgba(248,81,73,.14); border-color: rgba(248,81,73,.55); }
+.hvrow.on { outline: 2px solid var(--accent); outline-offset: -1px; }
+.hvrow.on:not(.won):not(.lost) { background: #1d3050; }
 .hvrow .hvn { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 10px; }
 .hvrow .hvc { display: flex; gap: 2px; }
-.hvrow .hvc .ctile { font-size: 12px; padding: 1px 4px; box-shadow: none; }
-.hvrow .hvc .ctile .suit { font-size: 10px; }
+.hvrow .hvc .ctile { font-size: 11.5px; padding: 1px 3px; box-shadow: none; }
+.hvrow .hvc .ctile .suit { font-size: 9.5px; }
 .hvrow .hvnc { color: var(--muted); letter-spacing: 2px; }
 .hvrow .hvm { display: flex; gap: 4px; }
 .hvrow .hvp { color: var(--accent2); font-weight: 800; }
-.hvrow .hvs, .hvrow .hvb { color: var(--muted); font-variant-numeric: tabular-nums; }
-.hvrow .hvb { font-size: 9.5px; white-space: nowrap; }
+.hvrow .hvs { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* The run is the list, so its button sits with the list's own controls. */
 .cardpanel-head .playbtn { margin: 0 auto 0 12px; color: var(--accent); }
 
@@ -1508,6 +1516,7 @@ button.statcalc:active { color: var(--accent); }
 .rptok { background: none; border: 0; padding: 2px 4px; border-radius: 6px; color: var(--muted);
   font: inherit; }
 .rptok.agg { color: var(--text); }
+.rptok small { font-size: 9.5px; font-weight: 600; margin-left: 2px; opacity: .8; }
 .rptok.on { background: var(--accent); color: #0b0d10; }
 /* An action read off the record rather than in it: dashed, so it is never
    mistaken for something that was written down. */

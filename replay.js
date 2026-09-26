@@ -86,6 +86,8 @@ function rpBuild(h) {
   let settled = ANTE * Math.max(1, dealt.size);
   let level = straddle || BB;
   const folded = new Set();
+  const allIn = new Set();                            // jammed: nothing left to answer with
+  let raised = false;                                 // did the last action raise the level
   const streetOf = () => Object.values(inv).reduce((s, v) => s + v, 0);
   /* What each seat has put in over the whole hand, streets already swept —
      the ante up front, then every street as the dealer takes it. A stack is
@@ -127,7 +129,8 @@ function rpBuild(h) {
       else if (RP_AGG.has(a.act)) {
         const v = money ? (sizeAmount(a.size) ?? sizeMult(a.size, level)) : null;
         if (v === null) money = false;                 // stop the pot, keep replaying
-        else { inv[a.actor] = v; how[a.actor] = rpKind(a.act); level = Math.max(level, v); }
+        else { inv[a.actor] = v; how[a.actor] = rpKind(a.act); raised = v > level; level = Math.max(level, v); }
+        if (a.act === "jam") allIn.add(a.actor);
       } else if (a.act === "call" || a.act === "limp") {
         if (money) { inv[a.actor] = level; how[a.actor] = "call"; }
       }
@@ -148,8 +151,12 @@ function rpBuild(h) {
   const acted = new Set((h.actions || []).map((a) => a.actor));
   const stillIn = () => seats.filter((s) => acted.has(s.actor) && !folded.has(s.actor));
   let inferred = null;
-  if (lastA && RP_AGG.has(lastA.act)) {
-    const live = stillIn().filter((s) => s.actor !== lastA.actor);
+  /* A jam for less than the bet in front of it is an all-in call, and a seat
+     already all-in has nothing to answer with: neither leaves a bet hanging.
+     Reading those as folds handed short all-ins the pot they had lost. */
+  const hanging = lastA && RP_AGG.has(lastA.act) && (lastA.act !== "jam" || !money || raised);
+  if (hanging) {
+    const live = stillIn().filter((s) => s.actor !== lastA.actor && !allIn.has(s.actor));
     if (live.length && h.showdown === false) {
       inferred = "fold";
       for (const s of live) { folded.add(s.actor); snap(lastA.street, "folds", s.actor, null, { street: lastA.street, actor: s.actor, act: "fold", inferred: true }); }
@@ -180,23 +187,33 @@ function rpBuild(h) {
     }
     result = { winners, how: "showdown", hands };
   }
-  const outs = Object.values(inv).sort((x, y) => y - x);
-  const uncalled = outs.length > 1 ? outs[0] - outs[1] : (outs[0] || 0);
+  const outs = Object.entries(inv).sort((x, y) => y[1] - x[1]);
+  const uncalled = outs.length > 1 ? outs[0][1] - outs[1][1] : (outs[0]?.[1] || 0);
   const won = money && result ? last.potSettled + last.potStreet - uncalled : null;
+  /* What goes back onto each stack when the hand ends: the uncalled chips to
+     their owner and the pot to the winners, so the last frame shows the win. */
+  const payout = {};
+  if (money && uncalled) payout[outs[0][0]] = uncalled;
+  if (won !== null) for (const w of result.winners) payout[w] = (payout[w] || 0) + won / result.winners.length;
   sweep();
   frames.push({ ...last, note: null, actor: null, a: null, end: true,
-    potSettled: last.potSettled + last.potStreet, potStreet: 0, inv: {}, paid: { ...paid },
+    potSettled: last.potSettled + last.potStreet - (money ? uncalled : 0), potStreet: 0, inv: {}, paid: { ...paid },
     boardN: board.length });
   /* A seat's starting stack: the one on record for him, or the effective stack
      for Hero when the hand carries one. Nothing is assumed for anyone else —
      a stack the app made up would be wrong on exactly the hands it matters. */
   seats.forEach((s) => {
     if (s.chips) s.start = s.chips;
+    /* All-in is the whole stack, so a seat that jammed started with exactly
+       what it put in. Checked on every imported hand that carries stacks: all
+       22 all-in seats match to the chip. Nobody else's stack follows from it. */
+    else if (money && allIn.has(s.actor)) { s.start = paid[s.actor]; s.allInStack = true; }
     else if (s.actor === "hero" && h.effStack > 0) s.start = h.effStack * u;
     else s.start = null;
   });
-  return { seats, unseated, frames, board, h, inferred, result, won, stakes,
-    blinds: { SB, BB, STD, ANTE, dealt: dealt.size }, stacks: seats.some((s) => s.start) };
+  return { seats, unseated, frames, board, h, inferred, result, won, payout, stakes,
+    blinds: { SB, BB, STD, ANTE, dealt: dealt.size }, stacks: seats.some((s) => s.start),
+    allInOnly: seats.some((s) => s.start) && seats.every((s) => !s.start || s.allInStack) };
 }
 
 /* The kind of action, for colour: a raise of any order is a raise, a jam is a
@@ -253,7 +270,7 @@ function rpDraw() {
     /* Live stack: what he started with less everything he has put in. Goes
        quiet once the pot can't be walked, or if the record and the walk
        disagree (a negative stack), rather than show a number that isn't. */
-    const stack = s.start && f.money ? s.start - (f.paid[s.actor] || 0) - inFront : null;
+    const stack = s.start && f.money ? s.start - (f.paid[s.actor] || 0) - inFront + (f.end ? r.payout[s.actor] || 0 : 0) : null;
     const kind = live && f.a ? rpKind(f.a.act) : "";
     /* The chip that just went in slides out from the seat, so the money moving
        is something seen and not worked out from a number changing. */
@@ -268,7 +285,7 @@ function rpDraw() {
       <div class="rpbody">
         <div class="rpcards">${cards}</div>
         <div class="rpname"><span class="rppos">${esc(s.pos)}</span>${esc(s.name)}</div>
-        ${stack !== null && stack >= 0 ? `<div class="rpstack">${chipStr(stack)}</div>` : ""}
+        ${stack !== null && stack >= 0 ? `<div class="rpstack"${s.allInStack ? ` title="Read off the all-in: he put in everything he had"` : ""}>${chipStr(stack)}</div>` : ""}
       </div>
       <div class="rpfront">
         ${s.pos === "BN" ? `<span class="rpdealer" title="Dealer">D</span>` : ""}
@@ -292,7 +309,9 @@ function rpDraw() {
        <span class="rpstreet">${f.end ? "End" : RP_STREET_LABEL[f.street]}</span>
        ${!f.actor && f.note ? `<span class="rpnote">${esc(f.note)}</span>` : ""}
        ${!f.money ? `<span class="rpwarn" title="A bet on this hand has no amount on record, so the pot stops here rather than guess">pot unknown</span>` : ""}
-       ${!r.stacks ? `<span class="rpwarn" title="No starting stacks on record for this hand, so none can be shown">no stacks</span>` : ""}
+       ${!r.stacks && r.h.effStack > 0 ? `<span class="rpnote" title="The effective stack on record: the smaller of the stacks that played the hand, not any one seat's">Eff. stack ${chipStr(r.h.effStack * chipUnit(r.h))}</span>`
+        : !r.stacks ? `<span class="rpwarn" title="No starting stacks on record for this hand, so none can be shown">no stacks</span>` : ""}
+       ${r.allInOnly ? `<span class="rpwarn" title="No stacks on record. An all-in is the whole stack, so those seats show one; the rest are unknown">stacks: all-in seats only</span>` : ""}
        ${r.inferred === "unknown" ? `<span class="rpwarn" title="The last bet has no answer on record and the hand does not say whether it reached showdown">ends on an unanswered bet</span>` : ""}
        ${r.inferred === "fold" || r.inferred === "call" ? `<span class="rpwarn" title="The record stops at the bet; the ${r.inferred} is read off its showdown flag">${r.inferred} not on record</span>` : ""}
        ${r.unseated ? `<span class="rpwarn" title="No position on record, so there is no honest seat for them">${r.unseated} not seated</span>` : ""}
@@ -334,17 +353,41 @@ function rpTok(a, rung, opened) {
   const lbl = rung ? String((SIZING_STEP_BY_ID[rung.step] || {}).label || "").replace(/^B/, "") : "";
   return (opened ? "R" : "B") + lbl;
 }
+/* What the action put in, as the street level it took the seat to — the
+   number a bet, raise, call or jam is read by. Null for checks and folds, and
+   wherever the pot could not be walked. */
+function rpAmt(f) {
+  if (!f.money || !f.a || f.a.act === "check" || f.a.act === "fold") return null;
+  const v = f.inv[f.a.actor];
+  return v > 0 ? v : null;
+}
+/* Seats that only ever folded preflop, in a hand that saw a flop. They never
+   played the hand, so the line and the history leave them out and read as the
+   hand between the players who did (Phil, 2026-09-27). A preflop hand keeps
+   every fold — there the folds are the story. */
+function rpQuiet(h) {
+  const A = h.actions || [];
+  if (!A.some((a) => a.street !== "pre")) return new Set();
+  const q = new Set(A.filter((a) => a.street === "pre" && a.act === "fold").map((a) => a.actor));
+  for (const a of A) if (a.act !== "fold") q.delete(a.actor);
+  return q;
+}
 function rpLine() {
   const box = $("hv-line");
   if (!box) return;
   const { r, i } = rpState;
+  const quiet = rpQuiet(r.h);
   const streets = [];
   let st = null, opened = false, cur = null;
   r.frames.forEach((f, k) => {
     if (!f.a) return;
     if (f.street !== st) { st = f.street; opened = false; cur = []; streets.push(cur); }
     const agg = RP_AGG.has(f.a.act);
-    cur.push(`<button class="rptok${k === i ? " on" : ""}${agg ? " agg" : ""}" data-rpgo="${k}">${esc(rpTok(f.a, f.rung, opened))}</button>`);
+    if (!(f.street === "pre" && quiet.has(f.a.actor))) {
+      const amt = rpAmt(f);
+      cur.push(`<button class="rptok${k === i ? " on" : ""}${agg ? " agg" : ""}" data-rpgo="${k}">${esc(rpTok(f.a, f.rung, opened))}` +
+        `${amt ? `<small>${esc(chipStr(amt))}</small>` : ""}</button>`);
+    }
     if (agg) opened = true;
   });
   box.innerHTML = streets.map((t) => `<span class="rpline-st">${t.join("")}</span>`).join(`<i class="rpline-cut">/</i>`);
@@ -375,6 +418,7 @@ function rpHistory() {
     `<button class="rphh-card${k === i ? " on" : ""} ${cls}" data-rpgo="${k}">${who(actor)}<span class="rphh-act">${act}</span></button>`;
   const head = (k, label, pot) => `<button class="rphh-hd" data-rpgo="${k}"><span>${label}</span><b>${pot}</b></button>`;
   const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  const quiet = rpQuiet(r.h);
   const cols = [];
 
   const f0 = r.frames[0], b = r.blinds;
@@ -392,8 +436,13 @@ function rpHistory() {
     let cards = "";
     r.frames.forEach((f, k) => {
       if (f.street !== st || !f.a || f.end) return;
+      if (st === "pre" && quiet.has(f.a.actor)) return;
       const jam = f.a.act === "jam" || f.rung?.step === "jam";
-      const txt = esc(cap(f.note || f.a.act)) + (jam ? `<i class="rphh-allin">All-in</i>` : rungHTML(f.rung));
+      /* A call carries no size of its own on record, so it borrows the level
+         it matched — every chip action reads with its amount. */
+      const amt = rpAmt(f), sized = /\d/.test(f.note || "");
+      const txt = esc(cap(f.note || f.a.act)) + (amt && !sized ? " " + esc(chipStr(amt)) : "") +
+        (jam ? `<i class="rphh-allin">All-in</i>` : rungHTML(f.rung));
       cards += card(k, f.a.actor, txt, `k-${rpKind(f.a.act)}${f.a.inferred ? " inferred" : ""}`);
     });
     cols.push(`<div class="rphh-col">${head(first, RP_STREET_LABEL[st], ff.money ? chipStr(ff.potSettled + ff.potStreet) : "")}${cards}</div>`);
