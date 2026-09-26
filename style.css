@@ -1465,7 +1465,7 @@ button.statcalc:active { color: var(--accent); }
   background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
   padding: 2px 2px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); text-align: left; }
-.rphh-hd b { color: var(--accent2); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.rphh-hd b { color: var(--accent2); letter-spacing: 0; font-variant-numeric: tabular-nums; text-transform: none; }
 /* One action. The left edge carries the action colour the felt uses — orange
    is a raise wherever it appears — and the white pill is the action itself. */
 .rphh-card { display: block; width: 100%; text-align: left; background: #16233a;

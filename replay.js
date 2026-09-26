@@ -125,16 +125,26 @@ function rpBuild(h) {
       snap(st, null, null);                            // the cards land before anyone acts
     }
     for (const a of A) {
+      let note = rpActText(a), rung = rpRung(rungs.get(a), st), allInCall = false;
       if (a.act === "fold") folded.add(a.actor);
       else if (RP_AGG.has(a.act)) {
         const v = money ? (sizeAmount(a.size) ?? sizeMult(a.size, level)) : null;
         if (v === null) money = false;                 // stop the pot, keep replaying
         else { inv[a.actor] = v; how[a.actor] = rpKind(a.act); raised = v > level; level = Math.max(level, v); }
         if (a.act === "jam") allIn.add(a.actor);
+        /* All in for no more than the bet in front of him is a call, the way
+           the table reads it: no size of his own, so no rung either. */
+        if (a.act === "jam" && money && !raised) { allInCall = true; how[a.actor] = "call"; rung = null; }
+        if (money) {
+          const { verb, to } = actParts(a);
+          note = allInCall ? "calls all-in " + rpBB(v, BB)
+            : (a.act === "jam" ? "jams" : verb) + (a.act === "jam" || to ? " to " : " ") + rpBB(v, BB);
+        }
       } else if (a.act === "call" || a.act === "limp") {
         if (money) { inv[a.actor] = level; how[a.actor] = "call"; }
       }
-      snap(st, rpActText(a), a.actor, rungs.get(a), a);
+      snap(st, note, a.actor, rung, a);
+      if (allInCall) frames[frames.length - 1].allInCall = true;
     }
   }
   /* A hand that ends on a bet nobody answered. The import dropped the last
@@ -219,6 +229,23 @@ function rpBuild(h) {
 /* The kind of action, for colour: a raise of any order is a raise, a jam is a
    jam, everything else is itself. The felt reads by colour before it reads by
    words — orange is a raise wherever it appears, green is a call. */
+/* Amounts in big blinds, the unit a hand is thought in (Phil, 2026-09-27).
+   Chips only where there is no big blind to divide by. */
+function rpBB(n, BB) {
+  if (!(BB > 0)) return chipStr(n);
+  const v = n / BB;
+  return String(v >= 100 ? Math.round(v) : v >= 10 ? +v.toFixed(1) : +v.toFixed(2)) + "bb";
+}
+/* The rung a shove or an overbet would have been. The Sizings grid files
+   both under Jam, but read as a size B300 says more than "all in": what it
+   cost against the pot. Past B150 the fraction itself, to the nearest 10%. */
+function rpRung(rg, street) {
+  if (!rg || rg.step !== "jam") return rg;
+  if (rg.ratio === null || rg.ratio === undefined) return null;
+  if (street === "pre" && rg.ratio > SZ_JAM_OVER) return null;   // an open to 25bb is no "B960"
+  const step = rg.ratio > SZ_JAM_OVER ? "B" + Math.round(rg.ratio * 10) * 10 : sizeStepFor(rg.ratio, "bet");
+  return { ...rg, step };
+}
 const rpKind = (act) => /^(raise|[345]bet)$/.test(act) ? "raise" : act;
 
 /* Short form for the bubble by a seat — "3-bets to 6800", without the name. */
@@ -271,7 +298,7 @@ function rpDraw() {
        quiet once the pot can't be walked, or if the record and the walk
        disagree (a negative stack), rather than show a number that isn't. */
     const stack = s.start && f.money ? s.start - (f.paid[s.actor] || 0) - inFront + (f.end ? r.payout[s.actor] || 0 : 0) : null;
-    const kind = live && f.a ? rpKind(f.a.act) : "";
+    const kind = live && f.a ? (f.allInCall ? "call" : rpKind(f.a.act)) : "";
     /* The chip that just went in slides out from the seat, so the money moving
        is something seen and not worked out from a number changing. */
     const fresh = live && inFront && f.a && f.a.act !== "check" && f.a.act !== "fold";
@@ -285,11 +312,11 @@ function rpDraw() {
       <div class="rpbody">
         <div class="rpcards">${cards}</div>
         <div class="rpname"><span class="rppos">${esc(s.pos)}</span>${esc(s.name)}</div>
-        ${stack !== null && stack >= 0 ? `<div class="rpstack"${s.allInStack ? ` title="Read off the all-in: he put in everything he had"` : ""}>${chipStr(stack)}</div>` : ""}
+        ${stack !== null && stack >= 0 ? `<div class="rpstack"${s.allInStack ? ` title="Read off the all-in: he put in everything he had"` : ""}>${rpBB(stack, r.blinds.BB)}</div>` : ""}
       </div>
       <div class="rpfront">
         ${s.pos === "BN" ? `<span class="rpdealer" title="Dealer">D</span>` : ""}
-        ${inFront ? `<span class="rpchip c-${f.how[s.actor] || "blind"}${fresh ? " fresh" : ""}">${chipStr(inFront)}</span>` : ""}
+        ${inFront ? `<span class="rpchip c-${f.how[s.actor] || "blind"}${fresh ? " fresh" : ""}">${rpBB(inFront, r.blinds.BB)}</span>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -300,8 +327,8 @@ function rpDraw() {
        <div class="rpmid">
          <div class="rpboard">${boardHTML}</div>
          <div class="rppot${i > 0 && !f.a && !f.end && f.street !== "pre" ? " swept" : ""}">${f.money
-           ? "Pot " + chipStr(f.potSettled) +
-             (f.potStreet ? `<span class="rpout">+${chipStr(f.potStreet)}</span>` : "")
+           ? "Pot " + rpBB(f.potSettled, r.blinds.BB) +
+             (f.potStreet ? `<span class="rpout">+${rpBB(f.potStreet, r.blinds.BB)}</span>` : "")
            : "Pot —"}</div>
        </div>
      </div>
@@ -309,7 +336,7 @@ function rpDraw() {
        <span class="rpstreet">${f.end ? "End" : RP_STREET_LABEL[f.street]}</span>
        ${!f.actor && f.note ? `<span class="rpnote">${esc(f.note)}</span>` : ""}
        ${!f.money ? `<span class="rpwarn" title="A bet on this hand has no amount on record, so the pot stops here rather than guess">pot unknown</span>` : ""}
-       ${!r.stacks && r.h.effStack > 0 ? `<span class="rpnote" title="The effective stack on record: the smaller of the stacks that played the hand, not any one seat's">Eff. stack ${chipStr(r.h.effStack * chipUnit(r.h))}</span>`
+       ${!r.stacks && r.h.effStack > 0 ? `<span class="rpnote" title="The effective stack on record: the smaller of the stacks that played the hand, not any one seat's">Eff. stack ${rpBB(r.h.effStack * chipUnit(r.h), r.blinds.BB)}</span>`
         : !r.stacks ? `<span class="rpwarn" title="No starting stacks on record for this hand, so none can be shown">no stacks</span>` : ""}
        ${r.allInOnly ? `<span class="rpwarn" title="No stacks on record. An all-in is the whole stack, so those seats show one; the rest are unknown">stacks: all-in seats only</span>` : ""}
        ${r.inferred === "unknown" ? `<span class="rpwarn" title="The last bet has no answer on record and the hand does not say whether it reached showdown">ends on an unanswered bet</span>` : ""}
@@ -349,8 +376,8 @@ function rpTok(a, rung, opened) {
   if (a.act === "call") return "C";
   if (a.act === "limp") return "L";
   if (!RP_AGG.has(a.act)) return "";
-  if (a.act === "jam" || (rung && rung.step === "jam")) return "J";
-  const lbl = rung ? String((SIZING_STEP_BY_ID[rung.step] || {}).label || "").replace(/^B/, "") : "";
+  const lbl = rung ? String((SIZING_STEP_BY_ID[rung.step] || {}).label || rung.step).replace(/^B/, "") : "";
+  if (a.act === "jam") return "J" + lbl;
   return (opened ? "R" : "B") + lbl;
 }
 /* What the action put in, as the street level it took the seat to — the
@@ -385,8 +412,8 @@ function rpLine() {
     const agg = RP_AGG.has(f.a.act);
     if (!(f.street === "pre" && quiet.has(f.a.actor))) {
       const amt = rpAmt(f);
-      cur.push(`<button class="rptok${k === i ? " on" : ""}${agg ? " agg" : ""}" data-rpgo="${k}">${esc(rpTok(f.a, f.rung, opened))}` +
-        `${amt ? `<small>${esc(chipStr(amt))}</small>` : ""}</button>`);
+      cur.push(`<button class="rptok${k === i ? " on" : ""}${agg && !f.allInCall ? " agg" : ""}" data-rpgo="${k}">${esc(f.allInCall ? "C" : rpTok(f.a, f.rung, opened))}` +
+        `${amt ? `<small>${esc(rpBB(amt, r.blinds.BB))}</small>` : ""}</button>`);
     }
     if (agg) opened = true;
   });
@@ -425,8 +452,8 @@ function rpHistory() {
   if (f0.money && (b.ANTE || Object.keys(f0.inv).length)) {
     let cards = "";
     if (b.ANTE) cards += `<button class="rphh-card k-blind" data-rpgo="0"><span class="rphh-who"><span class="rphh-nm">All ante ×${b.dealt}</span></span>` +
-      `<span class="rphh-act">Ante ${chipStr(b.ANTE * b.dealt)}</span></button>`;
-    for (const k of Object.keys(f0.inv)) cards += card(0, k, `${esc(posOf(k))} ${chipStr(f0.inv[k])}`, "k-blind");
+      `<span class="rphh-act">Ante ${rpBB(b.ANTE * b.dealt, b.BB)}</span></button>`;
+    for (const k of Object.keys(f0.inv)) cards += card(0, k, `${esc(posOf(k))} ${rpBB(f0.inv[k], b.BB)}`, "k-blind");
     cols.push(`<div class="rphh-col">${head(0, "Blinds" + (b.ANTE ? " (Ante)" : ""), "")}${cards}</div>`);
   }
   for (const st of RP_STREETS) {
@@ -437,15 +464,15 @@ function rpHistory() {
     r.frames.forEach((f, k) => {
       if (f.street !== st || !f.a || f.end) return;
       if (st === "pre" && quiet.has(f.a.actor)) return;
-      const jam = f.a.act === "jam" || f.rung?.step === "jam";
+      const jam = f.a.act === "jam" && !f.allInCall;
       /* A call carries no size of its own on record, so it borrows the level
          it matched — every chip action reads with its amount. */
       const amt = rpAmt(f), sized = /\d/.test(f.note || "");
-      const txt = esc(cap(f.note || f.a.act)) + (amt && !sized ? " " + esc(chipStr(amt)) : "") +
-        (jam ? `<i class="rphh-allin">All-in</i>` : rungHTML(f.rung));
-      cards += card(k, f.a.actor, txt, `k-${rpKind(f.a.act)}${f.a.inferred ? " inferred" : ""}`);
+      const txt = esc(cap(f.note || f.a.act)) + (amt && !sized ? " " + esc(rpBB(amt, b.BB)) : "") +
+        rungHTML(f.rung) + (jam ? `<i class="rphh-allin">All-in</i>` : "");
+      cards += card(k, f.a.actor, txt, `k-${f.allInCall ? "call" : rpKind(f.a.act)}${f.a.inferred ? " inferred" : ""}`);
     });
-    cols.push(`<div class="rphh-col">${head(first, RP_STREET_LABEL[st], ff.money ? chipStr(ff.potSettled + ff.potStreet) : "")}${cards}</div>`);
+    cols.push(`<div class="rphh-col">${head(first, RP_STREET_LABEL[st], ff.money ? rpBB(ff.potSettled + ff.potStreet, b.BB) : "")}${cards}</div>`);
   }
   const last = r.frames.length - 1, fe = r.frames[last], res = r.result;
   const acted = new Set((r.h.actions || []).map((a) => a.actor));
@@ -461,11 +488,11 @@ function rpHistory() {
     if (res) {
       const names = res.winners.map((a) => seatOf[a]?.name || a).join(" & ");
       const hand = res.hands?.[res.winners[0]];
-      cards += `<div class="rphh-win"><div>${esc(names)} ${res.winners.length > 1 ? "chop" : "wins"}${r.won !== null ? " " + chipStr(r.won) : ""}` +
+      cards += `<div class="rphh-win"><div>${esc(names)} ${res.winners.length > 1 ? "chop" : "wins"}${r.won !== null ? " " + rpBB(r.won, b.BB) : ""}` +
         `${res.how === "folds" ? " <small>all fold</small>" : ""}</div>` +
         (hand ? `<div class="rphh-five">${tilesHTML(hand.cards)}<small>${RP_HAND_NAMES[hand.score[0]]}</small></div>` : "") + `</div>`;
     }
-    cols.push(`<div class="rphh-col">${head(last, res ? (res.how === "folds" ? "Result" : "Showdown") : "End", r.won !== null ? chipStr(r.won) : fe.money ? chipStr(fe.potSettled) : "")}${cards}</div>`);
+    cols.push(`<div class="rphh-col">${head(last, res ? (res.how === "folds" ? "Result" : "Showdown") : "End", r.won !== null ? rpBB(r.won, b.BB) : fe.money ? rpBB(fe.potSettled, b.BB) : "")}${cards}</div>`);
   }
   /* The strip keeps its place while the current card is still in view and
      recentres only when the action has moved off the edge. */
