@@ -1510,7 +1510,7 @@ button.statcalc:active { color: var(--accent); }
 .rphh-sd .ctile, .rphh-five .ctile { font-size: 11px; padding: 1px 3px; }
 .rphh-win { padding: 4px 2px 0; font-size: 12px; font-weight: 800; color: #e6b422; }
 .rphh-win small { font-weight: 600; color: var(--muted); }
-.rphh-five { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+.rphh-five { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 4px; }
 .rphh-five small { margin-left: 3px; font-size: 10.5px; color: var(--text); font-weight: 600; }
 .rplog-empty { font-size: 11.5px; color: var(--muted); padding: 6px 10px; }
 
@@ -1533,3 +1533,34 @@ button.statcalc:active { color: var(--accent); }
 .rphh-card.inferred { border-style: dashed; }
 .rphh-card.inferred .rphh-act { font-style: italic; font-weight: 600; }
 .rphh-card.inferred .rphh-act::after { content: " ?"; color: #b45309; font-style: normal; }
+
+/* ===== Laptop =====
+   A wide window trades the bottom tab bar for a sidebar and uses the width:
+   the replayer's felt beside its history, an opponent's panels in two
+   columns, the opponents list as a grid. Everything narrower keeps the phone
+   layout untouched. */
+@media (min-width: 1000px) {
+  body { padding-left: 92px; }
+  main { max-width: 1480px; padding: 12px 28px 48px; }
+  main > section { max-width: 760px; margin: 0 auto; }
+  main > #view-handview, main > #view-opponents { max-width: none; }
+  main > #view-opp { max-width: 1240px; }
+  #tabbar { top: 0; right: auto; width: 92px; flex-direction: column; gap: 8px;
+    border-top: 0; border-right: 1px solid var(--line); padding: 20px 6px; }
+  #tabbar button { flex: none; padding: 10px 0; font-size: 12px; }
+  .vhead.sticky { margin: 0 -28px 4px; padding-left: 28px; padding-right: 28px; }
+  #toast { bottom: 32px; left: calc(50% + 46px); }
+  #sheet { left: 92px; bottom: auto; top: 10vh; width: 560px; max-height: 80vh;
+    border: 1px solid var(--line); border-radius: 18px; padding-bottom: 16px; }
+
+  /* Felt on the left, pinned while the history scrolls on the right. */
+  .hvcols { display: grid; grid-template-columns: minmax(400px, 1fr) minmax(0, 1.3fr);
+    gap: 24px; align-items: start; }
+  .hvmain { position: sticky; top: 12px; }
+  .rpfelt { width: min(100%, 62vh); max-height: none; }
+
+  .odcols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
+
+  /* Dragging reads rows top to bottom, so edit mode keeps the single column. */
+  #opp-list:not(.editing) .groupsec { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+}

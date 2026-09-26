@@ -50,6 +50,10 @@
       <button id="od-e-del" class="danger">Delete</button>
     </div>
   </div>
+  <!-- Two runs of panels, in phone order: one column on a phone, side by
+       side on a laptop. -->
+  <div class="odcols">
+  <div class="odcol">
   <div class="panel hudpanel">
     <div class="cardpanel-head"><span class="ptitle">HUD</span>
       <span id="od-hud-n" class="muted sub2"></span></div>
@@ -67,6 +71,8 @@
       </span></div>
     <div id="od-ranges"></div>
   </div>
+  </div>
+  <div class="odcol">
   <div class="panel">
     <div class="cardpanel-head"><span class="ptitle">Exploits</span>
       <button id="od-exploit-tmpl" class="linkbtn">＋ Template</button></div>
@@ -110,6 +116,8 @@
     <div class="cardpanel-head"><span class="ptitle">Front-page card</span>
       <button id="od-card-edit" class="linkbtn">Edit</button></div>
     <div id="od-card-preview" class="chiprow cardchips"></div>
+  </div>
+  </div>
   </div>
 </section>
 
@@ -188,16 +196,24 @@
     <h1>Hand</h1>
     <button id="hv-edit" class="iconbtn" title="Edit">✎</button>
   </header>
-  <div class="hvside">
-    <div id="hv-pager" class="hvpager hidden"></div>
-    <div id="hv-table" class="rpwrap"></div>
+  <!-- Stacked on a phone; side by side on a laptop — the felt stays put while
+       the history reads down beside it. -->
+  <div class="hvcols">
+    <div class="hvmain">
+      <div class="hvside">
+        <div id="hv-pager" class="hvpager hidden"></div>
+        <div id="hv-table" class="rpwrap"></div>
+      </div>
+      <div id="hv-transport" class="rptransport"></div>
+      <div id="hv-line" class="rpline"></div>
+    </div>
+    <div class="hvlog">
+      <div id="hv-log" class="rphh"></div>
+      <button id="hv-textbtn" class="linkbtn rptextbtn">Show the written hand</button>
+      <div id="hv-text" class="handview hidden"></div>
+      <button id="hv-delete" class="danger">Delete hand</button>
+    </div>
   </div>
-  <div id="hv-transport" class="rptransport"></div>
-  <div id="hv-line" class="rpline"></div>
-  <div id="hv-log" class="rphh"></div>
-  <button id="hv-textbtn" class="linkbtn rptextbtn">Show the written hand</button>
-  <div id="hv-text" class="handview hidden"></div>
-  <button id="hv-delete" class="danger">Delete hand</button>
 </section>
 
 <!-- ===== Saved ranges ===== -->

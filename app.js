@@ -2533,6 +2533,7 @@ function renderOpponents() {
     : "";
   $("opp-edit").classList.toggle("on", oppEditMode);
   $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
+  $("opp-list").classList.toggle("editing", oppEditMode);
   $("opp-list").innerHTML = dupeBanner + (list.length ? groups.map((g) => {
     const members = list.filter((o) => (o.group || "") === g);
     const collapsed = collapsedGroups.has(g);
