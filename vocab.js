@@ -235,6 +235,9 @@ const TENDENCY_TAGS = [
      float is free when checked to. `floats-wide` stays the one-line summary. */
   { id: "f-float-oop",    cat: "postflop", label: "Float OOP" },
   { id: "f-float-ip",     cat: "postflop", label: "Float IP" },
+  /* What he check-raises with as the OOP caller: a draw he can keep betting,
+     or nothing at all (Phil, 2026-09-27). */
+  { id: "f-xr-hands-pfc-oop", cat: "postflop", label: "xR", kind: "tally", options: [["equity", "Equity"], ["air", "Air"]] },
   // turn
   { id: "t-barrel2-freq-hu", cat: "postflop", label: "2nd barrel freq HU",  kind: "stat", calc: "barrelHu" },
   { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
@@ -280,6 +283,10 @@ const TENDENCY_TAGS = [
   { id: "r-call-range",   cat: "postflop", label: "Call range",      kind: "choice", options: [["wide", "Wide"], ["tight", "Tight"]] },
   { id: "r-call-hands",   cat: "postflop", label: "Bluff catch",     kind: "tally",  options: [["light", "Light"], ["tight", "Tight"]] },
   { id: "have-lead-r",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  /* River draws: does he play the river off whether the draws got there? As
+     PFC a yes is a focus, as PFR a yes is a hyper-focus (Phil, 2026-09-27). */
+  { id: "r-draw-focus-pfc", cat: "postflop", label: "Draw Focus" },
+  { id: "r-draw-hyper-focus-pfr", cat: "postflop", label: "Draw Hyper Focus" },
   { id: "timing-tells",         cat: "live",     label: "Timing tells" },
   { id: "snap-call-weak",       cat: "live",     label: "Snap-call = weak" },
   { id: "talks-when-strong",    cat: "live",     label: "Chatty = strong" },

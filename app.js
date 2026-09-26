@@ -172,6 +172,7 @@ const READ_LAYOUT = [
       { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid"], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "protect-disadv-board", also: ["f-bf-disadv-board"] }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
       { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
+      { label: "OOP", lines: true, ids: ["f-xr-hands-pfc-oop"] },
       { label: "Streets vs Him", lines: true, ids: [
         { label: "HU", subs: [["fold-cbet-f-hu", "F"], ["fold-cbet-t-hu", "T"], ["fold-cbet-r-hu", "R"]] },
         { label: "MWP", subs: [["fold-cbet-f-mw", "F"]] }] },
@@ -191,9 +192,9 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: wb(["r-barrel3-freq-hu", "r-bluff-lines", "r-bluff-hands", "r-af-hu", "r-bluff-bal", "r-thin", "force-squid"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]) },
+    { label: "As PFR", rows: wb(["r-barrel3-freq-hu", "r-bluff-lines", "r-bluff-hands", "r-af-hu", "r-bluff-bal", "r-thin", "r-draw-hyper-focus-pfr", "force-squid"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]) },
     { label: "As PFC", rows: [
-      { lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", ["raise-nuts-r", "Raise nuts"]] },
+      { lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", "r-draw-focus-pfc", ["raise-nuts-r", "Raise nuts"]] },
       { label: "OOP", lines: true, ids: ["have-lead-r", ["bsti-r", "BSTI"]] },
       { label: "IP", lines: true, ids: ["r-bet-vol", ["bluff-xt-r", "Bluff XT"]] },
     ] },
@@ -239,7 +240,7 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board", "f-bf-disadv-board"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-hands-pfc-oop", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [
@@ -250,8 +251,8 @@ const LIVE_LAYOUT = [
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
-      { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-thin", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
-      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", "have-lead-r", ["bsti-r", "BSTI"]] },
+      { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-thin", "r-draw-hyper-focus-pfr", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
+      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", "r-draw-focus-pfc", "have-lead-r", ["bsti-r", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq-hu", "r-af-hu"] },
     ] },
     { label: "All streets", rows: [
