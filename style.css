@@ -1451,16 +1451,25 @@ button.statcalc:active { color: var(--accent); }
 /* ===== The hand history =====
    The half of a replayer you actually read: the felt says where the money is,
    this says how it got there. One column per street, the pot that came into
-   it in the header, a card per action; the blinds up front, the showdown at
-   the end. Scrolls sideways — a phone fits two and a half streets across.
-   Tapping a card steps the table to it. */
+   it in the header, a card per action; the blinds on one line above, the
+   showdown at the end. The streets wrap onto a second row rather than scroll,
+   so the whole hand is on screen at once. Tapping a card steps the table to it. */
 .rphh { margin: 0 0 10px; background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 6px 0 4px; }
 .rphh-title { font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
   color: var(--muted); padding: 0 10px 5px; }
-.rphh-cols { position: relative; display: flex; gap: 8px; overflow-x: auto; padding: 0 8px 6px;
-  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
-.rphh-col { flex: 0 0 138px; display: flex; flex-direction: column; gap: 5px; scroll-snap-align: start; }
+.rphh-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(122px, 100%), 1fr));
+  gap: 8px; padding: 0 8px 6px; }
+.rphh-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.rphh-blinds { display: flex; flex-wrap: wrap; gap: 4px 12px; width: calc(100% - 16px); margin: 0 8px 8px;
+  background: #16233a; border: 1px solid #243449; border-left: 3px solid #4a7de0; border-radius: 9px;
+  padding: 5px 8px; color: var(--text); font: inherit; font-size: 11.5px; font-weight: 700;
+  text-align: left; font-variant-numeric: tabular-nums; }
+.rphh-blinds.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rphh-blinds span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.rphh-blinds em { font-style: normal; font-weight: 500; color: var(--muted); max-width: 70px;
+  overflow: hidden; text-overflow: ellipsis; }
+.rphh-blinds .rphh-pos { font-style: normal; }
 .rphh-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
   background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
   padding: 2px 2px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
@@ -1480,8 +1489,8 @@ button.statcalc:active { color: var(--accent); }
 .rphh-pos.p-b { background: #4a7de0; }
 .rphh-pos.p-s { background: #8b5cf6; }
 .rphh-act { display: block; margin-top: 4px; background: #f5f7fb; color: #121826; border-radius: 6px;
-  padding: 3px 6px; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  padding: 3px 6px; font-size: 12px; font-weight: 700; line-height: 1.45;
+  font-variant-numeric: tabular-nums; }
 .rphh-act .rung { margin-left: 4px; }
 .rphh-allin { display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 4px;
   background: #d61f69; color: #fff; font-size: 9.5px; font-style: normal; vertical-align: 1px; }
@@ -1505,13 +1514,13 @@ button.statcalc:active { color: var(--accent); }
 .rphh-five small { margin-left: 3px; font-size: 10.5px; color: var(--text); font-weight: 600; }
 .rplog-empty { font-size: 11.5px; color: var(--muted); padding: 6px 10px; }
 
-/* The betting line in shorthand, one line, scrolls sideways when it must. */
-.rpline { display: flex; align-items: center; gap: 4px; overflow-x: auto; white-space: nowrap;
+/* The betting line in shorthand; wraps between streets rather than scrolling. */
+.rpline { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; white-space: nowrap;
   margin: 0 0 8px; padding: 5px 8px; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--radius);
   font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .rpline:empty { display: none; }
-.rpline-st { display: inline-flex; gap: 3px; }
+.rpline-st { display: inline-flex; flex-wrap: wrap; gap: 2px 3px; }
 .rpline-cut { font-style: normal; color: var(--muted); padding: 0 3px; }
 .rptok { background: none; border: 0; padding: 2px 4px; border-radius: 6px; color: var(--muted);
   font: inherit; }

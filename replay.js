@@ -418,8 +418,6 @@ function rpLine() {
     if (agg) opened = true;
   });
   box.innerHTML = streets.map((t) => `<span class="rpline-st">${t.join("")}</span>`).join(`<i class="rpline-cut">/</i>`);
-  const on = box.querySelector(".rptok.on");
-  if (on) box.scrollLeft = Math.max(0, on.offsetLeft - box.clientWidth / 2 + on.offsetWidth / 2);
 }
 
 /* ---------- the running action list ----------
@@ -448,13 +446,15 @@ function rpHistory() {
   const quiet = rpQuiet(r.h);
   const cols = [];
 
+  /* The blinds are a fixed cost, not a decision: one line above the streets
+     rather than a column of their own. */
   const f0 = r.frames[0], b = r.blinds;
+  let blinds = "";
   if (f0.money && (b.ANTE || Object.keys(f0.inv).length)) {
-    let cards = "";
-    if (b.ANTE) cards += `<button class="rphh-card k-blind" data-rpgo="0"><span class="rphh-who"><span class="rphh-nm">All ante ×${b.dealt}</span></span>` +
-      `<span class="rphh-act">Ante ${rpBB(b.ANTE * b.dealt, b.BB)}</span></button>`;
-    for (const k of Object.keys(f0.inv)) cards += card(0, k, `${esc(posOf(k))} ${rpBB(f0.inv[k], b.BB)}`, "k-blind");
-    cols.push(`<div class="rphh-col">${head(0, "Blinds" + (b.ANTE ? " (Ante)" : ""), "")}${cards}</div>`);
+    const bits = Object.keys(f0.inv).map((k) => `<span><i class="rphh-pos p-${RP_POS_CLS[posOf(k)] || "x"}">${esc(posOf(k))}</i>` +
+      `<em>${esc(seatOf[k] ? seatOf[k].name : "—")}</em>${rpBB(f0.inv[k], b.BB)}</span>`);
+    if (b.ANTE) bits.unshift(`<span>Ante ${rpBB(b.ANTE, b.BB)} ×${b.dealt}</span>`);
+    blinds = `<button class="rphh-blinds${i === 0 ? " on" : ""}" data-rpgo="0">${bits.join("")}</button>`;
   }
   for (const st of RP_STREETS) {
     const first = r.frames.findIndex((f) => f.street === st && !f.end);
@@ -494,18 +494,9 @@ function rpHistory() {
     }
     cols.push(`<div class="rphh-col">${head(last, res ? (res.how === "folds" ? "Result" : "Showdown") : "End", r.won !== null ? rpBB(r.won, b.BB) : fe.money ? rpBB(fe.potSettled, b.BB) : "")}${cards}</div>`);
   }
-  /* The strip keeps its place while the current card is still in view and
-     recentres only when the action has moved off the edge. */
-  const prev = box.querySelector(".rphh-cols");
-  const keep = prev ? prev.scrollLeft : 0;
-  box.innerHTML = cols.length
-    ? `<div class="rphh-title">Hand history${r.stakes ? " · " + esc(r.stakes.replace(/^Blinds /, "")) : ""} · ${r.seats.length} seated</div><div class="rphh-cols">${cols.join("")}</div>`
+  box.innerHTML = cols.length || blinds
+    ? `<div class="rphh-title">Hand history${r.stakes ? " · " + esc(r.stakes.replace(/^Blinds /, "")) : ""} · ${r.seats.length} seated</div>${blinds}<div class="rphh-cols">${cols.join("")}</div>`
     : `<div class="rplog-empty">No actions on record.</div>`;
-  const sc = box.querySelector(".rphh-cols"), col = box.querySelector(".rphh-card.on")?.closest(".rphh-col");
-  if (sc && col) {
-    const inView = col.offsetLeft >= keep && col.offsetLeft + col.offsetWidth <= keep + sc.clientWidth;
-    sc.scrollLeft = inView ? keep : Math.max(0, col.offsetLeft - (sc.clientWidth - col.offsetWidth) / 2);
-  }
 }
 
 function rpGo(i) {
