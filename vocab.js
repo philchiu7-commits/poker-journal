@@ -375,6 +375,7 @@ const TENDENCY_TAGS = [
   { id: "have-lead-t-draw", cat: "postflop", label: "Have Lead Draw" },
   { id: "have-lead-t-flush", cat: "postflop", label: "Have Lead Flush" },
   { id: "have-lead-t-strong", cat: "postflop", label: "Have Lead Strong" },
+  { id: "have-lead-t-merge", cat: "postflop", label: "Have Lead Merge" },
   // river
   /* Superseded by the yes/no Bluff lines (can?) reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */

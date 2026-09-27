@@ -344,6 +344,8 @@ const readEstimates = (() => {
     S({ id: `have-lead-${L}-strong`, grp: "Leads", rule: "CAN", def: `${tag} leads into the last street's bettor shown: two pair or better.`,
       ch: (F) => { const T = lead(F, s); return T ? { ok: T.tier.t === 4, why: g(T) } : null; } });
   }
+  S({ id: "have-lead-t-merge", grp: "Leads", rule: "CAN", def: "Turn leads into the last street's bettor shown: one pair — merged, not two pair+ and not a bluff.",
+    ch: (F) => { const T = lead(F, "turn"); return T ? { ok: T.tier.t < 4 && T.tier.name !== "no pair", why: g(T) } : null; } });
   S({ id: "have-lead-r-bluff", grp: "Leads", rule: "CAN", def: "River leads into the last street's bettor shown: a bluff — no pair better than third (missed draws count).",
     ch: (F) => { const T = lead(F, "river"); return T ? { ok: T.tier.t === 0, why: g(T) } : null; } });
   // checked-to bets as the caller
