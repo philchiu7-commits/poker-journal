@@ -1412,13 +1412,14 @@ button.statcalc:active { color: var(--accent); }
   font-size: 10.5px; font-weight: 800; color: #0b0d10; background: var(--accent);
   border-radius: 999px; padding: 2px 8px; box-shadow: var(--shadow);
   animation: rpbubin .25s ease-out both; }
+.rpbub.keep, .rpbub.none { display: none; }
 @keyframes rpbubin { from { transform: translateY(4px); opacity: 0; } to { transform: none; opacity: 1; } }
-.rpseat.k-bet .rpbub { background: #f0a020; }
-.rpseat.k-raise .rpbub { background: #e8452c; color: #fff; }
-.rpseat.k-jam .rpbub { background: #d61f69; color: #fff; }
-.rpseat.k-call .rpbub, .rpseat.k-limp .rpbub { background: #2fb86a; }
-.rpseat.k-check .rpbub { background: #c9d1dc; }
-.rpseat.k-fold .rpbub { background: #6b7280; color: #fff; }
+.rpseat .rpbub.k-bet { background: #f0a020; }
+.rpseat .rpbub.k-raise { background: #e8452c; color: #fff; }
+.rpseat .rpbub.k-jam { background: #d61f69; color: #fff; }
+.rpseat .rpbub.k-call, .rpseat .rpbub.k-limp { background: #2fb86a; }
+.rpseat .rpbub.k-check { background: #c9d1dc; }
+.rpseat .rpbub.k-fold { background: #6b7280; color: #fff; }
 .rpseat.k-bet .rpname, .rpseat.k-bet .rppos { background: #f0a020; border-color: #f0a020; }
 .rpseat.k-raise .rpname { background: #e8452c; border-color: #e8452c; color: #fff; }
 .rpseat.k-raise .rppos { color: #fff; }
@@ -1581,7 +1582,33 @@ button.statcalc:active { color: var(--accent); }
   #hv-textbtn { grid-column: 2 / -1; grid-row: 5; justify-self: start; }
   #hv-text { grid-column: 2 / -1; grid-row: 6; }
   #hv-delete { grid-column: 2 / -1; grid-row: 7; justify-self: start; }
-  .rpfelt { width: 38vh; max-height: none; }
+  /* The table is the point of this page: as tall as the screen allows once the
+     header and the transport under it are paid for, and never so wide the
+     betting line loses its column. */
+  .rpfelt { width: min(calc((100vh - 230px) / 1.08), calc(100vw - 560px)); min-width: 420px; max-height: none; }
+  .rpmid { gap: 10px; }
+  .rpboard { gap: 6px; }
+  .rpboard .ctile { font-size: 28px; padding: 7px 10px; }
+  .rpboard .ctile .suit { font-size: 22px; }
+  .rppot { font-size: 15px; padding: 3px 14px; }
+  .rpfelt .ctile { font-size: 21px; padding: 4px 6px; }
+  .rpfelt .ctile .suit { font-size: 17px; }
+  .rpback { width: 27px; height: 36px; }
+  .rpcards { gap: 3px; }
+  /* Each seat is one stack — action, cards, name, stack, chip — laid out in
+     flow so no part can sit on another. The action slot is always there
+     (empty when he has not acted this street) so seats don't jump. */
+  .rpseat { width: 132px; gap: 3px; }
+  .rpbub { position: static; margin: 0; font-size: 13px; padding: 3px 10px; }
+  .rpbub.keep { display: block; animation: none; }
+  .rpbub.none { display: block; visibility: hidden; }
+  .rpbub.none::before { content: "\00a0"; }
+  .rpname { max-width: 128px; font-size: 13px; padding: 3px 9px; }
+  .rpstack { font-size: 12.5px; }
+  .rpfront { min-height: 24px; gap: 6px; }
+  .rpchip { font-size: 13px; padding: 2px 9px 2px 3px; }
+  .rpchip::before { width: 17px; height: 17px; }
+  .rpdealer { width: 22px; height: 22px; font-size: 13px; }
   /* the box hugs its street columns instead of trailing empty panel */
   .rphh { width: fit-content; max-width: 100%; }
   .rphh-cols { grid-template-columns: repeat(var(--n, 3), minmax(0, 210px)); gap: 10px; }

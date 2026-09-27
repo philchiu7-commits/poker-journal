@@ -307,8 +307,14 @@ function rpDraw() {
        what he already put in is still on the felt until the street is swept. */
     /* The bet always sits between the player and the pot, so seats below the
        middle push their chips up rather than off the edge of the felt. */
+    /* His last action this street stays up until the street is swept (laptop;
+       the phone felt has no room and shows only the live one). */
+    let said = live && f.note ? f : null;
+    for (let j = i; !said && j >= 0 && r.frames[j].street === f.street; j--)
+      if (r.frames[j].actor === s.actor && r.frames[j].note) said = r.frames[j];
+    const bk = said?.a ? (said.allInCall ? "call" : rpKind(said.a.act)) : "";
     return `<div class="rpseat${out ? " out" : ""}${live ? " live" : ""}${y > 52 ? " low" : ""}${kind ? " k-" + kind : ""}" style="left:${x}%;top:${y}%">
-      ${live && f.note ? `<div class="rpbub${f.a?.inferred ? " inferred" : ""}" title="${f.a?.inferred ? "Not in the record — read off the uncalled bet and the showdown flag" : ""}">${esc(f.note)}${rungHTML(f.rung)}</div>` : ""}
+      ${said ? `<div class="rpbub${bk ? " k-" + bk : ""}${live ? "" : " keep"}${said.a?.inferred ? " inferred" : ""}" title="${said.a?.inferred ? "Not in the record — read off the uncalled bet and the showdown flag" : ""}">${esc(said.note)}${rungHTML(said.rung)}</div>` : `<div class="rpbub none"></div>`}
       <div class="rpbody">
         <div class="rpcards">${cards}</div>
         <div class="rpname"><span class="rppos">${esc(s.pos)}</span>${esc(s.name)}</div>
@@ -358,9 +364,9 @@ function rpTransport() {
      <div class="rpsteps">
        <button class="rpbtn rpnext" data-hvstep="-1" ${hvNextId(-1) ? "" : "disabled"} title="Previous hand">‹ Prev</button>
        <button class="rpbtn" data-rpgo="0" ${i === 0 ? "disabled" : ""} title="Start">⏮</button>
-       <button class="rpbtn" data-rpstep="-1" ${i === 0 ? "disabled" : ""} title="Back">‹</button>
+       <button class="rpbtn" data-rpstep="-1" ${i === 0 ? "disabled" : ""} aria-label="Back">‹</button>
        <button class="rpbtn rpplay" data-rpplay title="${rpState.timer ? "Pause" : "Play"}">${rpState.timer ? "❚❚" : "▶"}</button>
-       <button class="rpbtn" data-rpstep="1" ${i === last ? "disabled" : ""} title="Forward">›</button>
+       <button class="rpbtn" data-rpstep="1" ${i === last ? "disabled" : ""} aria-label="Forward">›</button>
        <button class="rpbtn rpnext" data-hvstep="1" ${hvNextId(1) ? "" : "disabled"} title="Next hand">Next ›</button>
      </div>`;
 }
