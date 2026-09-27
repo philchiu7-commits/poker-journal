@@ -220,8 +220,20 @@ const TENDENCY_TAGS = [
      Postflop general / Flop / Turn / River outline. Placement is READ_LAYOUT.
      `stat` reads hold the number off his HUD, not a 0-100 feel. */
   // postflop general — multiway limped pot
-  { id: "mwl-oop-probe",  cat: "postflop", label: "Probe OOP",       kind: "tally",  options: [["have", "Have"], ["rangex", "RangeX"], ["draw", "Draw"], ["merge", "Merge"], ["wktp", "WKTp"], ["topp", "TopP+"]] },
-  { id: "mwl-xr",         cat: "postflop", label: "xR",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
+  /* Superseded by the yes/no Probe OOP reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "mwl-oop-probe",  cat: "postflop", label: "Probe OOP (old tally)",       kind: "tally",  options: [["have", "Have"], ["rangex", "RangeX"], ["draw", "Draw"], ["merge", "Merge"], ["wktp", "WKTp"], ["topp", "TopP+"]] },
+  { id: "mwl-oop-probe-have", cat: "postflop", label: "Probe OOP Have" },
+  { id: "mwl-oop-probe-rangex", cat: "postflop", label: "Probe OOP RangeX" },
+  { id: "mwl-oop-probe-draw", cat: "postflop", label: "Probe OOP Draw" },
+  { id: "mwl-oop-probe-merge", cat: "postflop", label: "Probe OOP Merge" },
+  { id: "mwl-oop-probe-wktp", cat: "postflop", label: "Probe OOP WKTp" },
+  { id: "mwl-oop-probe-topp", cat: "postflop", label: "Probe OOP TopP+" },
+  /* Superseded by the yes/no xR reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "mwl-xr",         cat: "postflop", label: "xR (old tally)",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
+  { id: "mwl-xr-strong", cat: "postflop", label: "xR Strong" },
+  { id: "mwl-xr-bluff", cat: "postflop", label: "xR Bluff" },
   { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
   // flop
   { id: "f-cbet-freq-hu", cat: "postflop", label: "Cbet freq HU",  kind: "stat", calc: "cbetHu" },
@@ -280,7 +292,13 @@ const TENDENCY_TAGS = [
   { id: "t-bcard-over",    cat: "postflop", label: "Turn Cards Overcards" },
   { id: "t-bcard-blank",   cat: "postflop", label: "Turn Cards Blank" },
   { id: "t-low-boards",   cat: "postflop", label: "Low boards",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
-  { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
+  /* Superseded by the yes/no T call range reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "t-call-range",   cat: "postflop", label: "T call range (old tally)",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
+  { id: "t-call-range-2ndp", cat: "postflop", label: "T call range 2ndP" },
+  { id: "t-call-range-sd", cat: "postflop", label: "T call range SD" },
+  { id: "t-call-range-wfd", cat: "postflop", label: "T call range wFD" },
+  { id: "t-call-range-lt3rdp", cat: "postflop", label: "T call range <3rdP" },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
   { id: "t-hero-fold",    cat: "postflop", label: "Can Hero Fold?" },
   /* He cbet the flop and checked the turn: yes = that check is the hand over,
@@ -297,10 +315,28 @@ const TENDENCY_TAGS = [
   { id: "t-probe-mw",     cat: "postflop", label: "Probe T MWP",      kind: "stat", calc: "probeTMw" },
   { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
   { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["play", "Play"], ["wide", "Wide"]] },
-  { id: "have-lead-t",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  /* Superseded by the yes/no Have Lead reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "have-lead-t",    cat: "postflop", label: "Have Lead (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  { id: "have-lead-t-draw", cat: "postflop", label: "Have Lead Draw" },
+  { id: "have-lead-t-flush", cat: "postflop", label: "Have Lead Flush" },
+  { id: "have-lead-t-strong", cat: "postflop", label: "Have Lead Strong" },
   // river
-  { id: "r-bluff-lines",  cat: "postflop", label: "Bluff lines (can?)", kind: "tally", options: [["bbb", "BBB"], ["bxb", "BXB"], ["xbb", "XBB"], ["xxb", "XXB"]] },
-  { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands",     kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
+  /* Superseded by the yes/no Bluff lines (can?) reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "r-bluff-lines",  cat: "postflop", label: "Bluff lines (can?) (old tally)", kind: "tally", options: [["bbb", "BBB"], ["bxb", "BXB"], ["xbb", "XBB"], ["xxb", "XXB"]] },
+  { id: "r-bluff-lines-bbb", cat: "postflop", label: "Bluff lines (can?) BBB" },
+  { id: "r-bluff-lines-bxb", cat: "postflop", label: "Bluff lines (can?) BXB" },
+  { id: "r-bluff-lines-xbb", cat: "postflop", label: "Bluff lines (can?) XBB" },
+  { id: "r-bluff-lines-xxb", cat: "postflop", label: "Bluff lines (can?) XXB" },
+  /* Superseded by the four yes/no Bluff hands reads below (Phil, 2026-09-27). Kept,
+     not retired, so any counts already on it stay visible under Live → Other. */
+  { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands (old tally)", kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
+  /* What he bluffs the river with as PFR, one yes/no per kind of hand. */
+  { id: "r-bh-fd",     cat: "postflop", label: "Bluff hands FD" },
+  { id: "r-bh-oesd",   cat: "postflop", label: "Bluff hands OESD" },
+  { id: "r-bh-air",    cat: "postflop", label: "Bluff hands Air" },
+  { id: "r-bh-ahigh",  cat: "postflop", label: "Bluff hands A-high" },
   { id: "r-barrel3-freq-hu", cat: "postflop", label: "3rd barrel freq HU",  kind: "stat", calc: "barrelRHu" },
   { id: "r-af-hu", cat: "postflop", label: "River AF HU",  kind: "stat", unit: "", calc: "riverAfHu" },
   { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
@@ -316,10 +352,23 @@ const TENDENCY_TAGS = [
   { id: "r-fold-bal",     cat: "postflop", label: "Fold balance",    kind: "choice", options: [["overfold", "Overfold"], ["underfold", "Underfold"]] },
   { id: "r-to-sizing",    cat: "postflop", label: "To sizing",       kind: "choice", options: [["elastic", "Elastic"], ["inelastic", "Inelastic"]] },
   { id: "r-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
-  { id: "r-can-raise",    cat: "postflop", label: "Can raise?",      kind: "tally",  options: [["bluff", "Bluff"], ["thin", "Thin"]] },
+  /* Superseded by the yes/no Can raise? reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "r-can-raise",    cat: "postflop", label: "Can raise? (old tally)",      kind: "tally",  options: [["bluff", "Bluff"], ["thin", "Thin"]] },
+  { id: "r-can-raise-bluff", cat: "postflop", label: "Can raise? Bluff" },
+  { id: "r-can-raise-thin", cat: "postflop", label: "Can raise? Thin" },
   { id: "r-call-range",   cat: "postflop", label: "Call range",      kind: "choice", options: [["wide", "Wide"], ["tight", "Tight"]] },
-  { id: "r-call-hands",   cat: "postflop", label: "Bluff catch",     kind: "tally",  options: [["light", "Light"], ["tight", "Tight"]] },
-  { id: "have-lead-r",    cat: "postflop", label: "Have Lead",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  /* Superseded by the yes/no Bluff catch reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "r-call-hands",   cat: "postflop", label: "Bluff catch (old tally)",     kind: "tally",  options: [["light", "Light"], ["tight", "Tight"]] },
+  { id: "r-call-hands-light", cat: "postflop", label: "Bluff catch Light" },
+  { id: "r-call-hands-tight", cat: "postflop", label: "Bluff catch Tight" },
+  /* Superseded by the yes/no Have Lead reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "have-lead-r",    cat: "postflop", label: "Have Lead (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  { id: "have-lead-r-draw", cat: "postflop", label: "Have Lead Draw" },
+  { id: "have-lead-r-flush", cat: "postflop", label: "Have Lead Flush" },
+  { id: "have-lead-r-strong", cat: "postflop", label: "Have Lead Strong" },
   /* River draws: does he play the river off whether the draws got there? As
      PFC a yes is a focus, as PFR a yes is a hyper-focus (Phil, 2026-09-27). */
   { id: "r-draw-focus-pfc", cat: "postflop", label: "Draw Focus" },

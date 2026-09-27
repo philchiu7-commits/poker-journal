@@ -165,7 +165,7 @@ const READ_LAYOUT = [
     { label: "Style", liveOnly: true, ids: ["preflop-style", "limp-scale-ws", "limp-scale-ns"] },
   ] }] },
   { title: "Postflop general", subs: [
-    { label: "MWP limp", rows: [{ lines: true, ids: ["mwl-oop-probe", "mwl-xr", "mwl-ip-stab"] }] },
+    { label: "MWP limp", rows: [{ lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, "mwl-ip-stab"] }] },
   ] },
   { title: "Flop exploit", subs: [
     { label: "As PFR", rows: wb([{ label: "Cbet freq", subs: [["f-cbet-freq-hu", "HU"], ["f-cbet-freq-mw", "MWP"]] },
@@ -188,15 +188,15 @@ const READ_LAYOUT = [
        the rest sit under the seat they belong to (Phil). */
     { label: "As PFC", rows: [
       { lines: true, ids: ["floats-wide", "fold-cbet-t-hu", "t-call-style", ["raise-nuts-t", "Raise nuts"], ["bsti-t", "BSTI"]] },
-      { label: "OOP", lines: true, ids: [{ label: "Probe T", subs: [["t-probe-hu", "HU"], ["t-probe-mw", "MWP"]] }, "have-lead-t", "t-protect-flush"] },
+      { label: "OOP", lines: true, ids: [{ label: "Probe T", subs: [["t-probe-hu", "HU"], ["t-probe-mw", "MWP"]] }, { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"]] }, "t-protect-flush"] },
       { label: "IP", lines: true, ids: ["t-bet-vol", ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] },
     ] },
   ] },
   { title: "River exploit", subs: [
-    { label: "As PFR", rows: wb(["r-barrel3-freq-hu", "r-bluff-lines", "r-bluff-hands", "r-af-hu", "r-bluff-bal", "r-thin", "r-draw-hyper-focus-pfr", "force-squid"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]) },
+    { label: "As PFR", rows: wb(["r-barrel3-freq-hu", { id: "r-bluff-lines-bbb", label: "Bluff lines (can?)", chip: "BBB", chips: true, also: [["r-bluff-lines-bxb", "BXB"], ["r-bluff-lines-xbb", "XBB"], ["r-bluff-lines-xxb", "XXB"]] }, { id: "r-bh-fd", label: "Bluff hands", chip: "FD", chips: true, also: [["r-bh-oesd", "OESD"], ["r-bh-air", "Air"], ["r-bh-ahigh", "A-high"]] }, "r-af-hu", "r-bluff-bal", "r-thin", "r-draw-hyper-focus-pfr", "force-squid"], ["r-traps", "r-can-x-nsd", "punchbag-r-pfr"]) },
     { label: "As PFC", rows: [
-      { lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", "r-draw-focus-pfc", ["raise-nuts-r", "Raise nuts"]] },
-      { label: "OOP", lines: true, ids: ["have-lead-r", ["bsti-r", "BSTI"]] },
+      { lines: true, ids: ["r-fold-bal", "r-to-sizing", { id: "r-can-raise-bluff", label: "Can raise?", chip: "Bluff", chips: true, also: [["r-can-raise-thin", "Thin"]] }, { id: "t-call-range-2ndp", label: "T call range", chip: "2ndP", chips: true, also: [["t-call-range-sd", "SD"], ["t-call-range-wfd", "wFD"], ["t-call-range-lt3rdp", "<3rdP"]] }, "r-call-range", { id: "r-call-hands-light", label: "Bluff catch", chip: "Light", chips: true, also: [["r-call-hands-tight", "Tight"]] }, "r-draw-focus-pfc", ["raise-nuts-r", "Raise nuts"]] },
+      { label: "OOP", lines: true, ids: [{ id: "have-lead-r-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"]] }, ["bsti-r", "BSTI"]] },
       { label: "IP", lines: true, ids: ["r-bet-vol", ["bluff-xt-r", "Bluff XT"]] },
     ] },
   ] },
@@ -247,19 +247,19 @@ const LIVE_LAYOUT = [
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
       { label: "As PFR", lines: true, ids: ["t-barrel-air", "t-barrel-equity", "t-barrel-sdv", "t-barrel-tight", "t-bcard-4str", "t-bcard-3flush", "t-bcard-4flush", "t-bcard-over", "t-bcard-blank", "t-low-boards", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
-      { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", "t-bet-vol", "t-call-style", "have-lead-t", "t-protect-flush", ["bsti-t", "BSTI"]] },
+      { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", "t-bet-vol", "t-call-style", { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"]] }, "t-protect-flush", ["bsti-t", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq-hu", "t-fold-to-xr-hu"] },
     ] },
     { label: "River", rows: [
       { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
-      { label: "As PFR", lines: true, ids: ["r-bluff-lines", "r-bluff-hands", "r-bluff-bal", "r-thin", "r-draw-hyper-focus-pfr", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
-      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", "r-can-raise", "t-call-range", "r-call-range", "r-call-hands", "r-draw-focus-pfc", "have-lead-r", ["bsti-r", "BSTI"]] },
+      { label: "As PFR", lines: true, ids: [{ id: "r-bluff-lines-bbb", label: "Bluff lines (can?)", chip: "BBB", chips: true, also: [["r-bluff-lines-bxb", "BXB"], ["r-bluff-lines-xbb", "XBB"], ["r-bluff-lines-xxb", "XXB"]] }, { id: "r-bh-fd", label: "Bluff hands", chip: "FD", chips: true, also: [["r-bh-oesd", "OESD"], ["r-bh-air", "Air"], ["r-bh-ahigh", "A-high"]] }, "r-bluff-bal", "r-thin", "r-draw-hyper-focus-pfr", "r-traps", "r-can-x-nsd", "punchbag-r-pfr"] },
+      { label: "As PFC", lines: true, ids: ["r-fold-bal", "r-to-sizing", "r-bet-vol", { id: "r-can-raise-bluff", label: "Can raise?", chip: "Bluff", chips: true, also: [["r-can-raise-thin", "Thin"]] }, { id: "t-call-range-2ndp", label: "T call range", chip: "2ndP", chips: true, also: [["t-call-range-sd", "SD"], ["t-call-range-wfd", "wFD"], ["t-call-range-lt3rdp", "<3rdP"]] }, "r-call-range", { id: "r-call-hands-light", label: "Bluff catch", chip: "Light", chips: true, also: [["r-call-hands-tight", "Tight"]] }, "r-draw-focus-pfc", { id: "have-lead-r-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"]] }, ["bsti-r", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq-hu", "r-af-hu"] },
     ] },
     { label: "All streets", rows: [
       { label: "Lead", ids: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
       { label: "Range shape", ids: ["merged", "polar", "bad-polar", "sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block"] },
-      { label: "MWP limp", lines: true, ids: ["mwl-oop-probe", "mwl-xr", "mwl-ip-stab"] },
+      { label: "MWP limp", lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, "mwl-ip-stab"] },
     ] },
   ] },
   { title: "Sizing", cat: "sizing", subs: [{ rows: [
