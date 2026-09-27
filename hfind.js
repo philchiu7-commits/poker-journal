@@ -148,7 +148,8 @@ function hqParse(text) {
   };
   for (let k = 0; k < words.length; k++) {
     const w = words[k], t = HQ_WORDS[w];
-    if (/^ln[0-5]{2,3}$/.test(w)) { cur = push({ kind: "line", line: [...w.slice(2)].map((d) => HQ_LINE_CODE[d]).join("") }); continue; }
+    if (/^ln[0-5]{1,2}(?:_[0-5]{1,2}){1,2}$/.test(w)) {
+      cur = push({ kind: "line", line: w.slice(2).split("_").map((u) => [...u].map((d) => HQ_LINE_CODE[d]).join("")) }); continue; }
     { const b = /^bt([tr])(flush|4flush|straight|4str|over|pair|blank)$/.exec(w);
       if (b) { cur = push({ kind: "f", f: "bcard", st: b[1] === "t" ? "turn" : "river", val: b[2] }); continue; } }
     { const b = /^hi(\d+)(le|ge|eq)([ftr])$/.exec(w);
@@ -218,19 +219,22 @@ const HQ_NAME = {
 const HQ_LINE_ACT = { b: "bet", x: "check", c: "call", r: "raise", f: "fold" };
 /* Lines: one letter per street from the flop — "bxb", "bb" (flop + turn,
    river anything), "-bb" (turn + river, flop anything), a dash anywhere is
-   that street anything — "-x-" checked the turn, "b-b" bet flop and river. Swapped for a digit
-   token before the phrase rules so "-xr" can't turn into a check-raise.
-   "the bb" is still the big blind. XR in capitals is the line (check flop,
-   raise turn); any lower case — xR, xr — is the one-street check-raise, and
-   the same for XC XF XB BF BC. */
+   that street anything — "-x-" checked the turn, "b-b" bet flop and river.
+   A lower-case letter then a capital is two moves on one street, so "BBxR"
+   is bet, bet, check-raise the river and "-BxC" bet turn, check-call river.
+   Swapped for a digit token before the phrase rules so "-xr" can't turn
+   into a check-raise. "the bb" is still the big blind. XR in capitals is the
+   line (check flop, raise turn); on its own any lower case — xR, xr — is the
+   one-street check-raise, and the same for XC XF XB BF BC. */
 const HQ_LINE_CODE = "-bxcrf";
 function hqLines(s) {
-  return s.replace(/(^|\s)(lines?\s+)?([-bxcrf]{2,3})(?=\s)/gi, (m, sp, pre, raw, at, all) => {
+  return s.replace(/(^|\s)(lines?\s+)?([-bxcrf]{2,6})(?=\s)/gi, (m, sp, pre, raw, at, all) => {
     const code = raw.toLowerCase();
-    if (code.length > 3 || code.length < 2 || !/[bxcrf]/.test(code)) return m;
+    const units = raw.match(/-|[bxcrf][BXCRF]|[bxcrfBXCRF]/g);
+    if (units.length > 3 || units.length < 2 || !/[bxcrf]/.test(code)) return m;
     if (!pre && raw !== raw.toUpperCase() && ["xr", "xc", "xf", "xb", "bf", "bc"].includes(code)) return m;
     if (!pre && code === "bb" && /\bthe\s+$/i.test(all.slice(0, at + sp.length))) return m;
-    return sp + "ln" + [...code].map((L) => HQ_LINE_CODE.indexOf(L)).join("");
+    return sp + "ln" + units.map((u) => [...u.toLowerCase()].map((L) => HQ_LINE_CODE.indexOf(L)).join("")).join("_");
   });
 }
 const HQ_FACE_NAME = { cbet: "a c-bet", bet: "a bet", raise: "a raise", "3bet": "a 3-bet", "4bet": "a 4-bet",
@@ -258,7 +262,8 @@ function hqLabel(c) {
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
   } else if (c.kind === "line") {
     const any = ["flop", "turn", "river"].filter((st, j) => !c.line[j] || c.line[j] === "-");
-    t = "goes " + [...c.line].map((L, j) => L === "-" ? "" : HQ_LINE_ACT[L] + " " + ["flop", "turn", "river"][j]).filter(Boolean).join(", ")
+    const two = { xr: "check-raise", xc: "check-call", xf: "check-fold", bc: "bet-call", bf: "bet-fold", br: "bet-reraise" };
+    t = "goes " + c.line.map((L, j) => L === "-" ? "" : (two[L] || [...L].map((x) => HQ_LINE_ACT[x]).join(" then ")) + " " + ["flop", "turn", "river"][j]).filter(Boolean).join(", ")
       + (any.length ? ` (${any.join(", ")}: anything)` : "");
   } else {
     const verb = HQ_NAME[c.kind] || c.kind;
@@ -419,9 +424,12 @@ function hqClause(h, oppId, c) {
   }
   /* X only when every move he made there was a check; B/R/C/F when he made
      that move at any point on the street (bet then called a raise is B). */
-  if (c.kind === "line") return [...c.line].every((L, j) => {
+  if (c.kind === "line") return c.line.every((L, j) => {
     if (L === "-") return true;
     const my = mine(["flop", "turn", "river"][j]);
+    const is = (t, x) => x === "x" ? t.a.act === "check" : t.k.has(HQ_LINE_ACT[x]);
+    // two moves: his first there was the one, and a later one the other (xR: checked, then raised)
+    if (L.length === 2) return my.length > 1 && is(my[0], L[0]) && my.slice(1).some((t) => is(t, L[1]));
     return my.length > 0 && (L === "x" ? my.every((t) => t.a.act === "check") : my.some((t) => t.k.has(HQ_LINE_ACT[L])));
   });
   if (c.kind === "agg") return streets.some((st) => mine(st).some((t) => t.k.has("agg") && hqSize(t, c.sz)));
