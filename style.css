@@ -1570,6 +1570,9 @@ button.statcalc:active { color: var(--accent); }
   .rphh-card.k-fold .rphh-act { flex: none; margin-top: 0; padding: 1px 7px; font-size: 11px; }
 
   .odcols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
+  /* Reads lead the right-hand column; exploits drop to its foot. */
+  .odcol { display: flex; flex-direction: column; }
+  .odcol > .panel:has(#od-exploits) { order: 1; }
 
   /* Dragging reads rows top to bottom, so edit mode keeps the single column. */
   #opp-list:not(.editing) .groupsec { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
