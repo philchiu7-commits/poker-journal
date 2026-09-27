@@ -417,9 +417,8 @@ function rpLine() {
     if (f.street !== st) { st = f.street; opened = false; cur = []; streets.push(cur); }
     const agg = RP_AGG.has(f.a.act);
     if (!(f.street === "pre" && quiet.has(f.a.actor))) {
-      const amt = rpAmt(f);
-      cur.push(`<button class="rptok${k === i ? " on" : ""}${agg && !f.allInCall ? " agg" : ""}" data-rpgo="${k}">${esc(f.allInCall ? "C" : rpTok(f.a, f.rung, opened))}` +
-        `${amt ? `<small>${esc(rpBB(amt, r.blinds.BB))}</small>` : ""}</button>`);
+      /* Codes only — the sizes already say it; amounts are on the felt (Phil). */
+      cur.push(`<button class="rptok${k === i ? " on" : ""}${agg && !f.allInCall ? " agg" : ""}" data-rpgo="${k}">${esc(f.allInCall ? "C" : rpTok(f.a, f.rung, opened))}</button>`);
     }
     if (agg) opened = true;
   });
