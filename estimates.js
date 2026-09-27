@@ -265,8 +265,14 @@ const readEstimates = (() => {
   S({ id: "t-barrel-one-done", grp: "Turn barrels (as PFR)", rule: "F", imp: true, def: "Cbet the flop as preflop raiser, then first to act on the turn (no one bet before them): checked it.",
     ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.pfr || f.firstBetBy !== F.me || !t.my.length || !myTurnFirst(t, F.me)) return null;
       return { ok: t.my[0] === "check", why: "turn " + t.my.join("/") + (t.tier ? " with " + g(t) : "") }; } });
-  S({ id: "t-protect-flush", grp: "Turn barrels (as PFR)", rule: "SHARE", yes: 70, no: 30, def: "Turn brought a third card of a suit and they bet it: share shown top pair or better (a made hand, not a barrel).",
-    ch: (F) => { const t = F.st.turn; if (!F.cards || !t.tier || !t.iBet || F.board.length < 4 || !hqBoardCard(F.board, 3).flush) return null; return { ok: t.tier.t >= 2, why: g(t) }; } });
+  /* Protect T Flush (Phil 2026-09-28): last aggressor on the flop, out of position on a turn
+     that brings the third card of a suit, holding a made flush — checks it to protect the
+     checking range. Share checked (vs bet out). */
+  S({ id: "t-protect-flush", grp: "Turn barrels (as PFR)", rule: "SHARE", yes: 70, no: 30, def: "Flop aggressor, out of position when the turn brought a third card of a suit, holding a made flush: share checked it (protecting their checks) rather than bet.",
+    ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.cards || !t.tier || t.ip || F.board.length < 4 || !hqBoardCard(F.board, 3).flush) return null;
+      const agg = f.acts.filter((a) => AGG.has(a.act)).pop();
+      if (!agg || agg.actor !== F.me || !(t.tier.cat === 5 || t.tier.cat === 8) || !myTurnFirst(t, F.me)) return null;
+      const my = t.acts.find((a) => a.actor === F.me).act; return { ok: my === "check", why: my + " with " + g(t) }; } });
   
   // river bluffs
   const rbluff = (F) => { const T = bets(F, "river"); return T && T.tier.t === 0 ? T : null; };
