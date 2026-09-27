@@ -59,7 +59,7 @@ const HQ_WORDS = {
   flat: "a:flat", flats: "a:flat", flatted: "a:flat", flatting: "a:flat",
   "3bet": "a:3bet", "3bets": "a:3bet", "3betting": "a:3bet", "4bet": "a:4bet", "4bets": "a:4bet",
   "5bet": "a:5bet", "5bets": "a:5bet", lrr: "a:lrr",
-  xr: "a:xr", xc: "a:xc", xf: "a:xf", xb: "a:xb", bf: "a:bf", bc: "a:bc", line: "line", lines: "line",
+  xr: "a:xr", xc: "a:xc", xf: "a:xf", xb: "a:xb", bf: "a:bf", bc: "a:bc",
   barrel: "a:barrel2", barrels: "a:barrel2", barreled: "a:barrel2", barrelled: "a:barrel2",
   barrel2: "a:barrel2", barrel3: "a:barrel3",
   pre: "st:pre", pf: "st:pre", flop: "st:flop", flops: "st:flop", turn: "st:turn", turns: "st:turn",
@@ -97,10 +97,11 @@ const HQ_FACERS = new Set(["fold", "call", "raise", "jam", "3bet", "4bet", "5bet
 
 function hqParse(text) {
   let s = " " + String(text || "").toLowerCase().replace(/[’']/g, "").replace(/[,.;:!?()"]/g, " ") + " ";
+  s = hqLines(s);
   for (const [re, to] of HQ_PHRASES) s = s.replace(re, to);
   const words = s.split(/\s+/).filter(Boolean);
   const clauses = [], unknown = [];
-  let cur = null, pend = { st: null, sz: null, neg: false, or: false, line: false };
+  let cur = null, pend = { st: null, sz: null, neg: false, or: false };
   const push = (c) => {
     c.neg = pend.neg; c.or = pend.or && clauses.length > 0;
     pend.neg = false; pend.or = false;
@@ -108,11 +109,7 @@ function hqParse(text) {
   };
   for (let k = 0; k < words.length; k++) {
     const w = words[k], t = HQ_WORDS[w];
-    /* A line: one letter per street from the flop ("bxb", "rcb"; "bx" leaves
-       the river open). Two letters that already mean something — bb, xb, xr…
-       — need "line" in front. */
-    if (t === "line") { pend.line = true; continue; }
-    if (/^[bxcrf]{2,3}$/.test(w) && (pend.line || !t)) { pend.line = false; cur = push({ kind: "line", line: w }); continue; }
+    if (/^ln[0-5]{2,3}$/.test(w)) { cur = push({ kind: "line", line: [...w.slice(2)].map((d) => HQ_LINE_CODE[d]).join("") }); continue; }
     if (!t) { if (!HQ_STOP.has(w)) unknown.push(w); continue; }
     if (t === "neg") { pend.neg = true; continue; }
     if (t === "or") { pend.or = true; continue; }
@@ -176,6 +173,20 @@ const HQ_NAME = {
   barrel3: "triple-barrels (flop + turn + river)", agg: "bets or raises", seen: "plays",
 };
 const HQ_LINE_ACT = { b: "bet", x: "check", c: "call", r: "raise", f: "fold" };
+/* Lines: one letter per street from the flop — "bxb", "bb" (flop + turn,
+   river anything), "-bb" (turn + river, flop anything). Swapped for a digit
+   token before the phrase rules so "-xr" can't turn into a check-raise.
+   "the bb" is still the big blind; xr xc xf xb bf bc keep their one-street
+   meaning unless "line" goes in front. */
+const HQ_LINE_CODE = "-bxcrf";
+function hqLines(s) {
+  return s.replace(/(^|\s)(lines?\s+)?(-{0,2}[bxcrf]{1,3})(?=\s)/g, (m, sp, pre, code, at, all) => {
+    if (code.length > 3 || code.length < 2 || !/[bxcrf]/.test(code)) return m;
+    if (!pre && ["xr", "xc", "xf", "xb", "bf", "bc"].includes(code)) return m;
+    if (!pre && code === "bb" && /\bthe\s+$/.test(all.slice(0, at + sp.length))) return m;
+    return sp + "ln" + [...code].map((L) => HQ_LINE_CODE.indexOf(L)).join("");
+  });
+}
 const HQ_FACE_NAME = { cbet: "a c-bet", bet: "a bet", raise: "a raise", "3bet": "a 3-bet", "4bet": "a 4-bet",
   "5bet": "a 5-bet", jam: "a jam", donk: "a donk" };
 const HQ_POS_NAME = { BTN: "on the button", CO: "in the CO", HJ: "in the HJ", EP: "in early position",
@@ -193,8 +204,9 @@ function hqLabel(c) {
       ip: "in position on the flop", oop: "out of position on the flop" }[c.f];
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
   } else if (c.kind === "line") {
-    t = "goes " + [...c.line].map((L, j) => HQ_LINE_ACT[L] + " " + ["flop", "turn", "river"][j]).join(", ")
-      + (c.line.length === 2 ? " (river: anything)" : "");
+    const any = ["flop", "turn", "river"].filter((st, j) => !c.line[j] || c.line[j] === "-");
+    t = "goes " + [...c.line].map((L, j) => L === "-" ? "" : HQ_LINE_ACT[L] + " " + ["flop", "turn", "river"][j]).filter(Boolean).join(", ")
+      + (any.length ? ` (${any.join(", ")}: anything)` : "");
   } else {
     const verb = HQ_NAME[c.kind] || c.kind;
     t = verb + (c.facing ? (c.kind === "fold" ? " to " : " ") + HQ_FACE_NAME[c.facing] : "")
@@ -341,6 +353,7 @@ function hqClause(h, oppId, c) {
   /* X only when every move he made there was a check; B/R/C/F when he made
      that move at any point on the street (bet then called a raise is B). */
   if (c.kind === "line") return [...c.line].every((L, j) => {
+    if (L === "-") return true;
     const my = mine(["flop", "turn", "river"][j]);
     return my.length > 0 && (L === "x" ? my.every((t) => t.a.act === "check") : my.some((t) => t.k.has(HQ_LINE_ACT[L])));
   });
