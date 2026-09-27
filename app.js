@@ -193,7 +193,7 @@ const READ_LAYOUT = [
        As PFC is asked three ways: the reads that hold either way stay up top,
        the rest sit under the seat they belong to (Phil). */
     { label: "As PFC", rows: [
-      { lines: true, ids: ["floats-wide", "fold-cbet-t-hu", { id: "t-call-style-absv", label: "Turn call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Play"], ["t-call-style-wide", "Wide"]] }, { id: "raise-nuts-t", label: "Raise nuts", also: [["raise-nuts-t-even-boat", "Even Boat"], ["raise-nuts-t-even-ip", "Even IP"], ["raise-nuts-t-xnut", "XNut"]] }, ["bsti-t", "BSTI"]] },
+      { lines: true, ids: ["floats-wide", { id: "t-call-style-absv", label: "Turn call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Play"], ["t-call-style-wide", "Wide"]] }, { id: "raise-nuts-t", label: "Raise nuts", also: [["raise-nuts-t-even-boat", "Even Boat"], ["raise-nuts-t-even-ip", "Even IP"], ["raise-nuts-t-xnut", "XNut"]] }, ["bsti-t", "BSTI"]] },
       { label: "OOP", lines: true, ids: [{ label: "Probe T", subs: [["t-probe-hu", "HU"], ["t-probe-mw", "MWP"]] }, { id: "t-probe-merge", label: "Probe T", chip: "Merge", chips: true, also: [["t-probe-polar", "Polar"]] }, { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"], ["have-lead-t-merge", "Merge"]] }, "t-protect-flush"] },
       { label: "IP", lines: true, ids: [{ id: "t-bet-vol-high", label: "Bet vol", chip: "High", chips: true, also: [["t-bet-vol-low", "Low"]] }, ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] },
     ] },
