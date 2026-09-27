@@ -37,6 +37,8 @@ const HQ_PHRASES = [
   [/\bthree[\s-]?quarters?(?:\s*pot)?\b|\b3\/4(?:\s*pot)?\b/g, " s75 "],
   [/\bpot[\s-]?sized?(?:\s+bet)?\b|\bfull[\s-]?pot\b/g, " s100 "],
   [/\bover[\s-]?bet(?:s|ting)?\b/g, " ob "],
+  [/\bpre[\s-]?flop\s+(?:raiser|aggressor)\b|\bpfa\b/g, " pfr "],
+  [/\bpre[\s-]?flop\s+caller\b/g, " pfc "],
   [/\bpre[\s-]?flop\b/g, " pre "],
   [/\b([345])[\s-]bet/g, "$1bet"],
 ];
@@ -68,6 +70,7 @@ const HQ_WORDS = {
   straddle: "f:pos:STD", straddles: "f:pos:STD", straddled: "f:pos:STD", std: "f:pos:STD",
   ep: "f:pos:EP", utg: "f:pos:EP", early: "f:pos:EP", u6: "f:pos:EP", u7: "f:pos:EP", u8: "f:pos:EP", u9: "f:pos:EP",
   "3bp": "f:pot:3BP", "4bp": "f:pot:4BP+", "5bp": "f:pot:4BP+", srp: "f:pot:SRP", limpedpot: "f:pot:Limped",
+  pfr: "f:pfr", pfc: "f:pfc",
   hu: "f:hu", mw: "f:mw", multiway: "f:mw", sd: "f:sd", cards: "f:cards", shown: "f:cards", showed: "f:cards",
   ip: "f:ip", oop: "f:oop",
   no: "neg", not: "neg", never: "neg", didnt: "neg", doesnt: "neg", dont: "neg", without: "neg",
@@ -178,6 +181,7 @@ function hqLabel(c) {
     t = c.f === "sd" || c.f === "cards" ? "" : "is ";
     t += { pos: HQ_POS_NAME[c.val],
       pot: { "3BP": "in a 3-bet pot (he 3-bet or called it)", "4BP+": "in a 4-bet+ pot", SRP: "in a single-raised pot", Limped: "in a limped pot" }[c.val],
+      pfr: "the preflop raiser", pfc: "a preflop caller",
       hu: "heads-up on the flop", mw: "multiway on the flop", sd: "gets to showdown", cards: "has his cards on record",
       ip: "in position on the flop", oop: "out of position on the flop" }[c.f];
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
@@ -205,7 +209,7 @@ function hqInfo(h) {
   let rungs = null;
   try { rungs = typeof handRungs === "function" ? handRungs(h) : null; } catch (e) { rungs = null; }
   const tagged = [];
-  let lv = 0, prevAgg = null;
+  let lv = 0, prevAgg = null, pfr = null;
   for (const st of ["pre", "flop", "turn", "river"]) {
     let open = false, lastAgg = null;
     const acted = new Set();
@@ -238,9 +242,10 @@ function hqInfo(h) {
       tagged.push({ a, st, k, step: rg ? rg.step : null, ratio: rg ? rg.ratio : null });
       acted.add(a.actor);
     }
+    if (st === "pre") pfr = lastAgg;
     prevAgg = lastAgg;
   }
-  info = { tagged };
+  info = { tagged, pfr };
   hqCache.set(h, info);
   return info;
 }
@@ -256,6 +261,17 @@ function hqClause(h, oppId, c) {
       case "pot": return potBucket(h) === c.val && (c.val !== "3BP" || in3betPot(h, oppId));
       case "hu": return fieldBucket(h) === "HU" && seenStreets(h, oppId).includes("Flop");
       case "mw": return fieldBucket(h) === "MW" && seenStreets(h, oppId).includes("Flop");
+      /* Table sense, not HUD sense: the preflop raiser is whoever put in the
+         last raise, so an opener who called a 3-bet is the caller in that pot.
+         The caller called that last raise and stayed in. A limped pot has neither. */
+      case "pfr": return hqInfo(h).pfr === me;
+      case "pfc": {
+        const { pfr } = hqInfo(h);
+        const pre = hqInfo(h).tagged.filter((t) => t.st === "pre");
+        const j = pre.findIndex((t) => t.a.actor === pfr && t.k.has("agg") && !pre.slice(pre.indexOf(t) + 1).some((u) => u.k.has("agg")));
+        return !!pfr && pfr !== me && j >= 0 && pre.slice(j + 1).some((t) => t.a.actor === me && t.a.act === "call")
+          && !pre.slice(j + 1).some((t) => t.a.actor === me && t.a.act === "fold");
+      }
       case "sd": return oppSD(h, oppId);
       case "cards": return cardsSeen(h, oppId);
       case "ip": case "oop": {

@@ -1169,6 +1169,7 @@ function renderHandFilters(oppId, allHands) {
   const HF_TIP = { Flop: "He acted on the flop (not an all-in runout)", Turn: "He acted on the turn (not an all-in runout)",
     River: "He acted on the river (not an all-in runout)", HU: "Two players saw the flop", MW: "Three or more saw the flop",
     "3BP": "Hands where he 3-bet or called a 3-bet",
+    PFR: "Preflop raiser — he raised preflop (open, 3-bet or more)", PFC: "Preflop caller — he called preflop and never raised",
     "3b": "He 3-bet preflop", c3b: "He called somebody's 3-bet preflop",
     R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
   const chip = (dim, val, label) => {
