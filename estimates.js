@@ -377,6 +377,17 @@ const readEstimates = (() => {
     ["f-xb-pfc-2p", "two pair or better", (T) => T.tier.t === 4]])
     S({ id, grp: "Check backs (as PFC)", rule: "CAN", def: `As preflop caller, the flop was checked to them and they checked back — showed ${what}.`,
       ch: (F) => { const T = pfcXB(F); return T ? { ok: ok(T), why: g(T) } : null; } });
+  /* Flop → As PFC → Adv. Board (Phil 2026-09-28): a flop that favours the caller — three
+     different ranks, 9-high or lower, spanning 4 or less (7-6-5, 8-6-4). BXT = they bet into
+     the raiser: acted before him on the flop with no bet ahead, and bet. Flop only. */
+  const advBoard = (b) => { const r = b.slice(0, 3).map(rk); return b.length >= 3 && new Set(r).size === 3 && Math.max(...r) <= 9 && Math.max(...r) - Math.min(...r) <= 4; };
+  const advSpot = (F) => { const T = F.st.flop; if (!F.pfc || !F.preAgg || !advBoard(F.board)) return null;
+    const ri = T.acts.findIndex((a) => a.actor === F.preAgg), mi = T.acts.findIndex((a) => a.actor === F.me);
+    return mi >= 0 && (ri < 0 || mi < ri) && !T.acts.slice(0, mi).some((a) => AGG.has(a.act)) ? { T, donk: AGG.has(T.acts[mi].act) } : null; };
+  S({ id: "f-adv-board-bxt", grp: "Postflop — betting", rule: "F", imp: true, def: "As preflop caller on a low connected flop (9-high or lower, three ranks within 4), first to act ahead of the raiser: bet into him.",
+    ch: (F) => { const x = advSpot(F); return x ? { ok: x.donk, why: x.T.acts.find((a) => a.actor === F.me).act + " on " + F.board.slice(0, 3).join(" ") } : null; } });
+  S({ id: "f-adv-board-air", grp: "Postflop — betting", rule: "CAN", def: "As preflop caller, bet into the raiser on a low connected flop — showed air: no pair and no draw.",
+    ch: (F) => { const x = advSpot(F); return x && x.donk && F.cards && x.T.tier ? { ok: air(x.T), why: g(x.T) } : null; } });
   for (const [s, L] of [["flop", "f"], ["turn", "t"], ["river", "r"]])
     S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role) — showed a bluff: no pair of their own (air or a draw).`,
       ch: (F) => { const T = F.st[s]; if (!F.cards || !T.tier || T.firstBetBy !== F.me || !checkedTo(F, T)) return null;

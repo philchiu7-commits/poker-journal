@@ -314,6 +314,8 @@ const TENDENCY_TAGS = [
   { id: "f-xb-pfc-sd",   cat: "postflop", label: "Check Backs SD" },
   { id: "f-xb-pfc-topp", cat: "postflop", label: "Check Backs TopP" },
   { id: "f-xb-pfc-2p",   cat: "postflop", label: "Check Backs 2P+" },
+  { id: "f-adv-board-bxt", cat: "postflop", label: "Adv. Board BXT" },
+  { id: "f-adv-board-air", cat: "postflop", label: "Adv. Board Air" },
   /* Turn probe: what the bet is made of. */
   { id: "t-probe-merge", cat: "postflop", label: "Probe T Merge" },
   { id: "t-probe-polar", cat: "postflop", label: "Probe T Polar" },
