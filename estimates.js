@@ -335,6 +335,8 @@ const readEstimates = (() => {
     S({ id: `have-lead-${L}-strong`, grp: "Leads", rule: "CAN", def: `${tag} leads into the last street's bettor shown: two pair or better.`,
       ch: (F) => { const T = lead(F, s); return T ? { ok: T.tier.t === 4, why: g(T) } : null; } });
   }
+  S({ id: "have-lead-r-bluff", grp: "Leads", rule: "CAN", def: "River leads into the last street's bettor shown: a bluff — no pair better than third (missed draws count).",
+    ch: (F) => { const T = lead(F, "river"); return T ? { ok: T.tier.t === 0, why: g(T) } : null; } });
   // checked-to bets as the caller
   /* Same spot as Thin XT: any role, an opponent checked the street to them and
      they bet. A bluff is no pair of their own — air or a draw (Phil: Q6 betting

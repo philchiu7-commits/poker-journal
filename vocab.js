@@ -448,6 +448,7 @@ const TENDENCY_TAGS = [
   { id: "have-lead-r-draw", cat: "postflop", label: "Have Lead Draw" },
   { id: "have-lead-r-flush", cat: "postflop", label: "Have Lead Flush" },
   { id: "have-lead-r-strong", cat: "postflop", label: "Have Lead Strong" },
+  { id: "have-lead-r-bluff", cat: "postflop", label: "Have Lead Bluff" },
   /* River draws: does he play the river off whether the draws got there? As
      PFC a yes is a focus, as PFR a yes is a hyper-focus (Phil, 2026-09-27). */
   { id: "r-draw-focus-pfc", cat: "postflop", label: "Draw Focus" },
