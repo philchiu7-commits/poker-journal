@@ -169,7 +169,7 @@ const READ_LAYOUT = [
   ] },
   { title: "Flop exploit", subs: [
     { label: "As PFR", rows: wb([{ label: "Cbet freq", subs: [["f-cbet-freq-hu", "HU"], ["f-cbet-freq-mw", "MWP"]] },
-      { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid"], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "protect-disadv-board", label: "Protect OOP", chips: true, also: ["f-bf-disadv-board"] },
+      { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid"], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "f-protect-oop", label: "Protect OOP", chip: "Yes", chips: true, also: ["protect-disadv-board", "f-bf-disadv-board"] },
       { id: "f-adv-weak-check", label: "Adv Board", chips: true }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
       { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
@@ -239,7 +239,7 @@ const LIVE_LAYOUT = [
   { title: "Postflop", cat: "postflop", subs: [
     { label: "Flop", rows: [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
-      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check"] },
+      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
       { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-pfc-equity", "f-xr-pfc-air", "f-xr-pfc-gu-turn", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
@@ -3203,7 +3203,7 @@ function renderOppReads(o) {
           /* `chips`: the line's label names the spot and every read on it is a
              named chip — "Protect OOP: xR DisAdv. · BetF" — rather than one
              unnamed yes/no control with companions. */
-          : x.chips ? [idOf(x), ...alsoOf(x).map(idOf)].filter(live).map((id) => readBtn(id, TAG_BY_ID[id].label, false)).join("")
+          : x.chips ? [idOf(x), ...alsoOf(x).map(idOf)].filter(live).map((id) => readBtn(id, id === idOf(x) && x.chip || TAG_BY_ID[id].label, false)).join("")
           : readBtn(idOf(x), labelOf(x), true) +
             alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("");
         return `<span class="rllab${idsOf(x).some(isSet) ? " on" : ""}${wide(x)}">${esc(labelOf(x))}</span>` +

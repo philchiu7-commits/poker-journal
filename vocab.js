@@ -191,6 +191,8 @@ const TENDENCY_TAGS = [
   /* Protect OOP, as the preflop raiser on a board that favours the caller:
      the two ways he protects a hand there. xR = he checks and check-raises it
      (id kept from when this was one "Protect DisAdv. Board" read). */
+  /* Plain "yes, he protects OOP" — the chip ahead of the two ways he does it. */
+  { id: "f-protect-oop",        cat: "postflop", label: "Protect OOP" },
   { id: "protect-disadv-board", cat: "postflop", label: "xR DisAdv." },
   /* Bf = bet-fold. The other half of the protection bet on a board that
      favours the caller: he bets it, and a raise is the end of the hand. */
