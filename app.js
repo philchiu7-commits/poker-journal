@@ -173,12 +173,12 @@ const READ_LAYOUT = [
       { id: "f-adv-weak-check", label: "Adv Board", chips: true }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
       { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
-      { label: "OOP", lines: true, ids: [{ label: "xR", subs: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }] },
+      { label: "OOP", lines: true, ids: [{ id: "f-xr-pfc-equity", label: "xR", chip: "Equity", chips: true, also: [["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }] },
       { label: "Streets vs Him", lines: true, ids: [
         { label: "HU", subs: [["fold-cbet-f-hu", "F"], ["fold-cbet-t-hu", "T"], ["fold-cbet-r-hu", "R"]] },
         { label: "MWP", subs: [["fold-cbet-f-mw", "F"]] }] },
       { lines: true, ids: [{ label: "Float", subs: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] }] },
-      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { label: "ThinXT", subs: [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }] },
+      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { id: "f-thin-xt-srp", label: "ThinXT", chip: "SRP", chips: true, also: [["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }] },
     ] },
   ] },
   { title: "Turn exploit", subs: [
