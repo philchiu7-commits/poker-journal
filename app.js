@@ -241,12 +241,12 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"], "f-b3b-nut"] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-pfc-equity", "f-xr-pfc-air", "f-xr-pfc-gu-turn", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], "f-thin-xt-srp", "f-thin-xt-mwp", "f-thin-xt-3bp"] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", { label: "xR", subs: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }, "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { label: "ThinXT", subs: [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: ["t-barrel-air", "t-barrel-equity", "t-barrel-sdv", "t-barrel-tight", "t-bcard-4str", "t-bcard-3flush", "t-bcard-4flush", "t-bcard-over", "t-bcard-blank", "t-low-boards", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
+      { label: "As PFR", lines: true, ids: [{ label: "Barrels", subs: [["t-barrel-air", "Air"], ["t-barrel-equity", "Equity"], ["t-barrel-sdv", "SDV"], ["t-barrel-tight", "Tight"]] }, { label: "Turn Cards", subs: [["t-bcard-4str", "4Str"], ["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] }, "t-low-boards", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
       { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", "t-bet-vol", "t-call-style", { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"]] }, "t-protect-flush", ["bsti-t", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq-hu", "t-fold-to-xr-hu"] },
     ] },
@@ -3196,7 +3196,11 @@ function renderOppReads(o) {
         : isTallyRead(idOf(x)) && choiceOptions(idOf(x)).length >= 4 ? " rlwide" : "");
       const lines = items.filter(asLine).map((x) => {
         const sb = subsOf(x);
-        const body = sb
+        /* A group of plain yes/no reads is word chips — the word is the button and
+           the colour is the answer (Phil). Stats and pickers keep a cap over each box. */
+        const body = sb && sb.every((v) => !laid(idOf(v)))
+          ? sb.filter((v) => live(idOf(v))).map((v) => readBtn(idOf(v), labelOf(v), false)).join("")
+          : sb
           ? sb.filter((v) => live(idOf(v))).map((v) =>
               `<span class="rlgrp"><span class="scap">${esc(labelOf(v))}</span>` +
               `${readBtn(idOf(v), TAG_BY_ID[idOf(v)].label, true)}</span>`).join("")

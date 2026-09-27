@@ -183,14 +183,15 @@ const HQ_NAME = {
 };
 const HQ_LINE_ACT = { b: "bet", x: "check", c: "call", r: "raise", f: "fold" };
 /* Lines: one letter per street from the flop — "bxb", "bb" (flop + turn,
-   river anything), "-bb" (turn + river, flop anything). Swapped for a digit
+   river anything), "-bb" (turn + river, flop anything), a dash anywhere is
+   that street anything — "-x-" checked the turn, "b-b" bet flop and river. Swapped for a digit
    token before the phrase rules so "-xr" can't turn into a check-raise.
    "the bb" is still the big blind. XR in capitals is the line (check flop,
    raise turn); any lower case — xR, xr — is the one-street check-raise, and
    the same for XC XF XB BF BC. */
 const HQ_LINE_CODE = "-bxcrf";
 function hqLines(s) {
-  return s.replace(/(^|\s)(lines?\s+)?(-{0,2}[bxcrf]{1,3})(?=\s)/gi, (m, sp, pre, raw, at, all) => {
+  return s.replace(/(^|\s)(lines?\s+)?([-bxcrf]{2,3})(?=\s)/gi, (m, sp, pre, raw, at, all) => {
     const code = raw.toLowerCase();
     if (code.length > 3 || code.length < 2 || !/[bxcrf]/.test(code)) return m;
     if (!pre && raw !== raw.toUpperCase() && ["xr", "xc", "xf", "xb", "bf", "bc"].includes(code)) return m;
