@@ -268,8 +268,15 @@ const TENDENCY_TAGS = [
   { id: "t-barrel-equity", cat: "postflop", label: "Barrels Equity" },
   { id: "t-barrel-sdv",    cat: "postflop", label: "Barrels SDV" },
   { id: "t-barrel-tight",  cat: "postflop", label: "Barrels Tight" },
-  /* The turn cards he fires his second barrel on, counted per card type. */
-  { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards",      kind: "tally",  options: [["4str", "4Str"], ["3flush", "3Flush"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },
+  /* Superseded by the yes/no Turn Cards reads below (Phil, 2026-09-27). Kept,
+     not retired, so any counts already on it stay visible under Live → Other. */
+  { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards (old tally)", kind: "tally",  options: [["4str", "4Str"], ["3flush", "3Flush"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },
+  /* The turn cards he fires his second barrel on, one yes/no per card type. */
+  { id: "t-bcard-4str",    cat: "postflop", label: "Turn Cards 4Str" },
+  { id: "t-bcard-3flush",  cat: "postflop", label: "Turn Cards 3Flush" },
+  { id: "t-bcard-4flush",  cat: "postflop", label: "Turn Cards 4Flush" },
+  { id: "t-bcard-over",    cat: "postflop", label: "Turn Cards Overcards" },
+  { id: "t-bcard-blank",   cat: "postflop", label: "Turn Cards Blank" },
   { id: "t-low-boards",   cat: "postflop", label: "Low boards",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
