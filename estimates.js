@@ -331,6 +331,13 @@ const readEstimates = (() => {
      they bet. A bluff is no pair of their own — air or a draw (Phil: Q6 betting
      a JJJ4 turn in a limped pot is a bluff; the old caller-only rule missed it). */
   const checkedTo = (F, T) => { const i = T.acts.findIndex((a) => a.actor === F.me); return i > 0 && T.acts.slice(0, i).some((a) => a.act === "check"); };
+  /* Flop → As PFR → Low Board IP (Phil 2026-09-28). Low = the flop's top card is 9 or lower;
+     the flop was checked to them in position, nobody bet ahead of them. */
+  const lowIP = (F) => { const T = F.st.flop; return F.pfr && T.ip && F.board.length >= 3 && Math.max(...F.board.slice(0, 3).map(rk)) <= 9 && checkedTo(F, T) && myTurnFirst(T, F.me) ? T : null; };
+  S({ id: "f-low-board-ip-passive", grp: "Postflop — betting", rule: "F", imp: true, def: "Preflop raiser in position on a 9-high-or-lower flop, checked to: checked back.",
+    ch: (F) => { const T = lowIP(F); return T ? { ok: T.my[0] === "check", why: T.my[0] + " on " + F.board.slice(0, 3).join(" ") } : null; } });
+  S({ id: "f-low-board-ip-canbluff", grp: "Bets when checked to", rule: "CAN", def: "Preflop raiser in position on a 9-high-or-lower flop, checked to, bet — showed a bluff: no pair of their own (air or a draw).",
+    ch: (F) => { const T = lowIP(F); return T && F.cards && T.tier && T.firstBetBy === F.me ? { ok: T.tier.name === "no pair", why: g(T) } : null; } });
   for (const [s, L] of [["flop", "f"], ["turn", "t"], ["river", "r"]])
     S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role) — showed a bluff: no pair of their own (air or a draw).`,
       ch: (F) => { const T = F.st[s]; if (!F.cards || !T.tier || T.firstBetBy !== F.me || !checkedTo(F, T)) return null;

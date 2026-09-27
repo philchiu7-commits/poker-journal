@@ -319,6 +319,9 @@ const TENDENCY_TAGS = [
   { id: "t-low-boards",   cat: "postflop", label: "Low boards (old)",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
   { id: "t-low-boards-passive", cat: "postflop", label: "Low boards Passive" },
   { id: "t-low-boards-aggro", cat: "postflop", label: "Low boards Aggro" },
+  /* Flop, as PFR in position on a 9-high-or-lower board. */
+  { id: "f-low-board-ip-passive",  cat: "postflop", label: "Low Board IP Passive" },
+  { id: "f-low-board-ip-canbluff", cat: "postflop", label: "Low Board IP CanBluff" },
   /* Superseded by the yes/no T call range reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "t-call-range",   cat: "postflop", label: "T call range (old tally)",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
