@@ -1536,7 +1536,7 @@ button.statcalc:active { color: var(--accent); }
 
 /* ===== Laptop =====
    A wide window trades the bottom tab bar for a sidebar and uses the width:
-   the replayer's felt beside its history, an opponent's panels in two
+   the replayer's history in columns across the page, an opponent's panels in two
    columns, the opponents list as a grid. Everything narrower keeps the phone
    layout untouched. */
 @media (min-width: 1000px) {
@@ -1553,11 +1553,21 @@ button.statcalc:active { color: var(--accent); }
   #sheet { left: 92px; bottom: auto; top: 10vh; width: 560px; max-height: 80vh;
     border: 1px solid var(--line); border-radius: 18px; padding-bottom: 16px; }
 
-  /* Felt on the left, pinned while the history scrolls on the right. */
-  .hvcols { display: grid; grid-template-columns: minmax(400px, 1fr) minmax(0, 1.3fr);
-    gap: 24px; align-items: start; }
-  .hvmain { position: sticky; top: 12px; }
-  .rpfelt { width: min(100%, 62vh); max-height: none; }
+  /* Felt and its controls side by side on top, the history underneath in
+     street-width columns across the page — never stretched to fill it — so
+     the whole hand sits on one screen. */
+  .hvmain { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto auto 1fr;
+    column-gap: 28px; margin-bottom: 10px; }
+  .hvside { grid-row: 1 / -1; justify-self: end; }
+  #hv-transport { grid-column: 2; grid-row: 2; justify-self: start; }
+  #hv-line { grid-column: 2; grid-row: 3; justify-self: start; max-width: 520px; }
+  .rpfelt { width: 38vh; max-height: none; }
+  .rphh-cols { grid-template-columns: repeat(auto-fill, 190px); }
+  /* A fold says nothing about size, so it takes one slim line — a fold-round
+     preflop no longer pushes the rest of the hand off the screen. */
+  .rphh-card.k-fold { display: flex; align-items: center; gap: 6px; padding: 3px 7px; }
+  .rphh-card.k-fold .rphh-who { flex: 1; }
+  .rphh-card.k-fold .rphh-act { flex: none; margin-top: 0; padding: 1px 7px; font-size: 11px; }
 
   .odcols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
 
