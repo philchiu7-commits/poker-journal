@@ -214,8 +214,8 @@ const readEstimates = (() => {
     ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.pfc || !f.xr || !t.my.length) return null;
       return { ok: !t.my.some((x) => ["bet", "raise", "jam"].includes(x)), why: "turn: " + t.my.join("/") + (t.tier ? " with " + g(t) : "") }; } });
   for (const [id, k, lab] of [["t-bcard-3flush", "flush", "a third card of a suit"], ["t-bcard-4flush", "4flush", "a fourth card of a suit"], ["t-bcard-4str", "4str", "a four-straight"], ["t-bcard-over", "over", "an overcard to the flop"], ["t-bcard-blank", "blank", "a blank"]])
-    S({ id, grp: "Turn cards he barrels", rule: "F", imp: true, def: `Cbet the flop, the turn brought ${lab}, and the turn was their to bet: bet it.`,
-      ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.pfr || f.firstBetBy !== F.me || f.raised || !myTurnFirst(t, F.me) || F.board.length < 4) return null;
+    S({ id, grp: "Turn cards he barrels", rule: "F", imp: true, def: `As preflop raiser, the turn brought ${lab} and was theirs to bet (turn only, any flop): bet it.`,
+      ch: (F) => { const t = F.st.turn; if (!F.pfr || !myTurnFirst(t, F.me) || F.board.length < 4) return null;
         if (!hqBoardCard(F.board, 3)[k]) return null;
         return { ok: t.firstBetBy === F.me, why: (t.firstBetBy === F.me ? "barrelled " : "checked ") + F.board[3] }; } });
   
@@ -242,8 +242,8 @@ const readEstimates = (() => {
      left out either way, bet or checked. */
   // Phil: a flush traps only as the nut flush on a 4-flush board (flushStep is set only there, so a 3-flush board's flush never counts).
   const trapFlushOk = (F, T) => T.tier.cat !== 5 || T.tier.flushStep === 0;
-  S({ id: "r-traps", grp: "What they bet", rule: "CAN", def: "Turns/rivers where they held two pair or better and the street was theirs to bet: checked instead (check-call, check-raise, or a turn check-back; a river check-back in position isn't a trap). On a four-straight board only a straight or better counts; a flush counts only as the nut flush on a four-flush board, never on a three-flush board.",
-    ch: (F) => { if (!F.cards) return null; for (const s of ["river", "turn"]) { const T = F.st[s]; if (T.tier && T.tier.t === 4 && trapFlushOk(F, T) && myTurnFirst(T, F.me) && !(s === "river" && T.ip)) return { ok: T.my[0] === "check", why: s + ": " + T.my.join("/") + " with " + g(T) }; } return null; } });
+  S({ id: "r-traps", grp: "What they bet", rule: "CAN", def: "Rivers where they held two pair or better and the river was theirs to bet: checked instead (check-call or check-raise; a check-back in position isn't a trap). On a four-straight board only a straight or better counts; a flush counts only as the nut flush on a four-flush board, never on a three-flush board.",
+    ch: (F) => { if (!F.cards) return null; for (const s of ["river"]) { const T = F.st[s]; if (T.tier && T.tier.t === 4 && trapFlushOk(F, T) && myTurnFirst(T, F.me) && !T.ip) return { ok: T.my[0] === "check", why: s + ": " + T.my.join("/") + " with " + g(T) }; } return null; } });
   S({ id: "r-xc-thin", grp: "What they bet", rule: "CAN", def: "As preflop raiser, checked the river and called a bet: shown with second or top pair (thin value).",
     ch: (F) => { const T = F.st.river; if (!F.pfr || !F.cards || !T.tier || T.my[0] !== "check" || !T.my.includes("call")) return null;
       return { ok: T.tier.t === 1 || T.tier.t === 2, why: "check-called river with " + g(T) }; } });
@@ -252,18 +252,19 @@ const readEstimates = (() => {
       const x = T.my[0] === "check"; return { ok: x && T.tier.t === 0 && !T.tier.weakPair, why: (x ? "checked" : T.my[0]) + " river with " + g(T) }; } });
   
   // barrels content (PFR turn barrel after flop cbet)
-  const barrel = (F) => { const f = F.st.flop, t = F.st.turn; return F.pfr && F.cards && f.firstBetBy === F.me && t.firstBetBy === F.me && t.tier ? t : null; };
+  // turn only (Phil 2026-09-28): PFR bet the turn first, whatever they did on the flop
+  const barrel = (F) => { const t = F.st.turn; return F.pfr && F.cards && t.firstBetBy === F.me && t.tier ? t : null; };
   // Turn → As PFR → Bluff: of their turn bluffs as PFR, the XB line — checked the flop, bet the turn (Phil 2026-09-28)
   S({ id: "t-bluff-xb", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn bluffs shown as preflop raiser (bet first, no pair better than third): share on the XB line — only checked the flop, then bet the turn.",
     ch: (F) => { const t = F.st.turn; if (!F.pfr || !F.cards || !t.tier || t.firstBetBy !== F.me || t.tier.t !== 0) return null; const l = own(F.st.flop); return { ok: l === "X", why: "flop " + l + ": " + g(t) }; } });
-  S({ id: "t-barrel-air", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with nothing: no pair, no draw.", ch: (F) => { const T = barrel(F); return T ? { ok: air(T), why: g(T) } : null; } });
-  S({ id: "t-barrel-equity", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a draw and no pair (FD, OESD or gutshot).", ch: (F) => { const T = barrel(F); return T ? { ok: !!eq(T), why: g(T) } : null; } });
-  S({ id: "t-barrel-sdv", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a weak made hand: second pair or a pair under it.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || !!T.tier.weakPair, why: g(T) } : null; } });
+  S({ id: "t-barrel-air", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn bets as preflop raiser shown with nothing: no pair, no draw.", ch: (F) => { const T = barrel(F); return T ? { ok: air(T), why: g(T) } : null; } });
+  S({ id: "t-barrel-equity", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn bets as preflop raiser shown with a draw and no pair (FD, OESD or gutshot).", ch: (F) => { const T = barrel(F); return T ? { ok: !!eq(T), why: g(T) } : null; } });
+  S({ id: "t-barrel-sdv", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn bets as preflop raiser shown with a weak made hand: second pair or a pair under it.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || !!T.tier.weakPair, why: g(T) } : null; } });
   // Turn → As PFR → When check → xR (Phil 2026-09-28): they checked the turn as raiser, then check-raised.
   for (const [id, what, ok] of [["t-xr-pfr-nut", "two pair or better", (T) => T.tier.t === 4], ["t-xr-pfr-bluff", "a bluff: no pair better than third (draws count)", (T) => T.tier.t === 0]])
     S({ id, grp: "Turn barrels (as PFR)", rule: "CAN", def: `As preflop raiser, checked the turn and check-raised — showed ${what}.`,
       ch: (F) => { const T = F.st.turn; return F.pfr && F.cards && T.tier && T.xr ? { ok: ok(T), why: g(T) } : null; } });
-  S({ id: "t-barrel-mergy", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a middling made hand: second or top pair (a merged barrel, not polar).", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || T.tier.t === 2, why: g(T) } : null; } });
+  S({ id: "t-barrel-mergy", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn bets as preflop raiser shown with a middling made hand: second or top pair (a merged barrel, not polar).", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || T.tier.t === 2, why: g(T) } : null; } });
   S({ id: "t-barrel-tight", grp: "Turn barrels (as PFR)", rule: "SHARE", yes: 70, no: 40, def: "Turn barrels shown: share that were top pair or better.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t >= 2, why: g(T) } : null; } });
   S({ id: "t-barrel-one-done", grp: "Turn barrels (as PFR)", rule: "F", imp: true, def: "Cbet the flop as preflop raiser, then first to act on the turn (no one bet before them): checked it.",
     ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.pfr || f.firstBetBy !== F.me || !t.my.length || !myTurnFirst(t, F.me)) return null;
@@ -405,10 +406,11 @@ const readEstimates = (() => {
     S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role) — showed a bluff: no pair of their own (air or a draw).`,
       ch: (F) => { const T = F.st[s]; if (!F.cards || !T.tier || T.firstBetBy !== F.me || !checkedTo(F, T)) return null;
         return { ok: T.tier.name === "no pair", why: g(T) }; } });
+  // Thin XT F (Phil 2026-09-28): flop only — as preflop caller, checked to on the flop, they bet: thin value?
   for (const [id, pot] of [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MW"], ["f-thin-xt-3bp", "3BP+"]])
-    S({ id, grp: "Bets when checked to", rule: "CAN", def: `Flop checked through${pot === "MW" ? " three or more ways" : " in a " + pot}, they bet the turn — showed second or top pair (thin value).`,
-      ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.cards || !f.checkedThrough || !t.tier || !t.iBet) return null;
-        if (pot === "MW" ? f.alive < 3 : (F.pot !== pot || f.alive !== 2)) return null; return { ok: t.tier.t === 1 || t.tier.t === 2, why: g(t) }; } });
+    S({ id, grp: "Bets when checked to", rule: "CAN", def: `As preflop caller, the flop was checked to them${pot === "MW" ? " three or more ways" : " heads-up in a " + pot} and they bet — showed second or top pair (thin value).`,
+      ch: (F) => { const f = F.st.flop; if (!F.pfc || !F.cards || !f.tier || f.firstBetBy !== F.me || !checkedTo(F, f)) return null;
+        if (pot === "MW" ? f.alive < 3 : (F.pot !== pot || f.alive !== 2)) return null; return { ok: f.tier.t === 1 || f.tier.t === 2, why: g(f) }; } });
   // Weaker than top pair = second/third/under/bottom pair, still counted on 4-flush/straight boards (demoted top pair/overpair excluded).
   const belowTop = (T) => /^(second pair|third pair|underpair|bottom\/weak pair)/.test(T.tier.name);
   S({ id: "thin-xt-t", grp: "Bets when checked to", rule: "CAN", def: "An opponent checked the turn to them and they bet (any role) — showed a pair weaker than top pair (thin value).",

@@ -178,13 +178,13 @@ const READ_LAYOUT = [
       { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid", "f-b3b-nut", { id: "f-low-board-ip-passive", label: "Low Board IP", chip: "Passive", chips: true, also: [["f-low-board-ip-canbluff", "CanBluff"], ["f-low-board-ip-protect", "Protect"]] }], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "f-protect-oop", label: "Protect OOP", chip: "Yes", chips: true, also: ["protect-disadv-board", "f-bf-disadv-board"] },
       { id: "f-adv-weak-check", label: "Adv Board", chips: true }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
-      { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
+      { lines: true, ids: [{ label: "xR freq F", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
       { label: "OOP", lines: true, ids: [{ id: "f-xr-pfc-equity", label: "xR", chip: "Equity", chips: true, also: [["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }] },
       { label: "Streets vs Him", lines: true, ids: [
         { label: "HU", subs: [["fold-cbet-f-hu", "F"], ["fold-cbet-t-hu", "T"], ["fold-cbet-r-hu", "R"]] },
         { label: "MWP", subs: [["fold-cbet-f-mw", "F"]] }] },
-      { lines: true, ids: [{ label: "Float", subs: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] }] },
-      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { id: "f-thin-xt-srp", label: "ThinXT", chip: "SRP", chips: true, also: [["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }, { id: "f-xb-pfc-fd", label: "Check Backs", chip: "FD", chips: true, also: [["f-xb-pfc-sd", "SD"], ["f-xb-pfc-topp", "TopP"], ["f-xb-pfc-2p", "2P+"]] }, { id: "f-adv-board-bxt", label: "Adv. Board", chip: "BXT", chips: true, also: [["f-adv-board-air", "Air"]] }] },
+      { lines: true, ids: [{ label: "Float F", subs: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] }] },
+      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { id: "f-thin-xt-srp", label: "Thin XT F", chip: "SRP", chips: true, also: [["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }, { id: "f-xb-pfc-fd", label: "Check Back F", chip: "FD", chips: true, also: [["f-xb-pfc-sd", "SD"], ["f-xb-pfc-topp", "TopP"], ["f-xb-pfc-2p", "2P+"]] }, { id: "f-adv-board-bxt", label: "Adv. Board F", chip: "BXT", chips: true, also: [["f-adv-board-air", "Air"]] }] },
     ] },
   ] },
   { title: "Turn exploit", subs: [
@@ -245,9 +245,9 @@ const LIVE_LAYOUT = [
   { title: "Postflop", cat: "postflop", subs: [
     { label: "Flop", rows: [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"], "f-b3b-nut"] },
-      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check", { id: "f-low-board-ip-passive", label: "Low Board IP", chip: "Passive", chips: true, also: [["f-low-board-ip-canbluff", "CanBluff"], ["f-low-board-ip-protect", "Protect"]] }] },
+      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float F OOP"], ["f-float-ip", "Float F IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check", { id: "f-low-board-ip-passive", label: "Low Board IP", chip: "Passive", chips: true, also: [["f-low-board-ip-canbluff", "CanBluff"], ["f-low-board-ip-protect", "Protect"]] }] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", { label: "xR", subs: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }, "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { label: "ThinXT", subs: [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }, { label: "Check Backs", subs: [["f-xb-pfc-fd", "FD"], ["f-xb-pfc-sd", "SD"], ["f-xb-pfc-topp", "TopP"], ["f-xb-pfc-2p", "2P+"]] }, { id: "f-adv-board-bxt", label: "Adv. Board", chip: "BXT", chips: true, also: [["f-adv-board-air", "Air"]] }] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", { label: "xR", subs: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }, "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { label: "Thin XT F", subs: [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }, { label: "Check Back F", subs: [["f-xb-pfc-fd", "FD"], ["f-xb-pfc-sd", "SD"], ["f-xb-pfc-topp", "TopP"], ["f-xb-pfc-2p", "2P+"]] }, { id: "f-adv-board-bxt", label: "Adv. Board F", chip: "BXT", chips: true, also: [["f-adv-board-air", "Air"]] }] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [

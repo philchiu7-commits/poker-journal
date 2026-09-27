@@ -270,19 +270,19 @@ const TENDENCY_TAGS = [
   { id: "fold-cbet-f-mw", cat: "postflop", label: "Fold flop cbet MWP", kind: "stat", calc: "foldCbFMw" },
   { id: "fold-cbet-t-hu", cat: "postflop", label: "Fold turn cbet HU",  kind: "stat", calc: "foldCbTHu" },
   { id: "fold-cbet-r-hu", cat: "postflop", label: "Fold river cbet HU",  kind: "stat", calc: "foldCbRHu" },
-  { id: "f-xr-freq-pfc-hu", cat: "postflop", label: "xR freq HU",  kind: "stat", calc: "xrPfcHu" },
-  { id: "f-xr-freq-pfc-mw", cat: "postflop", label: "xR freq MWP", kind: "stat", calc: "xrPfcMw" },
+  { id: "f-xr-freq-pfc-hu", cat: "postflop", label: "xR freq F HU",  kind: "stat", calc: "xrPfcHu" },
+  { id: "f-xr-freq-pfc-mw", cat: "postflop", label: "xR freq F MWP", kind: "stat", calc: "xrPfcMw" },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
   { id: "let-realize-f",  cat: "postflop", label: "Let me Realize" },
   /* Thin value after the flop checks through, split by pot type (Phil's ThinXT row). */
-  { id: "f-thin-xt-srp",  cat: "postflop", label: "ThinXT SRP" },
-  { id: "f-thin-xt-mwp",  cat: "postflop", label: "ThinXT MWP" },
-  { id: "f-thin-xt-3bp",  cat: "postflop", label: "ThinXT 3BP" },
+  { id: "f-thin-xt-srp",  cat: "postflop", label: "Thin XT F SRP" },
+  { id: "f-thin-xt-mwp",  cat: "postflop", label: "Thin XT F MWP" },
+  { id: "f-thin-xt-3bp",  cat: "postflop", label: "Thin XT F 3BP" },
   /* Floating in and out of position are different plays, not one habit at two
      prices: OOP he has to lead or check-raise the turn to ever win it, IP the
      float is free when checked to. `floats-wide` stays the one-line summary. */
-  { id: "f-float-oop",    cat: "postflop", label: "Float OOP" },
-  { id: "f-float-ip",     cat: "postflop", label: "Float IP" },
+  { id: "f-float-oop",    cat: "postflop", label: "Float F OOP" },
+  { id: "f-float-ip",     cat: "postflop", label: "Float F IP" },
   /* What he check-raises with as the OOP caller: a draw he can keep betting,
      or nothing at all (Phil, 2026-09-27). */
   /* Superseded by the three yes/no reads below (Phil, 2026-09-27). Kept, not
@@ -311,12 +311,12 @@ const TENDENCY_TAGS = [
   { id: "t-xr-pfr-nut",   cat: "postflop", label: "Turn xR (PFR) Nut" },
   { id: "t-xr-pfr-bluff", cat: "postflop", label: "Turn xR (PFR) Bluff" },
   /* Flop, as PFC: checked to them, they checked back — with what. */
-  { id: "f-xb-pfc-fd",   cat: "postflop", label: "Check Backs FD" },
-  { id: "f-xb-pfc-sd",   cat: "postflop", label: "Check Backs SD" },
-  { id: "f-xb-pfc-topp", cat: "postflop", label: "Check Backs TopP" },
-  { id: "f-xb-pfc-2p",   cat: "postflop", label: "Check Backs 2P+" },
-  { id: "f-adv-board-bxt", cat: "postflop", label: "Adv. Board BXT" },
-  { id: "f-adv-board-air", cat: "postflop", label: "Adv. Board Air" },
+  { id: "f-xb-pfc-fd",   cat: "postflop", label: "Check Back F FD" },
+  { id: "f-xb-pfc-sd",   cat: "postflop", label: "Check Back F SD" },
+  { id: "f-xb-pfc-topp", cat: "postflop", label: "Check Back F TopP" },
+  { id: "f-xb-pfc-2p",   cat: "postflop", label: "Check Back F 2P+" },
+  { id: "f-adv-board-bxt", cat: "postflop", label: "Adv. Board F BXT" },
+  { id: "f-adv-board-air", cat: "postflop", label: "Adv. Board F Air" },
   /* Turn probe: what the bet is made of. */
   { id: "t-probe-merge", cat: "postflop", label: "Probe T Merge" },
   { id: "t-probe-polar", cat: "postflop", label: "Probe T Polar" },
