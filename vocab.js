@@ -170,6 +170,7 @@ const TENDENCY_TAGS = [
   /* Turn → Raise nuts companions: does the raise still come with a boat, and in position. */
   { id: "raise-nuts-t-even-boat", cat: "postflop", label: "Raise nuts T Even Boat" },
   { id: "raise-nuts-t-even-ip",   cat: "postflop", label: "Raise nuts T Even IP" },
+  { id: "raise-nuts-t-xnut",      cat: "postflop", label: "Raise nuts T XNut" },
   /* Bet-small-to-induce, per street: the global `bsti` sizing read says he
      does it, these say where. */
   { id: "bsti-f",               cat: "postflop", label: "BSTI F" },
