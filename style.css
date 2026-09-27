@@ -1574,22 +1574,22 @@ button.statcalc:active { color: var(--accent); }
   body.hvopen #hv-backdrop { display: block; position: fixed; inset: 0; z-index: 14;
     background: rgba(0,0,0,.62); backdrop-filter: blur(2px); }
   main > #view-handview { position: fixed; inset: 0; margin: auto; z-index: 15;
-    width: min(1280px, calc(100vw - 140px)); height: calc(100vh - 64px); max-width: none;
+    width: min(1500px, calc(100vw - 100px)); height: calc(100vh - 64px); max-width: none;
     overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 16px;
     padding: 6px 24px 24px; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
-  #view-handview:not(.hidden) { display: grid; grid-template-columns: auto auto minmax(0, 1fr);
+  #view-handview:not(.hidden) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto auto auto auto auto auto auto 1fr; align-items: start; }
   #view-handview > .vhead { grid-column: 1 / -1; grid-row: 1; }
   .hvmain, .hvside { display: contents; }
   #hv-pager { position: sticky; top: 12px; grid-column: 1; grid-row: 2 / -1; width: 84px;
     height: calc(100vh - 146px); margin-right: 24px; }
   .hvside.rail #hv-table { margin-left: 0; }
-  #hv-table { grid-column: 2; grid-row: 2; justify-self: center; }
+  #hv-table { grid-column: 2; grid-row: 2; justify-self: stretch; }
   #hv-transport { grid-column: 2; grid-row: 3; justify-self: center; margin-bottom: 8px; }
   /* the betting line sits beside the felt, where it can be read while playing */
-  #hv-line { grid-column: 3; grid-row: 2 / 4; align-self: center; justify-self: start; max-width: 760px; margin-left: 28px; }
-  #hv-line { font-size: 15px; padding: 8px 12px; gap: 4px 6px; }
-  #hv-line .rptok small { font-size: 11px; }
+  #hv-line { grid-column: 3; grid-row: 2 / 4; align-self: center; justify-self: start; max-width: 260px; margin-left: 20px; }
+  #hv-line { font-size: 12.5px; padding: 6px 10px; gap: 2px 4px; }
+  #hv-line .rptok small { font-size: 10px; }
   #hv-log { grid-column: 2 / -1; grid-row: 4; }
   #hv-textbtn { grid-column: 2 / -1; grid-row: 5; justify-self: start; }
   #hv-text { grid-column: 2 / -1; grid-row: 6; }
@@ -1597,7 +1597,11 @@ button.statcalc:active { color: var(--accent); }
   /* The table is the point of this page: as tall as the screen allows once the
      header and the transport under it are paid for, and never so wide the
      betting line loses its column. */
-  .rpfelt { width: min(calc((100vh - 278px) / 1.08), calc(min(1280px, 100vw - 140px) - 520px)); min-width: 420px; max-height: none; }
+  /* Wide, the way a real table is: it takes the width the pop-up has and the
+     height left under the header and over the transport — capped so an
+     ultra-wide screen gets an oval, not a racetrack. */
+  .rpfelt { width: 100%; height: calc(100vh - 290px); aspect-ratio: auto; min-height: 420px;
+    max-width: calc((100vh - 290px) * 1.75); max-height: none; border-radius: 50%; }
   .rpmid { gap: 10px; }
   .rpboard { gap: 6px; }
   .rpboard .ctile { font-size: 28px; padding: 7px 10px; }
