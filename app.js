@@ -950,7 +950,23 @@ const cardsSeen = (h, oppId) => {
    record first, then hands that reached a showdown without his, then the rest
    — newest first inside each block. Most of a drill is hands nobody showed,
    and sorted by date alone the two worth opening sit anywhere in the list. */
-const sdRank = (h, oppId) => (cardsSeen(h, oppId) ? 2 : h.showdown ? 1 : 0);
+const sdRank = (h, oppId) => (cardsSeen(h, oppId) ? 2 : handSD(h) ? 1 : 0);
+/* The DX importer writes showdown:false on every hand, so the flag can't be
+   trusted there. A DX record is complete — every fold is on it — so two or
+   more still in over a full board is a showdown even with no cards captured.
+   A short board with two still in is a capture gap: left out, not guessed. */
+const foldedIn = (h) => new Set((h.actions || []).filter((a) => a.act === "fold").map((a) => a.actor));
+function handSD(h) {
+  if (h.showdown) return true;
+  if (h.imported?.source !== "dx" || (h.board || []).filter(Boolean).length !== 5) return false;
+  const f = foldedIn(h);
+  return (h.villains || []).filter((_, i) => !f.has("v" + i)).length + (h.hero && !f.has("hero") ? 1 : 0) >= 2;
+}
+/* "He got to showdown": the hand went there and he was still in it. */
+function oppSD(h, oppId) {
+  const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  return i >= 0 && handSD(h) && !foldedIn(h).has("v" + i);
+}
 const bySeen = (oppId) => (a, b) => sdRank(b, oppId) - sdRank(a, oppId) || b.ts - a.ts;
 /* Villain seat → coarse bucket for filtering (BTN/CO/HJ/EP/Blinds/Straddle). */
 function posBucket(pos) {
@@ -1054,7 +1070,7 @@ function postRoles(h, oppId) {
 }
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
-  if (f.sd && !h.showdown) return false;
+  if (f.sd && !oppSD(h, oppId)) return false;
   if (f.cards && !cardsSeen(h, oppId)) return false;
   if (f.pot.size) {
     const b = potBucket(h);
@@ -1133,7 +1149,7 @@ function renderHandFilters(oppId, allHands) {
     row("Role", "role", ROLE_BUCKETS) +
     row("Post", "post", POST_BUCKETS) +
     `<div class="hfrow"><span class="hflbl">Show</span><div class="chiprow tight">
-      <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1" title="He got to showdown">Showdown<i>${allHands.filter((h) => h.showdown).length}</i></button>
+      <button class="hfchip${f.sd ? " on" : ""}" data-hf="sd" data-hfv="1" title="He got to showdown">Showdown<i>${allHands.filter((h) => oppSD(h, oppId)).length}</i></button>
       <button class="hfchip${f.cards ? " on" : ""}" data-hf="cards" data-hfv="1" title="His cards are on record">Cards seen<i>${allHands.filter((h) => cardsSeen(h, oppId)).length}</i></button>
     </div></div>`;
   $("od-hf-clear").classList.toggle("hidden", !handFiltersActive());

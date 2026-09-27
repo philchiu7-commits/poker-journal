@@ -495,7 +495,7 @@ function rpHistory() {
     cols.push(`<div class="rphh-col">${head(last, res ? (res.how === "folds" ? "Result" : "Showdown") : "End", r.won !== null ? rpBB(r.won, b.BB) : fe.money ? rpBB(fe.potSettled, b.BB) : "")}${cards}</div>`);
   }
   box.innerHTML = cols.length || blinds
-    ? `<div class="rphh-title">Hand history${r.stakes ? " · " + esc(r.stakes.replace(/^Blinds /, "")) : ""} · ${r.seats.length} seated</div>${blinds}<div class="rphh-cols">${cols.join("")}</div>`
+    ? `<div class="rphh-title">Hand history${r.stakes ? " · " + esc(r.stakes.replace(/^Blinds /, "")) : ""} · ${r.seats.length} seated</div>${blinds}<div class="rphh-cols" style="--n:${cols.length}">${cols.join("")}</div>`
     : `<div class="rplog-empty">No actions on record.</div>`;
 }
 

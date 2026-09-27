@@ -1562,13 +1562,26 @@ button.statcalc:active { color: var(--accent); }
   /* Felt and its controls side by side on top, the history underneath in
      street-width columns across the page — never stretched to fill it — so
      the whole hand sits on one screen. */
-  .hvmain { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto auto 1fr;
-    column-gap: 28px; margin-bottom: 10px; }
-  .hvside { grid-row: 1 / -1; justify-self: end; }
-  #hv-transport { grid-column: 2; grid-row: 2; justify-self: start; }
-  #hv-line { grid-column: 2; grid-row: 3; justify-self: start; max-width: 520px; }
+  /* The hand view as one grid: the run rail is the whole left column, the
+     felt with its controls beside it, then the history and the line under. */
+  #view-handview:not(.hidden) { display: grid; grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto auto auto 1fr; align-items: start; }
+  #view-handview > .vhead { grid-column: 1 / -1; grid-row: 1; }
+  .hvmain, .hvside { display: contents; }
+  #hv-pager { position: sticky; top: 12px; grid-column: 1; grid-row: 2 / -1; width: 84px;
+    height: calc(100vh - 96px); margin-right: 24px; }
+  .hvside.rail #hv-table { margin-left: 0; }
+  #hv-table { grid-column: 2; grid-row: 2; }
+  #hv-transport { grid-column: 3; grid-row: 2; align-self: center; justify-self: start; margin-left: 28px; }
+  #hv-log { grid-column: 2 / -1; grid-row: 3; }
+  #hv-line { grid-column: 2 / -1; grid-row: 4; justify-self: start; max-width: 100%; margin-bottom: 10px; }
+  #hv-textbtn { grid-column: 2 / -1; grid-row: 5; justify-self: start; }
+  #hv-text { grid-column: 2 / -1; grid-row: 6; }
+  #hv-delete { grid-column: 2 / -1; grid-row: 7; justify-self: start; }
   .rpfelt { width: 38vh; max-height: none; }
-  .rphh-cols { grid-template-columns: repeat(auto-fill, 190px); }
+  /* the box hugs its street columns instead of trailing empty panel */
+  .rphh { width: fit-content; max-width: 100%; }
+  .rphh-cols { grid-template-columns: repeat(var(--n, 3), minmax(0, 210px)); gap: 10px; }
   /* A fold says nothing about size, so it takes one slim line — a fold-round
      preflop no longer pushes the rest of the hand off the screen. */
   .rphh-card.k-fold { display: flex; align-items: center; gap: 6px; padding: 3px 7px; }
