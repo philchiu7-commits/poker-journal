@@ -96,8 +96,8 @@ const HQ_FACEABLE = new Set(["cbet", "bet", "raise", "3bet", "4bet", "5bet", "ja
 const HQ_FACERS = new Set(["fold", "call", "raise", "jam", "3bet", "4bet", "5bet"]);
 
 function hqParse(text) {
-  let s = " " + String(text || "").toLowerCase().replace(/[’']/g, "").replace(/[,.;:!?()"]/g, " ") + " ";
-  s = hqLines(s);
+  let s = " " + String(text || "").replace(/[’']/g, "").replace(/[,.;:!?()"]/g, " ") + " ";
+  s = hqLines(s).toLowerCase();   // lines first: the case of XR vs xR matters
   for (const [re, to] of HQ_PHRASES) s = s.replace(re, to);
   const words = s.split(/\s+/).filter(Boolean);
   const clauses = [], unknown = [];
@@ -176,14 +176,16 @@ const HQ_LINE_ACT = { b: "bet", x: "check", c: "call", r: "raise", f: "fold" };
 /* Lines: one letter per street from the flop — "bxb", "bb" (flop + turn,
    river anything), "-bb" (turn + river, flop anything). Swapped for a digit
    token before the phrase rules so "-xr" can't turn into a check-raise.
-   "the bb" is still the big blind; xr xc xf xb bf bc keep their one-street
-   meaning unless "line" goes in front. */
+   "the bb" is still the big blind. XR in capitals is the line (check flop,
+   raise turn); any lower case — xR, xr — is the one-street check-raise, and
+   the same for XC XF XB BF BC. */
 const HQ_LINE_CODE = "-bxcrf";
 function hqLines(s) {
-  return s.replace(/(^|\s)(lines?\s+)?(-{0,2}[bxcrf]{1,3})(?=\s)/g, (m, sp, pre, code, at, all) => {
+  return s.replace(/(^|\s)(lines?\s+)?(-{0,2}[bxcrf]{1,3})(?=\s)/gi, (m, sp, pre, raw, at, all) => {
+    const code = raw.toLowerCase();
     if (code.length > 3 || code.length < 2 || !/[bxcrf]/.test(code)) return m;
-    if (!pre && ["xr", "xc", "xf", "xb", "bf", "bc"].includes(code)) return m;
-    if (!pre && code === "bb" && /\bthe\s+$/.test(all.slice(0, at + sp.length))) return m;
+    if (!pre && raw !== raw.toUpperCase() && ["xr", "xc", "xf", "xb", "bf", "bc"].includes(code)) return m;
+    if (!pre && code === "bb" && /\bthe\s+$/i.test(all.slice(0, at + sp.length))) return m;
     return sp + "ln" + [...code].map((L) => HQ_LINE_CODE.indexOf(L)).join("");
   });
 }
