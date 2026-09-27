@@ -253,6 +253,12 @@ textarea.noteedit { margin-bottom: 0; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
   padding: 10px 12px; margin: 8px 0 4px;
 }
+/* Hands sits in the left column (laptop) but still after Notes on phone:
+   the columns dissolve into one flex list and order puts it back. */
+.odcols { display: flex; flex-direction: column; }
+.odcol { display: contents; }
+.odhands { order: 1; }
+.odcol > .cardpanel { order: 2; }
 .cardpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .cardpanel-head .ptitle { margin: 0; }
 .cardchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -1573,6 +1579,7 @@ button.statcalc:active { color: var(--accent); }
   /* Reads lead the right-hand column; exploits drop to its foot. */
   .odcol { display: flex; flex-direction: column; }
   .odcol > .panel:has(#od-exploits) { order: 1; }
+  .odcol > .odhands, .odcol > .cardpanel { order: 0; }
 
   /* Dragging reads rows top to bottom, so edit mode keeps the single column. */
   #opp-list:not(.editing) .groupsec { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
