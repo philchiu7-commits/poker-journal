@@ -892,8 +892,21 @@ function hideSheet() {
 const VIEWS = ["opponents", "opp", "hand", "table", "handview", "ranges", "data"];
 const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", ranges: "ranges", data: "data" };
 
-let curView = null, hvUnder = null, hvUnderY = 0;
+let curView = null, hvUnder = null;
 function closeHandPopup() { if (curView === "handview") history.back(); }
+/* What he last tapped on the page, if it's still on screen: the % badge or
+   hand row he opened the hand from is the spot to hold in view while the page
+   reflows to make room for the docked hand. */
+let lastPageTap = null;
+document.addEventListener("pointerdown", (e) => {
+  if (!e.target.closest("#view-handview") && e.target.closest("main > section")) lastPageTap = e.target;
+}, true);
+function pageAnchor() {
+  const el = lastPageTap;
+  if (!el || !el.isConnected) return null;
+  const r = el.getBoundingClientRect();
+  return r.height && r.bottom > 0 && r.top < innerHeight ? el : null;
+}
 
 function route() {
   const raw = (location.hash || "#opponents").slice(1);
@@ -922,14 +935,16 @@ function route() {
     resetHandFilters(); noCardsOpen = true; handFiltersFor = arg;
     rangeTab = "history";   // "default" means per player, not once per app launch
   }
-  /* Laptop: a hand opens as a pop-up over the page it came from (Phil, v247),
-     which stays behind it as it was — not redrawn, not scrolled — and closing
-     it lands back where he was. The phone keeps the hand as its own screen:
-     CSS hides the page underneath there. */
+  /* Laptop: a hand docks beside the page it came from (Phil, v247; a side
+     panel since v278), which stays live next to it — not redrawn, not
+     scrolled — and closing it leaves that page where it now is. The phone
+     keeps the hand as its own screen: CSS hides the page underneath there. */
   const from = curView; curView = v;
   const wide = matchMedia("(min-width: 1000px)").matches;
+  // the page narrows to one column when a hand docks; keep what he was looking at in view
+  const anchor = wide && v === "handview" && from !== "handview" ? pageAnchor() : null;
   if (v === "handview" && from !== "handview") {
-    hvUnder = from; hvUnderY = window.scrollY;
+    hvUnder = from;
     if (!hvUnder) { hvUnder = "opponents"; renderOpponents(); }   // opened straight from a link
   }
   const under = v === "handview" ? hvUnder : null;
@@ -945,8 +960,10 @@ function route() {
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
      table: renderTableTab, handview: () => renderHandView(arg), ranges: renderRangeLib,
      data: renderData })[v]();
+  if (anchor) anchor.scrollIntoView({ block: "center" });
   if (v === "handview" && wide) $("view-handview").scrollTop = 0;
-  else window.scrollTo(0, from === "handview" && v === hvUnder && wide ? hvUnderY : 0);
+  // the page stays scrollable beside a docked hand, so keep wherever it is now
+  else if (!(from === "handview" && v === hvUnder && wide)) window.scrollTo(0, 0);
   if (v !== "handview") hvUnder = null;
   if (swPending) applySwUpdate();      // left the entry screen — safe to take the new build
 }
@@ -5951,7 +5968,15 @@ function sheetClick(e) {
   }
   if (sheetGroup === "__rdrill__") {
     const r = e.target.closest("[data-hand]");
-    if (r) { hideSheet(); location.hash = "#handview/" + r.dataset.hand; return; }
+    if (r) {
+      /* the drilled hands become the run, so the docked hand's rail pages
+         through exactly this list while the reads stay tappable beside it */
+      if (curView === "opp" && curOppId) {
+        const ids = [...$("sheet").querySelectorAll("[data-hand]")].map((x) => x.dataset.hand);
+        handPlay = { oppId: curOppId, ids: [...new Set(ids)], filtered: false };
+      }
+      hideSheet(); location.hash = "#handview/" + r.dataset.hand; return;
+    }
     if (chartCellClick(e)) return;
   }
   if (sheetGroup === "__rlmenu__") {

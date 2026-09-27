@@ -1584,39 +1584,44 @@ button.estn:active { color: var(--accent); }
      the whole hand sits on one screen. */
   /* The hand view as one grid: the run rail is the whole left column, the
      felt with its controls under it and the line beside, then the history. */
-  /* A hand is a pop-up over the page it came from, not a page of its own. */
-  body.hvopen { overflow: hidden; }
-  body.hvopen #hv-backdrop { display: block; position: fixed; inset: 0; z-index: 14;
-    background: rgba(0,0,0,.62); backdrop-filter: blur(2px); }
-  main > #view-handview { position: fixed; inset: 0; margin: auto; z-index: 15;
-    width: min(1500px, calc(100vw - 100px)); height: calc(100vh - 64px); max-width: none;
-    overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 16px;
-    padding: 6px 24px 24px; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
-  #view-handview:not(.hidden) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto auto auto auto auto auto auto 1fr; align-items: start; }
+  /* A hand docks down the right of the page it came from, like a second tab
+     beside it (Phil, v278): no backdrop, so the reads on the left stay live
+     and can be set while the hand is open. The page gives up that width. */
+  body { --hvw: clamp(560px, 48vw, 860px); }
+  body.hvopen main { max-width: none; margin-right: var(--hvw); }
+  body.hvopen main > section.under { max-width: 1240px; }
+  main > #view-handview { position: fixed; top: 0; right: 0; bottom: 0; z-index: 15;
+    width: var(--hvw); max-width: none; overflow: auto; background: var(--bg);
+    border-left: 1px solid var(--line); padding: 6px 20px 24px; box-shadow: -18px 0 50px rgba(0,0,0,.45); }
+  #view-handview:not(.hidden) { display: grid; grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto auto auto auto 1fr; align-items: start; }
+  #view-handview > .vhead { margin: 0 -20px 4px; padding-left: 20px; padding-right: 20px; }
   #view-handview > .vhead { grid-column: 1 / -1; grid-row: 1; }
   .hvmain, .hvside { display: contents; }
   #hv-pager { position: sticky; top: 12px; grid-column: 1; grid-row: 2 / -1; width: 84px;
-    height: calc(100vh - 146px); margin-right: 24px; }
+    height: calc(100vh - 90px); margin-right: 16px; }
   .hvside.rail #hv-table { margin-left: 0; }
   #hv-table { grid-column: 2; grid-row: 2; justify-self: stretch; }
   #hv-transport { grid-column: 2; grid-row: 3; justify-self: center; margin-bottom: 8px; }
-  /* the betting line sits beside the felt, where it can be read while playing */
-  #hv-line { grid-column: 3; grid-row: 2 / 4; align-self: center; justify-self: start; max-width: 260px; margin-left: 20px; }
+  /* the betting line sits right under the transport — the panel is too narrow
+     to give it a column of its own beside the felt */
+  #hv-line { grid-column: 2; grid-row: 4; justify-self: start; margin-bottom: 8px; }
   #hv-line { font-size: 12.5px; padding: 6px 10px; gap: 2px 4px; }
   #hv-line .rptok small { font-size: 10px; }
-  #hv-log { grid-column: 2 / -1; grid-row: 4; }
-  #hv-textbtn { grid-column: 2 / -1; grid-row: 5; justify-self: start; }
-  #hv-text { grid-column: 2 / -1; grid-row: 6; }
-  #hv-delete { grid-column: 2 / -1; grid-row: 7; justify-self: start; }
+  #hv-log { grid-column: 2; grid-row: 5; }
+  #hv-textbtn { grid-column: 2; grid-row: 6; justify-self: start; }
+  #hv-text { grid-column: 2; grid-row: 7; }
+  #hv-delete { grid-column: 2; grid-row: 8; justify-self: start; }
   /* The table is the point of this page: as tall as the screen allows once the
      header and the transport under it are paid for, and never so wide the
      betting line loses its column. */
   /* Wide, the way a real table is: it takes the width the pop-up has and the
      height left under the header and over the transport — capped so an
      ultra-wide screen gets an oval, not a racetrack. */
-  .rpfelt { width: 100%; height: calc(100vh - 290px); aspect-ratio: auto; min-height: 420px;
-    max-width: calc((100vh - 290px) * 1.75); max-height: none; border-radius: 50%; }
+  /* an oval as wide as the panel, short enough to leave the line and the
+     start of the history on screen under it */
+  .rpfelt { width: 100%; height: auto; aspect-ratio: 1.45; min-height: 0;
+    max-width: calc((100vh - 300px) * 1.45); max-height: none; border-radius: 50%; justify-self: center; }
   .rpmid { gap: 10px; }
   .rpboard { gap: 6px; }
   .rpboard .ctile { font-size: 28px; padding: 7px 10px; }
@@ -1629,12 +1634,12 @@ button.estn:active { color: var(--accent); }
   /* Each seat is one stack — action, cards, name, stack, chip — laid out in
      flow so no part can sit on another. The action slot is always there
      (empty when he has not acted this street) so seats don't jump. */
-  .rpseat { width: 132px; gap: 3px; }
+  .rpseat { width: 112px; gap: 3px; }
   .rpbub { position: static; margin: 0; font-size: 13px; padding: 3px 10px; }
   .rpbub.keep { display: block; animation: none; }
   .rpbub.none { display: block; visibility: hidden; }
   .rpbub.none::before { content: "\00a0"; }
-  .rpname { max-width: 128px; font-size: 13px; padding: 3px 9px; }
+  .rpname { max-width: 108px; font-size: 13px; padding: 3px 9px; }
   .rpstack { font-size: 12.5px; }
   .rpfront { min-height: 24px; gap: 6px; }
   .rpchip { font-size: 13px; padding: 2px 9px 2px 3px; }
@@ -1642,7 +1647,7 @@ button.estn:active { color: var(--accent); }
   .rpdealer { width: 22px; height: 22px; font-size: 13px; }
   /* the box hugs its street columns instead of trailing empty panel */
   .rphh { width: fit-content; max-width: 100%; }
-  .rphh-cols { grid-template-columns: repeat(var(--n, 3), minmax(0, 210px)); gap: 10px; }
+  .rphh-cols { grid-template-columns: repeat(var(--n, 3), minmax(0, 210px)); gap: 8px; }
   /* A fold says nothing about size, so it takes one slim line — a fold-round
      preflop no longer pushes the rest of the hand off the screen. */
   .rphh-card.k-fold { display: flex; align-items: center; gap: 6px; padding: 3px 7px; }
@@ -1650,6 +1655,8 @@ button.estn:active { color: var(--accent); }
   .rphh-card.k-fold .rphh-act { flex: none; margin-top: 0; padding: 1px 7px; font-size: 11px; }
 
   .odcols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
+  /* with a hand docked the page is half as wide: one column reads better than two squeezed */
+  body.hvopen .odcols { grid-template-columns: minmax(0, 1fr); }
   /* Reads lead the right-hand column; exploits drop to its foot. */
   .odcol { display: flex; flex-direction: column; }
   .odcol > .panel:has(#od-exploits) { order: 1; }
