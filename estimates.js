@@ -214,6 +214,9 @@ const readEstimates = (() => {
     ch: (F) => { for (const s of ["flop", "turn", "river"]) { const T = bets(F, s); if (T && T.alive >= 3 && T.iBet) return { ok: T.tier.t === 1 || T.tier.t === 2, why: s + ", " + T.alive + "-way: " + g(T) }; } return null; } });
   S({ id: "r-traps", grp: "What they bet", rule: "CAN", def: "Turns/rivers where they held two pair or better and the street was theirs to bet: checked instead (check-call, check-raise, or a turn check-back; a river check-back in position isn't a trap).",
     ch: (F) => { if (!F.cards) return null; for (const s of ["river", "turn"]) { const T = F.st[s]; if (T.tier && T.tier.t === 4 && myTurnFirst(T, F.me) && !(s === "river" && T.ip)) return { ok: T.my[0] === "check", why: s + ": " + T.my.join("/") + " with " + g(T) }; } return null; } });
+  S({ id: "r-xc-thin", grp: "What they bet", rule: "CAN", def: "As preflop raiser, checked the river and called a bet: shown with second or top pair (thin value).",
+    ch: (F) => { const T = F.st.river; if (!F.pfr || !F.cards || !T.tier || T.my[0] !== "check" || !T.my.includes("call")) return null;
+      return { ok: T.tier.t === 1 || T.tier.t === 2, why: "check-called river with " + g(T) }; } });
   S({ id: "r-can-x-nsd", grp: "What they bet", rule: "CAN", def: "As preflop raiser, checked the river holding no pair (gave up).",
     ch: (F) => { const T = F.st.river; if (!F.pfr || !F.cards || !T.tier || !T.my.length) return null;
       const x = T.my[0] === "check"; return { ok: x && T.tier.t === 0 && !T.tier.weakPair, why: (x ? "checked" : T.my[0]) + " river with " + g(T) }; } });
@@ -238,6 +241,8 @@ const readEstimates = (() => {
   for (const L of ["BBB", "BXB", "XBB", "XXB"])
     S({ id: "r-bluff-lines-" + L.toLowerCase(), grp: "River bluffs (any role)", rule: "CAN", def: `River bluffs shown where their flop-turn-river line was ${L} (X = didn't bet).`,
       ch: (F) => { const T = rbluff(F); if (!T) return null; const l = ["flop", "turn"].map((s) => F.st[s].line === "B" ? "B" : "X").join("") + "B"; return { ok: l === L, why: "line " + l + ": " + g(T) }; } });
+  S({ id: "r-bluff-lines-mwp", grp: "River bluffs (any role)", rule: "CAN", def: "River bluffs shown: share that were bet into 3+ players (any line).",
+    ch: (F) => { const T = rbluff(F); return T ? { ok: T.alive >= 3, why: T.alive + "-way: " + g(T) } : null; } });
   S({ id: "r-can-raise-bluff", grp: "Raises", rule: "CAN", def: "River raises shown with a bluff (weaker than second pair).",
     ch: (F) => { const T = F.st.river; return F.cards && T.tier && T.raised ? { ok: T.tier.t === 0, why: g(T) } : null; } });
   S({ id: "r-can-raise-thin", grp: "Raises", rule: "CAN", def: "River raises shown with second or top pair.",

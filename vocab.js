@@ -119,9 +119,23 @@ const TENDENCY_TAGS = [
   // preflop — limping / squid (limp-caller + lp-limp-weak are retired — see RETIRED_TAG_IDS)
   { id: "limp-caller",          cat: "preflop",  label: "Limp-caller" },
   { id: "lp-limp-weak",         cat: "preflop",  label: "Lp limp = weak" },
-  { id: "preflop-style",        cat: "preflop",  label: "Preflop",        kind: "choice", options: [["gto", "GTO"], ["exp", "EXP"]] },
-  { id: "limp-scale-ws",        cat: "preflop",  label: "Limp with wS",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
-  { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
+  /* Superseded by the yes/no Preflop reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "preflop-style",        cat: "preflop",  label: "Preflop (old)",        kind: "choice", options: [["gto", "GTO"], ["exp", "EXP"]] },
+  { id: "preflop-style-gto", cat: "preflop", label: "Preflop GTO" },
+  { id: "preflop-style-exp", cat: "preflop", label: "Preflop EXP" },
+  /* Superseded by the yes/no Limp with wS reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "limp-scale-ws",        cat: "preflop",  label: "Limp with wS (old)",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
+  { id: "limp-scale-ws-tight", cat: "preflop", label: "Limp with wS Tight" },
+  { id: "limp-scale-ws-normal", cat: "preflop", label: "Limp with wS Normal" },
+  { id: "limp-scale-ws-wide", cat: "preflop", label: "Limp with wS Wide" },
+  /* Superseded by the yes/no Limp with nS reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "limp-scale-ns",        cat: "preflop",  label: "Limp with nS (old)",   kind: "choice", options: [["tight", "Tight"], ["normal", "Normal"], ["wide", "Wide"]] },
+  { id: "limp-scale-ns-tight", cat: "preflop", label: "Limp with nS Tight" },
+  { id: "limp-scale-ns-normal", cat: "preflop", label: "Limp with nS Normal" },
+  { id: "limp-scale-ns-wide", cat: "preflop", label: "Limp with nS Wide" },
   { id: "limp-wide-multiplier", cat: "preflop",  label: "Goes for multipliers" },
   { id: "wide-cc",              cat: "preflop",  label: "Wide CC" },
   /* Slowplaying the open: does he flat or limp his monsters instead of
@@ -234,7 +248,11 @@ const TENDENCY_TAGS = [
   { id: "mwl-xr",         cat: "postflop", label: "xR (old tally)",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
   { id: "mwl-xr-strong", cat: "postflop", label: "xR Strong" },
   { id: "mwl-xr-bluff", cat: "postflop", label: "xR Bluff" },
-  { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
+  /* Superseded by the yes/no IP stab reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "mwl-ip-stab",    cat: "postflop", label: "IP stab (old)",         kind: "choice", options: [["merge", "Merge"], ["air", "Air"]] },
+  { id: "mwl-ip-stab-merge", cat: "postflop", label: "IP stab Merge" },
+  { id: "mwl-ip-stab-air", cat: "postflop", label: "IP stab Air" },
   // flop
   { id: "f-cbet-freq-hu", cat: "postflop", label: "Cbet freq HU",  kind: "stat", calc: "cbetHu" },
   { id: "f-cbet-freq-mw", cat: "postflop", label: "Cbet freq MWP", kind: "stat", calc: "cbetMw" },
@@ -291,7 +309,11 @@ const TENDENCY_TAGS = [
   { id: "t-bcard-4flush",  cat: "postflop", label: "Turn Cards 4Flush" },
   { id: "t-bcard-over",    cat: "postflop", label: "Turn Cards Overcards" },
   { id: "t-bcard-blank",   cat: "postflop", label: "Turn Cards Blank" },
-  { id: "t-low-boards",   cat: "postflop", label: "Low boards",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
+  /* Superseded by the yes/no Low boards reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "t-low-boards",   cat: "postflop", label: "Low boards (old)",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
+  { id: "t-low-boards-passive", cat: "postflop", label: "Low boards Passive" },
+  { id: "t-low-boards-aggro", cat: "postflop", label: "Low boards Aggro" },
   /* Superseded by the yes/no T call range reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "t-call-range",   cat: "postflop", label: "T call range (old tally)",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
@@ -313,8 +335,17 @@ const TENDENCY_TAGS = [
      pot is a different bet from the same turn against one man. */
   { id: "t-probe-hu",     cat: "postflop", label: "Probe T HU",      kind: "stat", calc: "probeTHu" },
   { id: "t-probe-mw",     cat: "postflop", label: "Probe T MWP",      kind: "stat", calc: "probeTMw" },
-  { id: "t-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
-  { id: "t-call-style",   cat: "postflop", label: "Turn call",       kind: "choice", options: [["absv", "AbsV"], ["play", "Play"], ["wide", "Wide"]] },
+  /* Superseded by the yes/no Bet vol reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "t-bet-vol",      cat: "postflop", label: "Bet vol (old)",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
+  { id: "t-bet-vol-high", cat: "postflop", label: "Bet vol High" },
+  { id: "t-bet-vol-low", cat: "postflop", label: "Bet vol Low" },
+  /* Superseded by the yes/no Turn call reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "t-call-style",   cat: "postflop", label: "Turn call (old)",       kind: "choice", options: [["absv", "AbsV"], ["play", "Play"], ["wide", "Wide"]] },
+  { id: "t-call-style-absv", cat: "postflop", label: "Turn call AbsV" },
+  { id: "t-call-style-play", cat: "postflop", label: "Turn call Play" },
+  { id: "t-call-style-wide", cat: "postflop", label: "Turn call Wide" },
   /* Superseded by the yes/no Have Lead reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "have-lead-t",    cat: "postflop", label: "Have Lead (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
@@ -329,6 +360,8 @@ const TENDENCY_TAGS = [
   { id: "r-bluff-lines-bxb", cat: "postflop", label: "Bluff lines (can?) BXB" },
   { id: "r-bluff-lines-xbb", cat: "postflop", label: "Bluff lines (can?) XBB" },
   { id: "r-bluff-lines-xxb", cat: "postflop", label: "Bluff lines (can?) XXB" },
+  // Phil 2026-09-28: can he bluff the river into 3+ players, any line
+  { id: "r-bluff-lines-mwp", cat: "postflop", label: "Bluff lines (can?) MWP" },
   /* Superseded by the four yes/no Bluff hands reads below (Phil, 2026-09-27). Kept,
      not retired, so any counts already on it stay visible under Live → Other. */
   { id: "r-bluff-hands",  cat: "postflop", label: "Bluff hands (old tally)", kind: "tally",  options: [["fd", "FD"], ["oesd", "OESD"], ["air", "Air"], ["ahigh", "A-high"]] },
@@ -339,7 +372,11 @@ const TENDENCY_TAGS = [
   { id: "r-bh-ahigh",  cat: "postflop", label: "Bluff hands A-high" },
   { id: "r-barrel3-freq-hu", cat: "postflop", label: "3rd barrel freq HU",  kind: "stat", calc: "barrelRHu" },
   { id: "r-af-hu", cat: "postflop", label: "River AF HU",  kind: "stat", unit: "", calc: "riverAfHu" },
-  { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
+  /* Superseded by the yes/no Bluff balance reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "r-bluff-bal",    cat: "postflop", label: "Bluff balance (old)",   kind: "choice", options: [["overbluff", "Overbluff"], ["underbluff", "Underbluff"]] },
+  { id: "r-bluff-bal-overbluff", cat: "postflop", label: "Bluff balance Overbluff" },
+  { id: "r-bluff-bal-underbluff", cat: "postflop", label: "Bluff balance Underbluff" },
   /* The value-side counterpart to the bluff reads: does he ever bet a hand that
      only beats a bluff-catcher, or is a river bet always two pair plus? */
   { id: "r-thin",         cat: "postflop", label: "Have thin?" },
@@ -348,16 +385,34 @@ const TENDENCY_TAGS = [
      willing to give up with no showdown value, so his river bets are that much
      more often real. */
   { id: "r-can-x-nsd",    cat: "postflop", label: "Can X nSD" },
+  /* As PFR on the river: checks and calls with a hand that could have bet thin (Phil, 2026-09-28). */
+  { id: "r-xc-thin",      cat: "postflop", label: "xC ThinValues" },
   { id: "punchbag-r-pfr", cat: "postflop", label: "Punch bag" },
-  { id: "r-fold-bal",     cat: "postflop", label: "Fold balance",    kind: "choice", options: [["overfold", "Overfold"], ["underfold", "Underfold"]] },
-  { id: "r-to-sizing",    cat: "postflop", label: "To sizing",       kind: "choice", options: [["elastic", "Elastic"], ["inelastic", "Inelastic"]] },
-  { id: "r-bet-vol",      cat: "postflop", label: "Bet vol",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
+  /* Superseded by the yes/no Fold balance reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "r-fold-bal",     cat: "postflop", label: "Fold balance (old)",    kind: "choice", options: [["overfold", "Overfold"], ["underfold", "Underfold"]] },
+  { id: "r-fold-bal-overfold", cat: "postflop", label: "Fold balance Overfold" },
+  { id: "r-fold-bal-underfold", cat: "postflop", label: "Fold balance Underfold" },
+  /* Superseded by the yes/no To sizing reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "r-to-sizing",    cat: "postflop", label: "To sizing (old)",       kind: "choice", options: [["elastic", "Elastic"], ["inelastic", "Inelastic"]] },
+  { id: "r-to-sizing-elastic", cat: "postflop", label: "To sizing Elastic" },
+  { id: "r-to-sizing-inelastic", cat: "postflop", label: "To sizing Inelastic" },
+  /* Superseded by the yes/no Bet vol reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "r-bet-vol",      cat: "postflop", label: "Bet vol (old)",         kind: "choice", options: [["high", "High"], ["low", "Low"]] },
+  { id: "r-bet-vol-high", cat: "postflop", label: "Bet vol High" },
+  { id: "r-bet-vol-low", cat: "postflop", label: "Bet vol Low" },
   /* Superseded by the yes/no Can raise? reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "r-can-raise",    cat: "postflop", label: "Can raise? (old tally)",      kind: "tally",  options: [["bluff", "Bluff"], ["thin", "Thin"]] },
   { id: "r-can-raise-bluff", cat: "postflop", label: "Can raise? Bluff" },
   { id: "r-can-raise-thin", cat: "postflop", label: "Can raise? Thin" },
-  { id: "r-call-range",   cat: "postflop", label: "Call range",      kind: "choice", options: [["wide", "Wide"], ["tight", "Tight"]] },
+  /* Superseded by the yes/no Call range reads below (Phil, 2026-09-28). Kept, not
+     retired, so a choice already stored on it stays visible under Live → Other. */
+  { id: "r-call-range",   cat: "postflop", label: "Call range (old)",      kind: "choice", options: [["wide", "Wide"], ["tight", "Tight"]] },
+  { id: "r-call-range-wide", cat: "postflop", label: "Call range Wide" },
+  { id: "r-call-range-tight", cat: "postflop", label: "Call range Tight" },
   /* Superseded by the yes/no Bluff catch reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "r-call-hands",   cat: "postflop", label: "Bluff catch (old tally)",     kind: "tally",  options: [["light", "Light"], ["tight", "Tight"]] },
