@@ -1856,7 +1856,7 @@ function showHudPeek(btn) {
 function openDrillSheet(o, label, hands, yes, no, chart) {
   const block = (ttl, list) => list.length
     ? `<div class="rdhead"><b>${esc(ttl)}</b><span class="spacer"></span><span class="rdact muted">${list.length}</span></div>`
-      + list.slice().sort((x, y) => bySeen(o.id)(x.h, y.h)).map((x) => handRowHTML(x.h, o.id)).join("")
+      + list.slice().sort((x, y) => bySeen(o.id)(x.h, y.h)).map((x) => handRowHTML(x.h, o.id, x.why)).join("")
     : "";
   const hit = hands.filter((x) => x.ok), miss = hands.filter((x) => !x.ok);
   sheetGroup = "__rdrill__";                    // same row → #handview handler
@@ -1950,11 +1950,36 @@ function drillRowsHTML(o, hands, yes, no) {
     if (!list.length) return "";
     const rows = list.slice().sort((x, y) => bySeen(o.id)(x.h, y.h));
     return `<div class="stpkh">${esc(ttl)}<span>${list.length}</span></div>`
-      + rows.slice(0, ST_PEEK_MAX).map((x) => handRowHTML(x.h, o.id)).join("")
+      + rows.slice(0, ST_PEEK_MAX).map((x) => handRowHTML(x.h, o.id, x.why)).join("")
       + (rows.length > ST_PEEK_MAX ? `<div class="stpkmore">+${rows.length - ST_PEEK_MAX} more</div>` : "");
   };
   return `<div class="list stpklist">${block(yes, hands.filter((x) => x.ok))}${
     block(no, hands.filter((x) => !x.ok))}</div>`;
+}
+/* Tree-read estimates (estimates.js): what the hands say, with each hand's
+   reason under it. The rule decides the wording — an F read is how often they
+   took the line, the others are whether the shown hand fits the read. */
+const EST_MIN = 7;
+const estWords = (e) => e.rule === "F" ? ["Took it", "Didn't"] : e.rule === "CAN" ? ["Showed it", "Other hands"] : ["Fits the read", "Doesn't"];
+function estFor(o, id) {
+  const e = typeof readEstimates === "function" ? readEstimates(o.id, HANDS)[id] : null;
+  return e && e.n ? e : null;
+}
+function showEstPeek(btn) {
+  const o = oppById(curOppId), id = btn.dataset.estdrill, e = o && estFor(o, id);
+  if (!e) return;
+  const [yes, no] = estWords(e);
+  openPeek(btn, `<div class="rpkhead">${esc(TAG_BY_ID[id]?.label || id)} \u00b7 ${e.k} of ${e.n} \u00b7 ${Math.round(e.pct)}%</div>`
+    + `<div class="estdef">${esc(e.def)}</div>`
+    + drillRowsHTML(o, e.ev, yes, no)
+    + `<div class="rpkfoot"><span>Tap the % for all of them</span></div>`, "stpk");
+}
+function openEstDrill(o, id) {
+  const e = estFor(o, id);
+  if (!e) return;
+  const [yes, no] = estWords(e);
+  openDrillSheet(o, TAG_BY_ID[id]?.label || id, e.ev, yes, no,
+    `<div class="rdsub estdef">${Math.round(e.pct)}% \u00b7 ${esc(e.def)}${e.n < EST_MIN ? ` Under ${EST_MIN} hands, so not enough to call it.` : ""}</div>`);
 }
 function showStatPeek(btn) {
   const o = oppById(curOppId);
@@ -2092,6 +2117,14 @@ function openPeek(btn, html, cls) {
       grid.style.maxWidth = Math.max(MIN_GRID, grid.offsetWidth - over) + "px";
       grid.style.marginInline = "auto";
     }
+  }
+  /* A hand list is the same trap: parked on its own % the tap to open them all
+     can't land. Its list scrolls, so give up list height until it fits. */
+  const hl = !grid && p.querySelector(".stpklist");
+  if (hl) {
+    hl.style.maxHeight = "";
+    const over = p.offsetHeight - room;
+    if (over > 0) hl.style.maxHeight = Math.max(80, hl.offsetHeight - over) + "px";
   }
   const w = p.offsetWidth, h = p.offsetHeight;
   p.style.left = Math.max(EDGE, Math.min(window.innerWidth - w - EDGE, r.left + r.width / 2 - w / 2)) + "px";
@@ -3123,10 +3156,21 @@ function renderOppReads(o) {
       return `<div class="bubbles">${opts}${clr}</div>`;
     }
     // on a line the row label already names the read, so the chip shows the state
-    return compact
+    return estBadge(id, lbl, compact
       ? `<button class="chip mini pline${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}"` +
         ` title="${esc(lbl)}">${st ? esc(STATE_WORD[st] || st) : "–"}</button>`
-      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`;
+      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`);
+  };
+  /* The hands' own answer beside Phil's: a % off the shown hands, hover for a
+     few, tap for all. Display only — it never sets the read. Only worked out
+     while the tree is open, and cached per player until their hands change. */
+  const est = showReadPicker && typeof readEstimates === "function" ? readEstimates(o.id, HANDS) : {};
+  const estBadge = (id, lbl, chip) => {
+    const e = est[id];
+    if (!e || !e.n) return chip;
+    return `<span class="estpair">${chip}<button class="estn${e.n < EST_MIN ? " thin" : ""}" data-estdrill="${id}"` +
+      ` title="${esc(lbl || TAG_BY_ID[id]?.label || id)} — ${e.k} of ${e.n} shown hands${e.n < EST_MIN ? `, under the ${EST_MIN} it takes to call it` : ""}">` +
+      `${Math.round(e.pct)}%<i>${e.n}</i></button></span>`;
   };
   const setReads = Object.entries(reads)
     .filter(([id, st]) => readIsShown(o, id))
@@ -3859,7 +3903,7 @@ function handHistoryLineHTML(h, focusActor) {
 /* Row in a hands list, in the standard hand-history style. With `oppId`,
    lead with THAT villain's position + hole cards; on the general feed, lead
    with the villain lineup. Bottom line: compressed street-by-street action. */
-function handRowHTML(h, oppId) {
+function handRowHTML(h, oppId, why) {
   const win = handWinner(h);              // scored once; both readings below reuse it
   const res = heroResultFrom(h, win);
   const dot = res ? `<span class="dot ${res}"></span>` : "";
@@ -3887,8 +3931,10 @@ function handRowHTML(h, oppId) {
         v.cards && v.cards.some(Boolean) ? tilesHTML(v.cards) : "",
         won,
       ].filter(Boolean).join("");
+      // `why`: an estimate's reason for counting this hand the way it did
       return `<div class="lrow" data-hand="${h.id}">
-        <div class="t hr-t">${dot}${bits}${vsquid}</div>${subFor(handHistoryLineHTML(h, "v" + i))}
+        <div class="t hr-t">${dot}${bits}${vsquid}</div>${subFor(handHistoryLineHTML(h, "v" + i))}${
+        why ? `<div class="s hr-why">${esc(why)}</div>` : ""}
       </div>`;
     }
   }
@@ -6612,6 +6658,8 @@ function bindStatic() {
   $("od-tags").onclick = async (e) => {
     const sd = e.target.closest("[data-statdrill]");
     if (sd) { const o = oppById(curOppId); if (o) openStatDrill(o, sd.dataset.statdrill); return; }
+    const ed = e.target.closest("[data-estdrill]");
+    if (ed) { const o = oppById(curOppId); if (o) openEstDrill(o, ed.dataset.estdrill); return; }
     const fd = e.target.closest("[data-rcfold]");
     if (fd) {                       // fold a whole street away; nothing stored on the opponent
       const t = fd.dataset.rcfold;
@@ -6691,18 +6739,18 @@ function bindStatic() {
   }
   $("od-tags").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill]");
-    if (b && b !== peekBtn) (b.dataset.statdrill ? showStatPeek : b.dataset.check ? showCheck : showRangePeek)(b);
+    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill],[data-estdrill]");
+    if (b && b !== peekBtn) (b.dataset.estdrill ? showEstPeek : b.dataset.statdrill ? showStatPeek : b.dataset.check ? showCheck : showRangePeek)(b);
   });
   $("od-tags").addEventListener("pointerout", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill]");
+    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill],[data-estdrill]");
     if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
   });
   document.addEventListener("click", (e) => {
     if (peekBtn && !e.target.closest("#rpeek") && !e.target.closest("[data-rjump]")
       && !e.target.closest("[data-check]") && !e.target.closest("[data-szsplit]")
-      && !e.target.closest("[data-statdrill]") && !e.target.closest("[data-hud]")
+      && !e.target.closest("[data-statdrill]") && !e.target.closest("[data-estdrill]") && !e.target.closest("[data-hud]")
       && !e.target.closest("[data-sz3]")) hideRangePeek();
   }, true);
   document.addEventListener("keydown", (e) => {

@@ -1210,6 +1210,16 @@ button.statcalc:active { color: var(--accent); }
 .statcalc + .statunit { align-self: center; margin-left: -4px; }
 .statcalc ~ .statn { align-self: center; }
 .statn { font-size: 11px; color: var(--muted); }
+/* Tree-read estimate: the hands' % tucked after Phil's chip, n greyed after it. */
+.estpair { display: inline-flex; align-items: center; gap: 3px; }
+button.estn { background: none; border: 0; border-bottom: 1px dotted var(--line); padding: 2px 1px;
+  font-family: inherit; font-size: 12px; font-weight: 600; line-height: 14px; color: var(--text); cursor: pointer;
+  -webkit-appearance: none; appearance: none; white-space: nowrap; }
+button.estn i { font-style: normal; font-size: 10px; color: var(--muted); margin-left: 2px; }
+button.estn.thin { color: var(--muted); font-weight: 500; }
+button.estn:active { color: var(--accent); }
+.estdef { font-size: 12px; color: var(--muted); padding: 2px 0 6px; }
+.hr-why { font-size: 11px; color: var(--muted); font-style: italic; }
 .tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
 /* Tally rows carry six options and a ✕, and at the widths Phil reads them on
    the ✕ was landing alone on a second line. Narrower boxes and a ✕ sized to
