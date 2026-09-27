@@ -260,8 +260,15 @@ const TENDENCY_TAGS = [
   // turn
   { id: "t-barrel2-freq-hu", cat: "postflop", label: "2nd barrel freq HU",  kind: "stat", calc: "barrelHu" },
   { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
-  { id: "t-bluff-hands",  cat: "postflop", label: "Barrels",         kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"], ["tight", "Tight"]] },
-  /* The turn cards he fires his second barrel on, counted like Barrels. */
+  /* Superseded by the four yes/no Barrels reads below (Phil, 2026-09-27). Kept,
+     not retired, so any counts already on it stay visible under Live → Other. */
+  { id: "t-bluff-hands",  cat: "postflop", label: "Barrels (old tally)", kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"], ["tight", "Tight"]] },
+  /* What he fires the turn with as PFR, one yes/no per kind of hand. */
+  { id: "t-barrel-air",    cat: "postflop", label: "Barrels Air" },
+  { id: "t-barrel-equity", cat: "postflop", label: "Barrels Equity" },
+  { id: "t-barrel-sdv",    cat: "postflop", label: "Barrels SDV" },
+  { id: "t-barrel-tight",  cat: "postflop", label: "Barrels Tight" },
+  /* The turn cards he fires his second barrel on, counted per card type. */
   { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards",      kind: "tally",  options: [["4str", "4Str"], ["3flush", "3Flush"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },
   { id: "t-low-boards",   cat: "postflop", label: "Low boards",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
