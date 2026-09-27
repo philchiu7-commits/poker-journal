@@ -69,8 +69,10 @@ const HQ_PHRASES = [
   [/\bpost[\s-]flop\b/g, " postflop "],
   /* Board by its top flop card: "A-high", "Thigh", "T high or lower", "Q-high+".
      One token, "hi" + rank value + le/ge/eq, so the "or" can't split it. */
-  [/\b(ace|king|queen|jack|ten|10|[akqjt2-9])[\s-]?high(?:\s+(?:boards?|flops?))?(\s*(?:(?:or|and)\s+(?:lower|below|less|under|smaller|worse)|-(?=\s)))?(\s*(?:(?:or|and)\s+(?:higher|above|more|over|bigger|better)|\+))?/g,
-    (m, r, lo, hi) => ` hi${HQ_RANK[r]}${lo ? "le" : hi ? "ge" : "eq"} `],
+  /* Naming the turn or river reads the board as it stands then — "turn is
+     9-high board or lower", "9-high turn", "T-high board on the river". */
+  [/(?:\b(turn|river)\s+(?:board\s+is|board|is)\s+(?:an?\s+)?)?\b(ace|king|queen|jack|ten|10|[akqjt2-9])[\s-]?high(?:\s+(?:boards?|flops?))?(?:\s+(?:on\s+)?(?:the\s+)?(turn|river)(?:\s+boards?)?)?(\s*(?:(?:or|and)\s+(?:lower|below|less|under|smaller|worse)|-(?=\s)))?(\s*(?:(?:or|and)\s+(?:higher|above|more|over|bigger|better)|\+))?/g,
+    (m, st, r, st2, lo, hi) => ` hi${HQ_RANK[r]}${lo ? "le" : hi ? "ge" : "eq"}${(st || st2 || "f")[0]} `],
   /* What the turn or river card did: "turn flush completing", "flush turn",
      "river pairs the board", "overcard turn", "4str turn", "blank river".
      One token, "bt" + t/r + kind, so the street word can't wander off. */
@@ -149,8 +151,8 @@ function hqParse(text) {
     if (/^ln[0-5]{2,3}$/.test(w)) { cur = push({ kind: "line", line: [...w.slice(2)].map((d) => HQ_LINE_CODE[d]).join("") }); continue; }
     { const b = /^bt([tr])(flush|4flush|straight|4str|over|pair|blank)$/.exec(w);
       if (b) { cur = push({ kind: "f", f: "bcard", st: b[1] === "t" ? "turn" : "river", val: b[2] }); continue; } }
-    { const b = /^hi(\d+)(le|ge|eq)$/.exec(w);
-      if (b) { cur = push({ kind: "f", f: "high", val: +b[1], op: b[2] }); continue; } }
+    { const b = /^hi(\d+)(le|ge|eq)([ftr])$/.exec(w);
+      if (b) { cur = push({ kind: "f", f: "high", val: +b[1], op: b[2], st: { f: "flop", t: "turn", r: "river" }[b[3]] }); continue; } }
     if (!t) { if (!HQ_STOP.has(w)) unknown.push(w); continue; }
     if (t === "neg") { pend.neg = true; continue; }
     if (t === "or") { pend.or = true; continue; }
@@ -246,8 +248,9 @@ function hqLabel(c) {
       pfr: "the preflop raiser", pfc: "a preflop caller",
       hu: "heads-up on the flop", mw: "multiway on the flop", sd: "gets to showdown", cards: "has his cards on record",
       ip: "in position on the flop", oop: "out of position on the flop",
-      high: c.op === "eq" ? `on a${c.val === 14 || c.val === 8 ? "n" : ""} ${HQ_RANK_NAME[c.val] || c.val}-high flop`
-        : `on a flop ${HQ_RANK_NAME[c.val] || c.val}-high or ${c.op === "le" ? "lower" : "higher"}`,
+      high: (c.op === "eq" ? `on a${c.val === 14 || c.val === 8 ? "n" : ""} ${HQ_RANK_NAME[c.val] || c.val}-high ${c.st === "flop" ? "flop" : "board"}`
+        : `on a ${c.st === "flop" ? "flop" : "board"} ${HQ_RANK_NAME[c.val] || c.val}-high or ${c.op === "le" ? "lower" : "higher"}`)
+        + (c.st === "flop" ? "" : ` by the ${c.st}`),
       bcard: { flush: `on a flush-completing ${c.st}`, "4flush": `on a ${c.st} that puts four to a flush on board`,
         straight: `on a straight-completing ${c.st}`, "4str": `on a ${c.st} that puts four to a straight on board`,
         over: `on an overcard ${c.st}`, pair: `on a board-pairing ${c.st}`,
@@ -349,10 +352,10 @@ function hqClause(h, oppId, c) {
          The caller called that last raise and stayed in. A limped pot has neither. */
       case "pfr": return isPFR(h, me);
       case "pfc": return isPFC(h, me);
-      /* The flop's top card, and only when he saw that flop. */
+      /* The board's top card as it stood on that street, and only when he saw it. */
       case "high": {
-        const f = (h.board || []).slice(0, 3).filter(Boolean);
-        if (f.length < 3 || !seenStreets(h, oppId).includes("Flop")) return false;
+        const n = { flop: 3, turn: 4, river: 5 }[c.st], f = (h.board || []).slice(0, n).filter(Boolean);
+        if (f.length < n || !seenStreets(h, oppId).includes(c.st[0].toUpperCase() + c.st.slice(1))) return false;
         const top = Math.max(...f.map((x) => HQ_RANK[String(x)[0].toLowerCase()] || 0));
         return c.op === "le" ? top <= c.val : c.op === "ge" ? top >= c.val : top === c.val;
       }
