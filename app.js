@@ -182,7 +182,7 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", "t-bluff-hands", "t-low-boards"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
+    { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", "t-bluff-hands", "t-barrel-cards", "t-low-boards"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
     /* Whether he is in or out of position changes what a turn read means, so
        As PFC is asked three ways: the reads that hold either way stay up top,
        the rest sit under the seat they belong to (Phil). */
@@ -246,7 +246,7 @@ const LIVE_LAYOUT = [
     ] },
     { label: "Turn", rows: [
       { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-low-boards", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
+      { label: "As PFR", lines: true, ids: ["t-bluff-hands", "t-barrel-cards", "t-low-boards", "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
       { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", "t-bet-vol", "t-call-style", "have-lead-t", "t-protect-flush", ["bsti-t", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq-hu", "t-fold-to-xr-hu"] },
     ] },
