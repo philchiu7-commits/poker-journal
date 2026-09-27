@@ -389,6 +389,8 @@ const TENDENCY_TAGS = [
   { id: "r-bh-oesd",   cat: "postflop", label: "Bluff hands OESD" },
   { id: "r-bh-air",    cat: "postflop", label: "Bluff hands Air" },
   { id: "r-bh-ahigh",  cat: "postflop", label: "Bluff hands A-high" },
+  { id: "r-bh-4flush", cat: "postflop", label: "Bluff hands 4Flush" },
+  { id: "r-bh-4str",   cat: "postflop", label: "Bluff hands 4Str" },
   { id: "r-barrel3-freq-hu", cat: "postflop", label: "3rd barrel freq HU",  kind: "stat", calc: "barrelRHu" },
   { id: "r-af-hu", cat: "postflop", label: "River AF HU",  kind: "stat", unit: "", calc: "riverAfHu" },
   /* Superseded by the yes/no Bluff balance reads below (Phil, 2026-09-28). Kept, not

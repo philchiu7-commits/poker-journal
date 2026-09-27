@@ -269,7 +269,9 @@ const readEstimates = (() => {
   const tdraw = (F) => F.st.turn.draw || {};
   for (const [id, lab, test] of [["r-bh-fd", "a missed flush draw", (F) => tdraw(F).fd], ["r-bh-oesd", "a missed open-ender", (F) => tdraw(F).oesd],
     ["r-bh-ahigh", "ace-high (no draw)", (F) => !tdraw(F).fd && !tdraw(F).oesd && F.cards.some((c) => c[0] === "A") && !F.st.river.tier.weakPair],
-    ["r-bh-air", "nothing (no pair, no ace, no draw on the turn)", (F) => !tdraw(F).fd && !tdraw(F).oesd && !tdraw(F).gut && !F.cards.some((c) => c[0] === "A") && !F.st.river.tier.weakPair]])
+    ["r-bh-air", "nothing (no pair, no ace, no draw on the turn)", (F) => !tdraw(F).fd && !tdraw(F).oesd && !tdraw(F).gut && !F.cards.some((c) => c[0] === "A") && !F.st.river.tier.weakPair],
+    // the board itself shows four to a flush / straight by the river — the bluff reps it (Phil 2026-09-28)
+    ["r-bh-4flush", "a bluff on a four-flush river board", (F) => four(F.board).fl], ["r-bh-4str", "a bluff on a four-straight river board", (F) => four(F.board).st]])
     S({ id, grp: "River bluffs (as PFR)", rule: "CAN", def: `River bluffs shown as preflop raiser: holding ${lab}.`,
       ch: (F) => { const T = F.pfr && rbluff(F); return T ? { ok: !!test(F), why: g(T) + (tdraw(F).fd ? " (had FD on turn)" : tdraw(F).oesd ? " (had OESD on turn)" : "") } : null; } });
   /* The line is this player's own action on each street (Phil): B only when they
