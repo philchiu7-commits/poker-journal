@@ -227,6 +227,9 @@ const readEstimates = (() => {
   S({ id: "t-barrel-equity", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a draw and no pair (FD, OESD or gutshot).", ch: (F) => { const T = barrel(F); return T ? { ok: !!eq(T), why: g(T) } : null; } });
   S({ id: "t-barrel-sdv", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a weak made hand: second pair or a pair under it.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || !!T.tier.weakPair, why: g(T) } : null; } });
   S({ id: "t-barrel-tight", grp: "Turn barrels (as PFR)", rule: "SHARE", yes: 70, no: 40, def: "Turn barrels shown: share that were top pair or better.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t >= 2, why: g(T) } : null; } });
+  S({ id: "t-barrel-one-done", grp: "Turn barrels (as PFR)", rule: "F", imp: true, def: "Cbet the flop as preflop raiser, then first to act on the turn (no one bet before them): checked it.",
+    ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.pfr || f.firstBetBy !== F.me || !t.my.length || !myTurnFirst(t, F.me)) return null;
+      return { ok: t.my[0] === "check", why: "turn " + t.my.join("/") + (t.tier ? " with " + g(t) : "") }; } });
   S({ id: "t-protect-flush", grp: "Turn barrels (as PFR)", rule: "SHARE", yes: 70, no: 30, def: "Turn brought a third card of a suit and they bet it: share shown top pair or better (a made hand, not a barrel).",
     ch: (F) => { const t = F.st.turn; if (!F.cards || !t.tier || !t.iBet || F.board.length < 4 || !hqBoardCard(F.board, 3).flush) return null; return { ok: t.tier.t >= 2, why: g(t) }; } });
   
