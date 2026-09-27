@@ -953,10 +953,13 @@ function route() {
    Clear-filters button is showing the whole time any are on. */
 let handFiltersFor = null;                 // whose filters these are
 const HF_DIMS = ["pos", "pot", "seen", "field", "squid", "role", "post"];
-const blankHandFilters = () => ({ ...Object.fromEntries(HF_DIMS.map((d) => [d, new Set()])), sd: false, cards: false });
+const blankHandFilters = () => ({ ...Object.fromEntries(HF_DIMS.map((d) => [d, new Set()])), sd: false, cards: false, q: null });
 let handFilters = blankHandFilters();
-const resetHandFilters = () => { handFilters = blankHandFilters(); };
-const handFiltersActive = () => HF_DIMS.some((d) => handFilters[d].size) || handFilters.sd || handFilters.cards;
+const resetHandFilters = () => {
+  handFilters = blankHandFilters();
+  if ($("od-hfind")) { $("od-hfind").value = ""; $("od-hfind-read").innerHTML = ""; }
+};
+const handFiltersActive = () => HF_DIMS.some((d) => handFilters[d].size) || handFilters.sd || handFilters.cards || !!handFilters.q?.groups.length;
 /* Hands where we never saw this player's cards sit in their own group, below
    the ones you can review. Open by default: four hands in five are imported
    with no cards on this villain, so collapsing the group hides most of what
@@ -1100,6 +1103,7 @@ function seenStreets(h, oppId) {
 }
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
+  if (f.q?.groups.length && !hqMatch(h, oppId, f.q)) return false;
   if (f.sd && !oppSD(h, oppId)) return false;
   if (f.cards && !cardsSeen(h, oppId)) return false;
   if (f.pot.size) {
@@ -6374,6 +6378,19 @@ function bindStatic() {
     renderOpponents();
   };
   $("od-hf-clear").onclick = () => { resetHandFilters(); if (curOppId) renderOppDetail(curOppId); };
+  /* Typed search. Read on a short pause so the list doesn't redraw under
+     every keystroke; the box itself is static markup, so focus survives. */
+  let hqT = 0;
+  $("od-hfind").oninput = () => {
+    clearTimeout(hqT);
+    hqT = setTimeout(() => {
+      const q = hqParse($("od-hfind").value);
+      handFilters.q = q.text ? q : null;
+      $("od-hfind-read").innerHTML = hqReadHTML(q);
+      if (curOppId) renderOppDetail(curOppId);
+    }, 220);
+  };
+  $("od-hfind-help").onclick = () => $("od-hfind-words").classList.toggle("hidden");
   $("od-play").onclick = () => {
     if (oppListIds.length < 2) return;
     handPlay = { oppId: curOppId, ids: [...oppListIds], filtered: handFiltersActive() };
