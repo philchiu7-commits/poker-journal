@@ -1088,19 +1088,15 @@ function postRoles(h, oppId) {
   }
   return [...out];
 }
-/* Streets he was still in for. Folding on a street still counts as seeing it.
-   A street was dealt if its cards are on the board or anyone acted on it, so
-   an all-in runout counts. A seat with no action on record was never in the
-   hand (typed hands only write down the seats that mattered) — no chips. */
+/* Streets he played, not just watched (Phil, v249): he has an action of his
+   own on that street — check, bet, call, raise or fold. A runout after an
+   all-in on an earlier street is dealt with nothing left to decide, so it
+   doesn't count; the street he went all-in on does. */
 function seenStreets(h, oppId) {
   const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
-  const me = "v" + i, acts = h.actions || [];
-  if (i < 0 || !acts.some((a) => a.actor === me)) return [];
-  const fold = acts.find((a) => a.actor === me && a.act === "fold");
-  const cut = fold ? STREET_ORDER.indexOf(fold.street) : 3;
-  const n = (h.board || []).filter(Boolean).length;
-  return SEEN_BUCKETS.filter((_, k) => k + 1 <= cut
-    && (n >= k + 3 || acts.some((a) => a.street === STREET_ORDER[k + 1])));
+  if (i < 0) return [];
+  const mine = new Set((h.actions || []).filter((a) => a.actor === "v" + i).map((a) => a.street));
+  return SEEN_BUCKETS.filter((_, k) => mine.has(STREET_ORDER[k + 1]));
 }
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
@@ -1166,8 +1162,8 @@ function renderHandFilters(oppId, allHands) {
     handFilters = save;
     return n;
   };
-  const HF_TIP = { Flop: "He was still in when the flop came", Turn: "He was still in when the turn came",
-    River: "He was still in when the river came", HU: "Two players saw the flop", MW: "Three or more saw the flop",
+  const HF_TIP = { Flop: "He acted on the flop (not an all-in runout)", Turn: "He acted on the turn (not an all-in runout)",
+    River: "He acted on the river (not an all-in runout)", HU: "Two players saw the flop", MW: "Three or more saw the flop",
     "3BP": "Hands where he 3-bet or called a 3-bet",
     "3b": "He 3-bet preflop", c3b: "He called somebody's 3-bet preflop",
     R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
