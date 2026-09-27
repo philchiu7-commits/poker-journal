@@ -238,6 +238,10 @@ const TENDENCY_TAGS = [
   { id: "f-xr-freq-pfc-mw", cat: "postflop", label: "xR freq MWP", kind: "stat", calc: "xrPfcMw" },
   { id: "punchbag-f-pfc", cat: "postflop", label: "Punch bag" },
   { id: "let-realize-f",  cat: "postflop", label: "Let me Realize" },
+  /* Thin value after the flop checks through, split by pot type (Phil's ThinXT row). */
+  { id: "f-thin-xt-srp",  cat: "postflop", label: "ThinXT SRP" },
+  { id: "f-thin-xt-mwp",  cat: "postflop", label: "ThinXT MWP" },
+  { id: "f-thin-xt-3bp",  cat: "postflop", label: "ThinXT 3BP" },
   /* Floating in and out of position are different plays, not one habit at two
      prices: OOP he has to lead or check-raise the turn to ever win it, IP the
      float is free when checked to. `floats-wide` stays the one-line summary. */

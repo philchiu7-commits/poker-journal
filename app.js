@@ -178,7 +178,7 @@ const READ_LAYOUT = [
         { label: "HU", subs: [["fold-cbet-f-hu", "F"], ["fold-cbet-t-hu", "T"], ["fold-cbet-r-hu", "R"]] },
         { label: "MWP", subs: [["fold-cbet-f-mw", "F"]] }] },
       { lines: true, ids: [{ label: "Float", subs: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] }] },
-      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
+      { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { label: "ThinXT", subs: [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }] },
     ] },
   ] },
   { title: "Turn exploit", subs: [
@@ -241,7 +241,7 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-pfc-equity", "f-xr-pfc-air", "f-xr-pfc-gu-turn", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-pfc-equity", "f-xr-pfc-air", "f-xr-pfc-gu-turn", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], "f-thin-xt-srp", "f-thin-xt-mwp", "f-thin-xt-3bp"] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [
