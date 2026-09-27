@@ -288,6 +288,9 @@ const readEstimates = (() => {
       ch: (F) => { const T = rbluff(F); if (!T) return null; const l = ["flop", "turn", "river"].map((s) => own(F.st[s])).join(""); return { ok: l === L, why: "line " + l + ": " + g(T) }; } });
   S({ id: "r-bluff-lines-mwp", grp: "River bluffs (any role)", rule: "CAN", def: "River bluffs shown: share that were bet into 3+ players (any line).",
     ch: (F) => { const T = rbluff(F); return T ? { ok: T.alive >= 3, why: T.alive + "-way: " + g(T) } : null; } });
+  // a pair too weak to call with, bet or raised as a bluff instead of checked down
+  S({ id: "r-hand-to-bluff-pfc", grp: "River bluffs (as PFC)", rule: "CAN", def: "River bets or raises as preflop caller shown: a weak pair (third pair or worse) turned into a bluff.",
+    ch: (F) => { const T = F.pfc && rbluff(F); return T ? { ok: !!T.tier.weakPair && T.tier.name !== "no pair", why: g(T) } : null; } });
   S({ id: "r-can-raise-bluff", grp: "Raises", rule: "CAN", def: "River raises shown with a bluff (weaker than second pair).",
     ch: (F) => { const T = F.st.river; return F.cards && T.tier && T.raised ? { ok: T.tier.t === 0, why: g(T) } : null; } });
   S({ id: "r-can-raise-thin", grp: "Raises", rule: "CAN", def: "River raises shown with second or top pair.",
@@ -349,6 +352,8 @@ const readEstimates = (() => {
     ch: (F) => { const T = lowIP(F); return T ? { ok: T.my[0] === "check", why: T.my[0] + " on " + F.board.slice(0, 3).join(" ") } : null; } });
   S({ id: "f-low-board-ip-canbluff", grp: "Bets when checked to", rule: "CAN", def: "Preflop raiser in position on a 9-high-or-lower flop, checked to, bet — showed a bluff: no pair of their own (air or a draw).",
     ch: (F) => { const T = lowIP(F); return T && F.cards && T.tier && T.firstBetBy === F.me ? { ok: T.tier.name === "no pair", why: g(T) } : null; } });
+  S({ id: "f-low-board-ip-protect", grp: "Bets when checked to", rule: "CAN", def: "Preflop raiser in position on a 9-high-or-lower flop, checked to, bet — showed one pair (betting to protect it).",
+    ch: (F) => { const T = lowIP(F); return T && F.cards && T.tier && T.firstBetBy === F.me ? { ok: T.tier.name !== "no pair" && T.tier.t < 4, why: g(T) } : null; } });
   /* Turn → OOP → Probe T: Merge / Polar (Phil 2026-09-28). The HUD's probe (stats.js): the raiser
      checked the flop through, they bet the turn acting before the raiser, no bet ahead of them.
      Merge = shown with one pair; Polar = two pair or better, or no pair of their own. */

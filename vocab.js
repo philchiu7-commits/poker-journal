@@ -334,6 +334,7 @@ const TENDENCY_TAGS = [
   /* Flop, as PFR in position on a 9-high-or-lower board. */
   { id: "f-low-board-ip-passive",  cat: "postflop", label: "Low Board IP Passive" },
   { id: "f-low-board-ip-canbluff", cat: "postflop", label: "Low Board IP CanBluff" },
+  { id: "f-low-board-ip-protect",  cat: "postflop", label: "Low Board IP Protect" },
   /* Superseded by the yes/no T call range reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "t-call-range",   cat: "postflop", label: "T call range (old tally)",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
@@ -452,6 +453,7 @@ const TENDENCY_TAGS = [
   /* River draws: does he play the river off whether the draws got there? As
      PFC a yes is a focus, as PFR a yes is a hyper-focus (Phil, 2026-09-27). */
   { id: "r-draw-focus-pfc", cat: "postflop", label: "Draw Focus" },
+  { id: "r-hand-to-bluff-pfc", cat: "postflop", label: "Turn hand to bluff" },
   { id: "r-draw-hyper-focus-pfr", cat: "postflop", label: "Draw Hyper Focus" },
   { id: "timing-tells",         cat: "live",     label: "Timing tells" },
   { id: "snap-call-weak",       cat: "live",     label: "Snap-call = weak" },
