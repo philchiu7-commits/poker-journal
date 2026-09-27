@@ -1945,13 +1945,13 @@ function statPeekHTML(o, id) {
 }
 /* The hit block over the miss block, shown hands first, capped — shared by
    every peek that lists hands. */
-function drillRowsHTML(o, hands, yes, no) {
+function drillRowsHTML(o, hands, yes, no, max = ST_PEEK_MAX) {
   const block = (ttl, list) => {
     if (!list.length) return "";
     const rows = list.slice().sort((x, y) => bySeen(o.id)(x.h, y.h));
     return `<div class="stpkh">${esc(ttl)}<span>${list.length}</span></div>`
-      + rows.slice(0, ST_PEEK_MAX).map((x) => handRowHTML(x.h, o.id, x.why)).join("")
-      + (rows.length > ST_PEEK_MAX ? `<div class="stpkmore">+${rows.length - ST_PEEK_MAX} more</div>` : "");
+      + rows.slice(0, max).map((x) => handRowHTML(x.h, o.id, x.why)).join("")
+      + (rows.length > max ? `<div class="stpkmore">+${rows.length - max} more</div>` : "");
   };
   return `<div class="list stpklist">${block(yes, hands.filter((x) => x.ok))}${
     block(no, hands.filter((x) => !x.ok))}</div>`;
@@ -1966,13 +1966,18 @@ function estFor(o, id) {
   return e && e.n ? e : null;
 }
 function showEstPeek(btn) {
-  const o = oppById(curOppId), id = btn.dataset.estdrill, e = o && estFor(o, id);
-  if (!e) return;
-  const [yes, no] = estWords(e);
-  openPeek(btn, `<div class="rpkhead">${esc(TAG_BY_ID[id]?.label || id)} \u00b7 ${e.k} of ${e.n} \u00b7 ${Math.round(e.pct)}%</div>`
-    + `<div class="estdef">${esc(e.def)}</div>`
-    + drillRowsHTML(o, e.ev, yes, no)
-    + `<div class="rpkfoot"><span>Tap the % for all of them</span></div>`, "stpk");
+  const o = oppById(curOppId);
+  if (!o) return;
+  const ids = btn.dataset.estpeek.split(",").filter((id) => estFor(o, id));
+  if (!ids.length) return;
+  const html = ids.map((id) => {
+    const e = estFor(o, id), [yes, no] = estWords(e);
+    return `<div class="rpkhead">${esc(TAG_BY_ID[id]?.label || id)} \u00b7 ${e.k} of ${e.n} \u00b7 ${Math.round(e.pct)}%</div>`
+      + `<div class="estdef">${esc(e.def)}</div>`
+      + drillRowsHTML(o, e.ev, yes, no, ids.length > 1 ? 3 : ST_PEEK_MAX);
+  }).join("");
+  // a label naming several reads scrolls as one list rather than squeezing each
+  openPeek(btn, (ids.length > 1 ? `<div class="stpklist estmulti">${html}</div>` : html) + `<div class="rpkfoot"><span>Tap the % for all of them</span></div>`, "stpk");
 }
 function openEstDrill(o, id) {
   const e = estFor(o, id);
@@ -2120,12 +2125,10 @@ function openPeek(btn, html, cls) {
   }
   /* A hand list is the same trap: parked on its own % the tap to open them all
      can't land. Its list scrolls, so give up list height until it fits. */
-  const hl = !grid && p.querySelector(".stpklist");
-  if (hl) {
-    hl.style.maxHeight = "";
-    const over = p.offsetHeight - room;
-    if (over > 0) hl.style.maxHeight = Math.max(80, hl.offsetHeight - over) + "px";
-  }
+  const hl = grid ? [] : p.querySelector(".estmulti") ? [p.querySelector(".estmulti")] : [...p.querySelectorAll(".stpklist")];
+  hl.forEach((l) => (l.style.maxHeight = ""));
+  const overL = p.offsetHeight - room;
+  if (overL > 0) hl.forEach((l) => (l.style.maxHeight = Math.max(60, l.offsetHeight - overL / hl.length) + "px"));
   const w = p.offsetWidth, h = p.offsetHeight;
   p.style.left = Math.max(EDGE, Math.min(window.innerWidth - w - EDGE, r.left + r.width / 2 - w / 2)) + "px";
   const top = goesBelow ? r.bottom + GAP : r.top - GAP - h;
@@ -3156,18 +3159,23 @@ function renderOppReads(o) {
       return `<div class="bubbles">${opts}${clr}</div>`;
     }
     // on a line the row label already names the read, so the chip shows the state
-    return estBadge(id, lbl, compact
+    return estBadge(id, lbl, !compact, compact
       ? `<button class="chip mini pline${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}"` +
         ` title="${esc(lbl)}">${st ? esc(STATE_WORD[st] || st) : "–"}</button>`
       : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`);
   };
-  /* The hands' own answer beside Phil's: a % off the shown hands, hover for a
-     few, tap for all. Display only — it never sets the read. Only worked out
-     while the tree is open, and cached per player until their hands change. */
+  /* The hands' own answer beside Phil's: a % off the shown hands, tap for all.
+     The hover lives on the words that name the read — the row label, a cap, or
+     a word chip's own word — never on the Yes/No he taps (Phil). Display only:
+     it never sets the read. Worked out only while the tree is open, and cached
+     per player until their hands change. */
   const est = showReadPicker && typeof readEstimates === "function" ? readEstimates(o.id, HANDS) : {};
-  const estBadge = (id, lbl, chip) => {
+  const hasEst = (id) => !!est[id]?.n;
+  const estHover = (ids) => { const on = ids.filter(hasEst); return on.length ? ` data-estpeek="${on.join(",")}"` : ""; };
+  const estBadge = (id, lbl, word, chip) => {
     const e = est[id];
     if (!e || !e.n) return chip;
+    if (word) chip = chip.replace("<button ", `<button${estHover([id])} `);
     return `<span class="estpair">${chip}<button class="estn${e.n < EST_MIN ? " thin" : ""}" data-estdrill="${id}"` +
       ` title="${esc(lbl || TAG_BY_ID[id]?.label || id)} — ${e.k} of ${e.n} shown hands${e.n < EST_MIN ? `, under the ${EST_MIN} it takes to call it` : ""}">` +
       `${Math.round(e.pct)}%<i>${e.n}</i></button></span>`;
@@ -3246,7 +3254,7 @@ function renderOppReads(o) {
           ? sb.filter((v) => live(idOf(v))).map((v) => readBtn(idOf(v), labelOf(v), false)).join("")
           : sb
           ? sb.filter((v) => live(idOf(v))).map((v) =>
-              `<span class="rlgrp"><span class="scap">${esc(labelOf(v))}</span>` +
+              `<span class="rlgrp"><span class="scap"${estHover([idOf(v)])}>${esc(labelOf(v))}</span>` +
               `${readBtn(idOf(v), TAG_BY_ID[idOf(v)].label, true)}</span>`).join("")
           /* `chips`: the line's label names the spot and every read on it is a
              named chip — "Protect OOP: xR DisAdv. · BetF" — rather than one
@@ -3256,7 +3264,7 @@ function renderOppReads(o) {
               readBtn(idOf(v), v === x ? x.chip || TAG_BY_ID[idOf(x)].label : labelOf(v), false)).join("")
           : readBtn(idOf(x), labelOf(x), true) +
             alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("");
-        return `<span class="rllab${idsOf(x).some(isSet) ? " on" : ""}${wide(x)}">${esc(labelOf(x))}</span>` +
+        return `<span class="rllab${idsOf(x).some(isSet) ? " on" : ""}${wide(x)}"${estHover(idsOf(x))}>${esc(labelOf(x))}</span>` +
           `<div class="rlctl${wide(x)}">${body}</div>`;
       }).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
@@ -6739,12 +6747,12 @@ function bindStatic() {
   }
   $("od-tags").addEventListener("pointerover", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill],[data-estdrill]");
-    if (b && b !== peekBtn) (b.dataset.estdrill ? showEstPeek : b.dataset.statdrill ? showStatPeek : b.dataset.check ? showCheck : showRangePeek)(b);
+    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill],[data-estpeek]");
+    if (b && b !== peekBtn) (b.dataset.estpeek ? showEstPeek : b.dataset.statdrill ? showStatPeek : b.dataset.check ? showCheck : showRangePeek)(b);
   });
   $("od-tags").addEventListener("pointerout", (e) => {
     if (!matchMedia("(hover: hover)").matches) return;
-    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill],[data-estdrill]");
+    const b = e.target.closest("[data-rjump],[data-check],[data-statdrill],[data-estpeek]");
     if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#rpeek"))) hideRangePeek();
   });
   document.addEventListener("click", (e) => {

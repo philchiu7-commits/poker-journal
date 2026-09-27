@@ -1218,6 +1218,11 @@ button.estn { background: none; border: 0; border-bottom: 1px dotted var(--line)
 button.estn i { font-style: normal; font-size: 10px; color: var(--muted); margin-left: 2px; }
 button.estn.thin { color: var(--muted); font-weight: 500; }
 button.estn:active { color: var(--accent); }
+/* words that open the hands on hover — a faint dotted rule says so */
+[data-estpeek]:not(button) { text-decoration: underline dotted var(--line); text-underline-offset: 3px; cursor: default; }
+.estmulti { max-height: min(60vh, 440px); }
+.estmulti .stpklist { max-height: none; overflow: visible; }
+.estmulti .rpkhead:not(:first-child) { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .estdef { font-size: 12px; color: var(--muted); padding: 2px 0 6px; }
 .hr-why { font-size: 11px; color: var(--muted); font-style: italic; }
 .tallyn { margin-left: 4px; font-size: 11px; opacity: .85; }
