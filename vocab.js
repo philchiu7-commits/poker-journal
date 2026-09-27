@@ -188,10 +188,16 @@ const TENDENCY_TAGS = [
   { id: "lead-limped",          cat: "postflop", label: "Lead limped" },
   { id: "sp-dis-board",         cat: "postflop", label: "SP dis board" },
   { id: "oop-protect",          cat: "postflop", label: "OOP protect" },
-  { id: "protect-disadv-board", cat: "postflop", label: "Protect DisAdv. Board" },
+  /* Protect OOP, as the preflop raiser on a board that favours the caller:
+     the two ways he protects a hand there. xR = he checks and check-raises it
+     (id kept from when this was one "Protect DisAdv. Board" read). */
+  { id: "protect-disadv-board", cat: "postflop", label: "xR DisAdv." },
   /* Bf = bet-fold. The other half of the protection bet on a board that
      favours the caller: he bets it, and a raise is the end of the hand. */
   { id: "f-bf-disadv-board",   cat: "postflop", label: "BetF" },
+  /* The other side of the same spot: on a board that favours him, his check
+     is a weak hand giving up, not a trap (Phil, 2026-09-27). */
+  { id: "f-adv-weak-check",    cat: "postflop", label: "WeakCheck" },
   { id: "check-oop-limped",     cat: "postflop", label: "Check OOP limped" },
   { id: "bet-merged-mwp",       cat: "postflop", label: "Bet merged mwp" },
   { id: "protected-block",      cat: "postflop", label: "Protected block" }, // yes = medium/protection, no = polar (nuts or bluff)
