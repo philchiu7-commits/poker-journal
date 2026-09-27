@@ -165,7 +165,7 @@ const READ_LAYOUT = [
     { label: "Style", liveOnly: true, ids: ["preflop-style", "limp-scale-ws", "limp-scale-ns"] },
   ] }] },
   { title: "Postflop general", subs: [
-    { label: "MWP limp", rows: [{ lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, "mwl-ip-stab"] }] },
+    { label: "MWP limp", rows: [{ lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP F", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, "mwl-ip-stab"] }] },
   ] },
   { title: "Flop exploit", subs: [
     { label: "As PFR", rows: wb([{ label: "Cbet freq", subs: [["f-cbet-freq-hu", "HU"], ["f-cbet-freq-mw", "MWP"]] },
@@ -259,7 +259,7 @@ const LIVE_LAYOUT = [
     { label: "All streets", rows: [
       { label: "Lead", ids: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
       { label: "Range shape", ids: ["merged", "polar", "bad-polar", "sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block"] },
-      { label: "MWP limp", lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, "mwl-ip-stab"] },
+      { label: "MWP limp", lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP F", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, "mwl-ip-stab"] },
     ] },
   ] },
   { title: "Sizing", cat: "sizing", subs: [{ rows: [

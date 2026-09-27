@@ -223,12 +223,12 @@ const TENDENCY_TAGS = [
   /* Superseded by the yes/no Probe OOP reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "mwl-oop-probe",  cat: "postflop", label: "Probe OOP (old tally)",       kind: "tally",  options: [["have", "Have"], ["rangex", "RangeX"], ["draw", "Draw"], ["merge", "Merge"], ["wktp", "WKTp"], ["topp", "TopP+"]] },
-  { id: "mwl-oop-probe-have", cat: "postflop", label: "Probe OOP Have" },
-  { id: "mwl-oop-probe-rangex", cat: "postflop", label: "Probe OOP RangeX" },
-  { id: "mwl-oop-probe-draw", cat: "postflop", label: "Probe OOP Draw" },
-  { id: "mwl-oop-probe-merge", cat: "postflop", label: "Probe OOP Merge" },
-  { id: "mwl-oop-probe-wktp", cat: "postflop", label: "Probe OOP WKTp" },
-  { id: "mwl-oop-probe-topp", cat: "postflop", label: "Probe OOP TopP+" },
+  { id: "mwl-oop-probe-have", cat: "postflop", label: "Probe OOP F Have" },
+  { id: "mwl-oop-probe-rangex", cat: "postflop", label: "Probe OOP F RangeX" },
+  { id: "mwl-oop-probe-draw", cat: "postflop", label: "Probe OOP F Draw" },
+  { id: "mwl-oop-probe-merge", cat: "postflop", label: "Probe OOP F Merge" },
+  { id: "mwl-oop-probe-wktp", cat: "postflop", label: "Probe OOP F WKTp" },
+  { id: "mwl-oop-probe-topp", cat: "postflop", label: "Probe OOP F TopP+" },
   /* Superseded by the yes/no xR reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
   { id: "mwl-xr",         cat: "postflop", label: "xR (old tally)",              kind: "tally",  options: [["strong", "Strong"], ["bluff", "Bluff"]] },
