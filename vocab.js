@@ -307,6 +307,8 @@ const TENDENCY_TAGS = [
   // Phil 2026-09-28: cbets the flop, then gives up the turn
   { id: "t-barrel-one-done", cat: "postflop", label: "Barrels One&Done" },
   { id: "t-barrel-mergy", cat: "postflop", label: "Barrels Mergy" },
+  { id: "t-xr-pfr-nut",   cat: "postflop", label: "Turn xR (PFR) Nut" },
+  { id: "t-xr-pfr-bluff", cat: "postflop", label: "Turn xR (PFR) Bluff" },
   /* Flop, as PFC: checked to them, they checked back — with what. */
   { id: "f-xb-pfc-fd",   cat: "postflop", label: "Check Backs FD" },
   { id: "f-xb-pfc-sd",   cat: "postflop", label: "Check Backs SD" },

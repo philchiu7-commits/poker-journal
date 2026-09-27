@@ -256,6 +256,10 @@ const readEstimates = (() => {
   S({ id: "t-barrel-air", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with nothing: no pair, no draw.", ch: (F) => { const T = barrel(F); return T ? { ok: air(T), why: g(T) } : null; } });
   S({ id: "t-barrel-equity", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a draw and no pair (FD, OESD or gutshot).", ch: (F) => { const T = barrel(F); return T ? { ok: !!eq(T), why: g(T) } : null; } });
   S({ id: "t-barrel-sdv", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a weak made hand: second pair or a pair under it.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || !!T.tier.weakPair, why: g(T) } : null; } });
+  // Turn → As PFR → When check → xR (Phil 2026-09-28): they checked the turn as raiser, then check-raised.
+  for (const [id, what, ok] of [["t-xr-pfr-nut", "two pair or better", (T) => T.tier.t === 4], ["t-xr-pfr-bluff", "a bluff: no pair better than third (draws count)", (T) => T.tier.t === 0]])
+    S({ id, grp: "Turn barrels (as PFR)", rule: "CAN", def: `As preflop raiser, checked the turn and check-raised — showed ${what}.`,
+      ch: (F) => { const T = F.st.turn; return F.pfr && F.cards && T.tier && T.xr ? { ok: ok(T), why: g(T) } : null; } });
   S({ id: "t-barrel-mergy", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a middling made hand: second or top pair (a merged barrel, not polar).", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || T.tier.t === 2, why: g(T) } : null; } });
   S({ id: "t-barrel-tight", grp: "Turn barrels (as PFR)", rule: "SHARE", yes: 70, no: 40, def: "Turn barrels shown: share that were top pair or better.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t >= 2, why: g(T) } : null; } });
   S({ id: "t-barrel-one-done", grp: "Turn barrels (as PFR)", rule: "F", imp: true, def: "Cbet the flop as preflop raiser, then first to act on the turn (no one bet before them): checked it.",
