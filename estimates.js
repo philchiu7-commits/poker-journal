@@ -339,6 +339,16 @@ const readEstimates = (() => {
     ch: (F) => { const T = lowIP(F); return T ? { ok: T.my[0] === "check", why: T.my[0] + " on " + F.board.slice(0, 3).join(" ") } : null; } });
   S({ id: "f-low-board-ip-canbluff", grp: "Bets when checked to", rule: "CAN", def: "Preflop raiser in position on a 9-high-or-lower flop, checked to, bet — showed a bluff: no pair of their own (air or a draw).",
     ch: (F) => { const T = lowIP(F); return T && F.cards && T.tier && T.firstBetBy === F.me ? { ok: T.tier.name === "no pair", why: g(T) } : null; } });
+  /* Flop → As PFC → Check Backs (Phil 2026-09-28): as preflop caller the flop was checked to them
+     and they checked it back (no one bet the flop) — what they turned up with. */
+  const pfcXB = (F) => { const T = F.st.flop; return F.pfc && F.cards && T.tier && T.firstBetBy == null && T.my[0] === "check" && checkedTo(F, T) ? T : null; };
+  for (const [id, what, ok] of [
+    ["f-xb-pfc-fd", "a flush draw", (T) => !!(T.draw && T.draw.fd)],
+    ["f-xb-pfc-sd", "showdown value: second pair or a weaker pair", (T) => T.tier.t === 1 || !!T.tier.weakPair],
+    ["f-xb-pfc-topp", "top pair or an overpair", (T) => T.tier.t === 2 || T.tier.t === 3],
+    ["f-xb-pfc-2p", "two pair or better", (T) => T.tier.t === 4]])
+    S({ id, grp: "Check backs (as PFC)", rule: "CAN", def: `As preflop caller, the flop was checked to them and they checked back — showed ${what}.`,
+      ch: (F) => { const T = pfcXB(F); return T ? { ok: ok(T), why: g(T) } : null; } });
   for (const [s, L] of [["flop", "f"], ["turn", "t"], ["river", "r"]])
     S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role) — showed a bluff: no pair of their own (air or a draw).`,
       ch: (F) => { const T = F.st[s]; if (!F.cards || !T.tier || T.firstBetBy !== F.me || !checkedTo(F, T)) return null;

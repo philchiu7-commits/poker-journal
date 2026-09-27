@@ -306,6 +306,11 @@ const TENDENCY_TAGS = [
   // Phil 2026-09-28: cbets the flop, then gives up the turn
   { id: "t-barrel-one-done", cat: "postflop", label: "Barrels One&Done" },
   { id: "t-barrel-mergy", cat: "postflop", label: "Barrels Mergy" },
+  /* Flop, as PFC: checked to them, they checked back — with what. */
+  { id: "f-xb-pfc-fd",   cat: "postflop", label: "Check Backs FD" },
+  { id: "f-xb-pfc-sd",   cat: "postflop", label: "Check Backs SD" },
+  { id: "f-xb-pfc-topp", cat: "postflop", label: "Check Backs TopP" },
+  { id: "f-xb-pfc-2p",   cat: "postflop", label: "Check Backs 2P+" },
   /* Superseded by the yes/no Turn Cards reads below (Phil, 2026-09-27). Kept,
      not retired, so any counts already on it stay visible under Live → Other. */
   { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards (old tally)", kind: "tally",  options: [["4str", "4Str"], ["3flush", "3Flush"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },
