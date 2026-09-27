@@ -10,6 +10,29 @@ const HQ_RANK = { a: 14, ace: 14, k: 13, king: 13, q: 12, queen: 12, j: 11, jack
   9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
 const HQ_RANK_NAME = { 14: "A", 13: "K", 12: "Q", 11: "J", 10: "T" };
 /* Multi-word phrases first, each collapsed to one token the reader below knows. */
+const HQ_BT_KIND = "4[\\s-]?flush|four[\\s-]flush|3[\\s-]?flush|flush|4[\\s-]?str(?:aight)?|four[\\s-]straight|straight|over[\\s-]?cards?|board[\\s-]?pair(?:ing|s|ed)?|pair(?:ing|s|ed)?(?:\\s+(?:the\\s+)?board)?|blank|brick";
+const hqBtKind = (k) => /^(?:4|four)[\s-]?flush/.test(k) ? "4flush" : /flush/.test(k) ? "flush"
+  : /^(?:4|four)[\s-]?str/.test(k) ? "4str" : /straight/.test(k) ? "straight"
+  : /over/.test(k) ? "over" : /pair/.test(k) ? "pair" : "blank";
+/* The card a street added against the board before it. A flush or straight
+   "completes" when a two-card hand could make one now and couldn't through
+   this card before; 4Flush / 4Str is one card short of it on the board. */
+function hqBoardCard(board, j) {
+  const rk = (x) => HQ_RANK[String(x)[0].toLowerCase()] || 0;
+  const before = board.slice(0, j), c = board[j];
+  const r = rk(c), su = String(c).slice(-1).toLowerCase();
+  const suit = before.filter((x) => String(x).slice(-1).toLowerCase() === su).length + 1;
+  const lows = (rs) => new Set(rs.flatMap((x) => x === 14 ? [14, 1] : [x]));
+  const most = (set, need) => { let n = 0; for (let lo = 1; lo <= 10; lo++) {
+    if (need != null && !(need >= lo && need <= lo + 4) && !(need === 14 && lo === 1)) continue;
+    let k = 0; for (let v = lo; v <= lo + 4; v++) if (set.has(v)) k++; n = Math.max(n, k); } return n; };
+  const pr = before.map(rk), had = lows(pr), now = lows([...pr, r]);
+  const out = { flush: suit === 3, "4flush": suit === 4,
+    straight: !pr.includes(r) && most(now, r) >= 3, "4str": most(now, r) >= 4 && most(had) < 4,
+    over: pr.every((x) => r > x), pair: pr.includes(r) };
+  out.blank = !out.flush && !out["4flush"] && !out.straight && !out["4str"] && !out.over && !out.pair;
+  return out;
+}
 const HQ_PHRASES = [
   [/\b([345])[\s-]?bet(?:s|ted|ting)?\s+pots?\b|\b([345])[\s-]?bps?\b/g, (m, a, b) => ` ${a || b}bp `],
   [/\bsingle[\s-]?raised(?:\s+pots?)?\b|\bsrps?\b/g, " srp "],
@@ -48,6 +71,13 @@ const HQ_PHRASES = [
      One token, "hi" + rank value + le/ge/eq, so the "or" can't split it. */
   [/\b(ace|king|queen|jack|ten|10|[akqjt2-9])[\s-]?high(?:\s+(?:boards?|flops?))?(\s*(?:(?:or|and)\s+(?:lower|below|less|under|smaller|worse)|-(?=\s)))?(\s*(?:(?:or|and)\s+(?:higher|above|more|over|bigger|better)|\+))?/g,
     (m, r, lo, hi) => ` hi${HQ_RANK[r]}${lo ? "le" : hi ? "ge" : "eq"} `],
+  /* What the turn or river card did: "turn flush completing", "flush turn",
+     "river pairs the board", "overcard turn", "4str turn", "blank river".
+     One token, "bt" + t/r + kind, so the street word can't wander off. */
+  [new RegExp(`\\b(turn|river)(?:\\s+card)?\\s+(?:that\\s+|which\\s+)?(?:(?:is|completes|completing|brings|makes|pairs|pairing)\\s+)?(?:(?:the|a|an)\\s+)?(${HQ_BT_KIND})(?:[\\s-]+(?:completing|completes|comes|card))?\\b`, "g"),
+    (m, st, k) => ` bt${st[0]}${hqBtKind(k)} `],
+  [new RegExp(`\\b(${HQ_BT_KIND})(?:[\\s-]+(?:completing|completes|comes|coming|card))?\\s+(?:on\\s+)?(?:the\\s+)?(turn|river)\\b`, "g"),
+    (m, k, st) => ` bt${st[0]}${hqBtKind(k)} `],
   [/\b([345])[\s-]bet/g, "$1bet"],
 ];
 /* Single words → what they are. Street and size words attach to the action
@@ -117,6 +147,8 @@ function hqParse(text) {
   for (let k = 0; k < words.length; k++) {
     const w = words[k], t = HQ_WORDS[w];
     if (/^ln[0-5]{2,3}$/.test(w)) { cur = push({ kind: "line", line: [...w.slice(2)].map((d) => HQ_LINE_CODE[d]).join("") }); continue; }
+    { const b = /^bt([tr])(flush|4flush|straight|4str|over|pair|blank)$/.exec(w);
+      if (b) { cur = push({ kind: "f", f: "bcard", st: b[1] === "t" ? "turn" : "river", val: b[2] }); continue; } }
     { const b = /^hi(\d+)(le|ge|eq)$/.exec(w);
       if (b) { cur = push({ kind: "f", f: "high", val: +b[1], op: b[2] }); continue; } }
     if (!t) { if (!HQ_STOP.has(w)) unknown.push(w); continue; }
@@ -215,7 +247,11 @@ function hqLabel(c) {
       hu: "heads-up on the flop", mw: "multiway on the flop", sd: "gets to showdown", cards: "has his cards on record",
       ip: "in position on the flop", oop: "out of position on the flop",
       high: c.op === "eq" ? `on a${c.val === 14 || c.val === 8 ? "n" : ""} ${HQ_RANK_NAME[c.val] || c.val}-high flop`
-        : `on a flop ${HQ_RANK_NAME[c.val] || c.val}-high or ${c.op === "le" ? "lower" : "higher"}` }[c.f];
+        : `on a flop ${HQ_RANK_NAME[c.val] || c.val}-high or ${c.op === "le" ? "lower" : "higher"}`,
+      bcard: { flush: `on a flush-completing ${c.st}`, "4flush": `on a ${c.st} that puts four to a flush on board`,
+        straight: `on a straight-completing ${c.st}`, "4str": `on a ${c.st} that puts four to a straight on board`,
+        over: `on an overcard ${c.st}`, pair: `on a board-pairing ${c.st}`,
+        blank: `on a blank ${c.st} (no flush, straight, overcard or pair)` }[c.val] }[c.f];
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
   } else if (c.kind === "line") {
     const any = ["flop", "turn", "river"].filter((st, j) => !c.line[j] || c.line[j] === "-");
@@ -319,6 +355,13 @@ function hqClause(h, oppId, c) {
         if (f.length < 3 || !seenStreets(h, oppId).includes("Flop")) return false;
         const top = Math.max(...f.map((x) => HQ_RANK[String(x)[0].toLowerCase()] || 0));
         return c.op === "le" ? top <= c.val : c.op === "ge" ? top >= c.val : top === c.val;
+      }
+      /* What the turn / river card did, and only when he saw that street. */
+      case "bcard": {
+        const j = c.st === "turn" ? 3 : 4, b = h.board || [];
+        if (b.slice(0, j + 1).filter(Boolean).length < j + 1) return false;
+        if (!seenStreets(h, oppId).includes(c.st === "turn" ? "Turn" : "River")) return false;
+        return hqBoardCard(b, j)[c.val];
       }
       case "sd": return oppSD(h, oppId);
       case "cards": return cardsSeen(h, oppId);
