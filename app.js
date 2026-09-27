@@ -3941,8 +3941,9 @@ function handHTML(h) {
   const hole = (cs) => cs && cs.some(Boolean) ? `<span class="hv-hole">${tilesHTML(cs)}</span>` : "";
 
   const seatH = (actor) => {
-    const v = actor === "hero" ? null : h.villains?.[Number(actor.slice(1))];
-    const stk = v?.chips ? `<span class="hv-stack">${stackStr(v.chips)}</span>` : "";
+    /* chips is written in the hand's own unit, like the blinds (k on DX hands) */
+    const chips = actor === "hero" ? h.heroChips : h.villains?.[Number(actor.slice(1))]?.chips;
+    const stk = chips ? `<span class="hv-stack">${stackStr(chips * u)}</span>` : "";
     return `<div class="hv-seat">${posB(actor)}<b>${esc(actorLabel(h, actor))}</b>${hole(cardsOf(actor))}${stk}</div>`;
   };
   const seats = [];

@@ -33,7 +33,7 @@ function rpSeats(h) {
   });
   if (RP_RING.includes(h.heroPos))
     out.push({ actor: "hero", pos: h.heroPos, id: null, name: "Hero",
-      cards: (h.heroCards || []).filter(Boolean), chips: null });
+      cards: (h.heroCards || []).filter(Boolean), chips: h.heroChips || null });
   out.sort((a, b) => RP_RING.indexOf(a.pos) - RP_RING.indexOf(b.pos));
   return { seats: out, unseated };
 }
@@ -213,7 +213,7 @@ function rpBuild(h) {
      for Hero when the hand carries one. Nothing is assumed for anyone else —
      a stack the app made up would be wrong on exactly the hands it matters. */
   seats.forEach((s) => {
-    if (s.chips) s.start = s.chips;
+    if (s.chips) s.start = s.chips * u;   /* written in the hand's unit, like the blinds */
     /* All-in is the whole stack, so a seat that jammed started with exactly
        what it put in. Checked on every imported hand that carries stacks: all
        22 all-in seats match to the chip. Nobody else's stack follows from it. */
