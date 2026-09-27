@@ -313,8 +313,10 @@ const readEstimates = (() => {
   // Turn → Raise nuts: Even Boat / Even IP (Phil 2026-09-28): facing a turn bet with the hand, did they raise it.
   S({ id: "raise-nuts-t-even-boat", grp: "Raises", rule: "SHARE", yes: 65, no: 35, def: "Faced a turn bet holding a full house or better (their own, not the board's): share they raised.",
     ch: (F) => { const T = F.st.turn; return F.cards && T.tier && T.faced && T.tier.t === 4 && T.tier.cat >= 6 ? { ok: T.resp === "raise", why: T.resp + " with " + g(T) } : null; } });
-  S({ id: "raise-nuts-t-xnut", grp: "Raises", rule: "SHARE", yes: 65, no: 35, def: "Turn was theirs to bet (no bet ahead of them) holding two pair or better: share they checked it.",
-    ch: (F) => { const T = F.st.turn; return F.cards && T.tier && T.tier.t === 4 && trapFlushOk(F, T) && myTurnFirst(T, F.me) ? { ok: T.my[0] === "check", why: T.my.join("/") + " with " + g(T) } : null; } });
+  // XNut (Phil 2026-09-28): only as the flop's aggressor, checked to in position on the turn — did they check back the nuts?
+  S({ id: "raise-nuts-t-xnut", grp: "Raises", rule: "SHARE", yes: 65, no: 35, def: "Last aggressor on the flop, checked to in position on the turn, holding two pair or better: share they checked back.",
+    ch: (F) => { const f = F.st.flop, T = F.st.turn, agg = f.acts.filter((a) => AGG.has(a.act)).pop();
+      return F.cards && T.tier && T.tier.t === 4 && trapFlushOk(F, T) && agg && agg.actor === F.me && T.ip && T.acts.length && checkedTo(F, T) && myTurnFirst(T, F.me) ? { ok: T.my[0] === "check", why: T.my.join("/") + " with " + g(T) } : null; } });
   S({ id: "raise-nuts-t-even-ip", grp: "Raises", rule: "SHARE", yes: 65, no: 35, def: "Faced a turn bet in position holding two pair or better: share they raised.",
     ch: (F) => { const T = F.st.turn; return F.cards && T.tier && T.faced && T.ip && T.tier.t === 4 ? { ok: T.resp === "raise", why: T.resp + " IP with " + g(T) } : null; } });
   S({ id: "have-b3b-v-f", grp: "Raises", rule: "CAN", def: "Bet the flop, got raised, re-raised — showed two pair or better.",
