@@ -303,6 +303,7 @@ const TENDENCY_TAGS = [
   { id: "t-barrel-air",    cat: "postflop", label: "Barrels Air" },
   { id: "t-barrel-equity", cat: "postflop", label: "Barrels Equity" },
   { id: "t-barrel-sdv",    cat: "postflop", label: "Barrels SDV" },
+  { id: "t-bluff-xb",      cat: "postflop", label: "Bluff XB Line" },
   { id: "t-barrel-tight",  cat: "postflop", label: "Barrels Tight" },
   // Phil 2026-09-28: cbets the flop, then gives up the turn
   { id: "t-barrel-one-done", cat: "postflop", label: "Barrels One&Done" },

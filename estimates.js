@@ -253,6 +253,9 @@ const readEstimates = (() => {
   
   // barrels content (PFR turn barrel after flop cbet)
   const barrel = (F) => { const f = F.st.flop, t = F.st.turn; return F.pfr && F.cards && f.firstBetBy === F.me && t.firstBetBy === F.me && t.tier ? t : null; };
+  // Turn → As PFR → Bluff: of their turn bluffs as PFR, the XB line — checked the flop, bet the turn (Phil 2026-09-28)
+  S({ id: "t-bluff-xb", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn bluffs shown as preflop raiser (bet first, no pair better than third): share on the XB line — only checked the flop, then bet the turn.",
+    ch: (F) => { const t = F.st.turn; if (!F.pfr || !F.cards || !t.tier || t.firstBetBy !== F.me || t.tier.t !== 0) return null; const l = own(F.st.flop); return { ok: l === "X", why: "flop " + l + ": " + g(t) }; } });
   S({ id: "t-barrel-air", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with nothing: no pair, no draw.", ch: (F) => { const T = barrel(F); return T ? { ok: air(T), why: g(T) } : null; } });
   S({ id: "t-barrel-equity", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a draw and no pair (FD, OESD or gutshot).", ch: (F) => { const T = barrel(F); return T ? { ok: !!eq(T), why: g(T) } : null; } });
   S({ id: "t-barrel-sdv", grp: "Turn barrels (as PFR)", rule: "CAN", def: "Turn barrels shown with a weak made hand: second pair or a pair under it.", ch: (F) => { const T = barrel(F); return T ? { ok: T.tier.t === 1 || !!T.tier.weakPair, why: g(T) } : null; } });
