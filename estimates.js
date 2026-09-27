@@ -24,22 +24,47 @@ const readEstimates = (() => {
     let st = false; for (let lo = 1; lo <= 10; lo++) { let k = 0; for (let v = lo; v < lo + 5; v++) if (r.has(v)) k++; if (k >= 4) st = true; }
     return { fl, st };
   };
+  /* Where their flush sits on a 4-flush board: 0 = nut, 1 = second nut, … (ranks of the suit
+     above their best card that aren't on the board). null = no flush card of their own there. */
+  function flushStep(hole, board) {
+    for (const s of "cdhs") {
+      const on = board.filter((c) => su(c) === s).map(rk);
+      if (on.length < 4) continue;
+      const mine = hole.filter((c) => su(c) === s).map(rk);
+      if (!mine.length) return null;
+      const top = Math.max(...mine); let n = 0;
+      for (let v = top + 1; v <= 14; v++) if (!on.includes(v)) n++;
+      return { n, top };
+    }
+    return null;
+  }
   /* Phil's NLHE ladder (Hand-strength rules): 0 bluff · 1 second pair · 2 top pair · 3 overpair ·
-     4 two pair+. Own-card pairs only; a 4-flush/4-straight board drops one pair to 0. */
+     4 two pair+. Own-card pairs only. Phil 2026-09-28, for every value/bluff read: on a 4-straight
+     board only a straight or better is value; on a 4-flush board only a flush of Q-high or better
+     (third nut — the step counts past suit cards on the board). Anything under that drops to 0
+     like a weak pair: not value, not air. */
+  const HN = ["", "", "", "", "straight", "flush", "full house", "quads", "straight flush"], RN = "  23456789TJQKA";
   function tier(hole, board) {
-    const all = hole.concat(board), s = best7(all), bc = boardCat(board);
+    const all = hole.concat(board), s = best7(all), bc = boardCat(board), f = four(board);
     const out = { t: 0, name: "no pair", cat: s[0] };
-    if (s[0] >= 4 && (board.length === 5 ? cmp(s, bc) > 0 : s[0] > bc[0])) return { ...out, t: 4, name: ["", "", "", "", "straight", "flush", "full house", "quads", "straight flush"][s[0]] };
+    const drop = (name) => ({ ...out, name: name + " (4-" + (f.fl ? "flush" : "straight") + " board)", weakPair: true });
+    if (s[0] >= 4 && (board.length === 5 ? cmp(s, bc) > 0 : s[0] > bc[0])) {
+      if (f.fl && s[0] === 4) return drop("straight");
+      if (f.fl && s[0] === 5) {
+        const k = flushStep(hole, board), name = (k.n === 0 ? "nut" : RN[k.top] + "-high") + " flush";
+        return k && k.n <= 2 ? { ...out, t: 4, name, flushStep: k.n } : drop(name);
+      }
+      return { ...out, t: 4, name: HN[s[0]] };
+    }
     const cnt = {}; for (const c of all) cnt[rk(c)] = (cnt[rk(c)] || 0) + 1;
     const hr = hole.map(rk);
-    if (hr.some((v) => cnt[v] >= 3)) return { ...out, t: 4, name: hr[0] === hr[1] ? "set" : "trips" };
+    const made = hr.some((v) => cnt[v] >= 3) ? (hr[0] === hr[1] ? "set" : "trips") : new Set(hr.filter((v) => cnt[v] >= 2)).size >= 2 ? "two pair" : null;
+    if (made) return f.fl || f.st ? drop(made) : { ...out, t: 4, name: made };
     const mine = [...new Set(hr.filter((v) => cnt[v] >= 2))];
-    if (mine.length >= 2) return { ...out, t: 4, name: "two pair" };
     if (!mine.length) return out;
     const above = new Set(board.map(rk).filter((v) => v > mine[0])).size, pp = hr[0] === hr[1];
     let t = above === 0 ? (pp ? 3 : 2) : above === 1 ? 1 : 0;
     let name = above === 0 ? (pp ? "overpair" : "top pair") : above === 1 ? "second pair" : (pp ? "underpair" : above === 2 ? "third pair" : "bottom/weak pair");
-    const f = four(board);
     if (t >= 1 && (f.fl || f.st)) { name += " (4-" + (f.fl ? "flush" : "straight") + " board)"; t = 0; }
     return { ...out, t, name, weakPair: t === 0 };
   }
@@ -212,8 +237,13 @@ const readEstimates = (() => {
       return { ok: x.T.tier.t <= 1, why: `${x.s} ${Math.round(x.r * 100)}% pot: ${g(x.T)}` }; } });
   S({ id: "bet-merged-mwp", grp: "What they bet", rule: "CAN", def: "Bets into 3+ players shown with second or top pair.",
     ch: (F) => { for (const s of ["flop", "turn", "river"]) { const T = bets(F, s); if (T && T.alive >= 3 && T.iBet) return { ok: T.tier.t === 1 || T.tier.t === 2, why: s + ", " + T.alive + "-way: " + g(T) }; } return null; } });
-  S({ id: "r-traps", grp: "What they bet", rule: "CAN", def: "Turns/rivers where they held two pair or better and the street was theirs to bet: checked instead (check-call, check-raise, or a turn check-back; a river check-back in position isn't a trap).",
-    ch: (F) => { if (!F.cards) return null; for (const s of ["river", "turn"]) { const T = F.st[s]; if (T.tier && T.tier.t === 4 && myTurnFirst(T, F.me) && !(s === "river" && T.ip)) return { ok: T.my[0] === "check", why: s + ": " + T.my.join("/") + " with " + g(T) }; } return null; } });
+  /* A flush only counts toward traps as the nut flush on a four-flush board
+     (Phil): any other flush there, or any flush on a three-flush board, is
+     left out either way, bet or checked. */
+  // Phil: a flush traps only as the nut flush on a 4-flush board (flushStep is set only there, so a 3-flush board's flush never counts).
+  const trapFlushOk = (F, T) => T.tier.cat !== 5 || T.tier.flushStep === 0;
+  S({ id: "r-traps", grp: "What they bet", rule: "CAN", def: "Turns/rivers where they held two pair or better and the street was theirs to bet: checked instead (check-call, check-raise, or a turn check-back; a river check-back in position isn't a trap). On a four-straight board only a straight or better counts; a flush counts only as the nut flush on a four-flush board, never on a three-flush board.",
+    ch: (F) => { if (!F.cards) return null; for (const s of ["river", "turn"]) { const T = F.st[s]; if (T.tier && T.tier.t === 4 && trapFlushOk(F, T) && myTurnFirst(T, F.me) && !(s === "river" && T.ip)) return { ok: T.my[0] === "check", why: s + ": " + T.my.join("/") + " with " + g(T) }; } return null; } });
   S({ id: "r-xc-thin", grp: "What they bet", rule: "CAN", def: "As preflop raiser, checked the river and called a bet: shown with second or top pair (thin value).",
     ch: (F) => { const T = F.st.river; if (!F.pfr || !F.cards || !T.tier || T.my[0] !== "check" || !T.my.includes("call")) return null;
       return { ok: T.tier.t === 1 || T.tier.t === 2, why: "check-called river with " + g(T) }; } });
@@ -241,9 +271,14 @@ const readEstimates = (() => {
     ["r-bh-air", "nothing (no pair, no ace, no draw on the turn)", (F) => !tdraw(F).fd && !tdraw(F).oesd && !tdraw(F).gut && !F.cards.some((c) => c[0] === "A") && !F.st.river.tier.weakPair]])
     S({ id, grp: "River bluffs (as PFR)", rule: "CAN", def: `River bluffs shown as preflop raiser: holding ${lab}.`,
       ch: (F) => { const T = F.pfr && rbluff(F); return T ? { ok: !!test(F), why: g(T) + (tdraw(F).fd ? " (had FD on turn)" : tdraw(F).oesd ? " (had OESD on turn)" : "") } : null; } });
-  for (const L of ["BBB", "BXB", "XBB", "XXB"])
-    S({ id: "r-bluff-lines-" + L.toLowerCase(), grp: "River bluffs (any role)", rule: "CAN", def: `River bluffs shown where their flop-turn-river line was ${L} (X = didn't bet).`,
-      ch: (F) => { const T = rbluff(F); if (!T) return null; const l = ["flop", "turn"].map((s) => F.st[s].line === "B" ? "B" : "X").join("") + "B"; return { ok: l === L, why: "line " + l + ": " + g(T) }; } });
+  /* The line is this player's own action on each street (Phil): B only when they
+     made the first bet, so calling someone else's flop bet is C, not B, and a
+     raise of someone else's bet is R. X is checks only. Lines no chip names
+     (BCB, RBB, CCB…) still count as river bluffs shown, just not on any chip. */
+  const own = (S) => S.iBet ? "B" : S.raised ? "R" : S.my.includes("call") ? "C" : S.my.includes("check") ? "X" : "-";
+  for (const L of ["BBB", "BXB", "XBB", "XXB", "CXB"])
+    S({ id: "r-bluff-lines-" + L.toLowerCase(), grp: "River bluffs (any role)", rule: "CAN", def: `River bluffs shown where their own flop-turn-river line was ${L} (B = they bet first, C = called, X = only checked, R = raised).`,
+      ch: (F) => { const T = rbluff(F); if (!T) return null; const l = ["flop", "turn", "river"].map((s) => own(F.st[s])).join(""); return { ok: l === L, why: "line " + l + ": " + g(T) }; } });
   S({ id: "r-bluff-lines-mwp", grp: "River bluffs (any role)", rule: "CAN", def: "River bluffs shown: share that were bet into 3+ players (any line).",
     ch: (F) => { const T = rbluff(F); return T ? { ok: T.alive >= 3, why: T.alive + "-way: " + g(T) } : null; } });
   S({ id: "r-can-raise-bluff", grp: "Raises", rule: "CAN", def: "River raises shown with a bluff (weaker than second pair).",

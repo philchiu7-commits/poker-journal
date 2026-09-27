@@ -362,6 +362,8 @@ const TENDENCY_TAGS = [
   { id: "r-bluff-lines-bxb", cat: "postflop", label: "Bluff lines (can?) BXB" },
   { id: "r-bluff-lines-xbb", cat: "postflop", label: "Bluff lines (can?) XBB" },
   { id: "r-bluff-lines-xxb", cat: "postflop", label: "Bluff lines (can?) XXB" },
+  // Phil 2026-09-28: called the flop, checked the turn, bet the river
+  { id: "r-bluff-lines-cxb", cat: "postflop", label: "Bluff lines (can?) CXB" },
   // Phil 2026-09-28: can he bluff the river into 3+ players, any line
   { id: "r-bluff-lines-mwp", cat: "postflop", label: "Bluff lines (can?) MWP" },
   /* Superseded by the four yes/no Bluff hands reads below (Phil, 2026-09-27). Kept,
