@@ -6,6 +6,9 @@
    is spelled back and any word it didn't is named, never guessed at, so the
    list can't quietly mean something other than what was typed. */
 
+const HQ_RANK = { a: 14, ace: 14, k: 13, king: 13, q: 12, queen: 12, j: 11, jack: 11, t: 10, ten: 10, 10: 10,
+  9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2 };
+const HQ_RANK_NAME = { 14: "A", 13: "K", 12: "Q", 11: "J", 10: "T" };
 /* Multi-word phrases first, each collapsed to one token the reader below knows. */
 const HQ_PHRASES = [
   [/\b([345])[\s-]?bet(?:s|ted|ting)?\s+pots?\b|\b([345])[\s-]?bps?\b/g, (m, a, b) => ` ${a || b}bp `],
@@ -41,6 +44,10 @@ const HQ_PHRASES = [
   [/\bpre[\s-]?flop\s+caller\b/g, " pfc "],
   [/\bpre[\s-]?flop\b/g, " pre "],
   [/\bpost[\s-]flop\b/g, " postflop "],
+  /* Board by its top flop card: "A-high", "Thigh", "T high or lower", "Q-high+".
+     One token, "hi" + rank value + le/ge/eq, so the "or" can't split it. */
+  [/\b(ace|king|queen|jack|ten|10|[akqjt2-9])[\s-]?high(?:\s+(?:boards?|flops?))?(\s*(?:(?:or|and)\s+(?:lower|below|less|under|smaller|worse)|-(?=\s)))?(\s*(?:(?:or|and)\s+(?:higher|above|more|over|bigger|better)|\+))?/g,
+    (m, r, lo, hi) => ` hi${HQ_RANK[r]}${lo ? "le" : hi ? "ge" : "eq"} `],
   [/\b([345])[\s-]bet/g, "$1bet"],
 ];
 /* Single words → what they are. Street and size words attach to the action
@@ -110,6 +117,8 @@ function hqParse(text) {
   for (let k = 0; k < words.length; k++) {
     const w = words[k], t = HQ_WORDS[w];
     if (/^ln[0-5]{2,3}$/.test(w)) { cur = push({ kind: "line", line: [...w.slice(2)].map((d) => HQ_LINE_CODE[d]).join("") }); continue; }
+    { const b = /^hi(\d+)(le|ge|eq)$/.exec(w);
+      if (b) { cur = push({ kind: "f", f: "high", val: +b[1], op: b[2] }); continue; } }
     if (!t) { if (!HQ_STOP.has(w)) unknown.push(w); continue; }
     if (t === "neg") { pend.neg = true; continue; }
     if (t === "or") { pend.or = true; continue; }
@@ -203,7 +212,9 @@ function hqLabel(c) {
       pot: { "3BP": "in a 3-bet pot (he 3-bet or called it)", "4BP+": "in a 4-bet+ pot", SRP: "in a single-raised pot", Limped: "in a limped pot" }[c.val],
       pfr: "the preflop raiser", pfc: "a preflop caller",
       hu: "heads-up on the flop", mw: "multiway on the flop", sd: "gets to showdown", cards: "has his cards on record",
-      ip: "in position on the flop", oop: "out of position on the flop" }[c.f];
+      ip: "in position on the flop", oop: "out of position on the flop",
+      high: c.op === "eq" ? `on a${c.val === 14 || c.val === 8 ? "n" : ""} ${HQ_RANK_NAME[c.val] || c.val}-high flop`
+        : `on a flop ${HQ_RANK_NAME[c.val] || c.val}-high or ${c.op === "le" ? "lower" : "higher"}` }[c.f];
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
   } else if (c.kind === "line") {
     const any = ["flop", "turn", "river"].filter((st, j) => !c.line[j] || c.line[j] === "-");
@@ -301,6 +312,13 @@ function hqClause(h, oppId, c) {
          The caller called that last raise and stayed in. A limped pot has neither. */
       case "pfr": return isPFR(h, me);
       case "pfc": return isPFC(h, me);
+      /* The flop's top card, and only when he saw that flop. */
+      case "high": {
+        const f = (h.board || []).slice(0, 3).filter(Boolean);
+        if (f.length < 3 || !seenStreets(h, oppId).includes("Flop")) return false;
+        const top = Math.max(...f.map((x) => HQ_RANK[String(x)[0].toLowerCase()] || 0));
+        return c.op === "le" ? top <= c.val : c.op === "ge" ? top >= c.val : top === c.val;
+      }
       case "sd": return oppSD(h, oppId);
       case "cards": return cardsSeen(h, oppId);
       case "ip": case "oop": {
