@@ -99,8 +99,10 @@ const STATE_CLASS = {
 /* A choice whose options are an answer (Raise nuts: Yes / No / Yes&SP) lights
    green or red like every other yes/no; any other option keeps the blue. */
 const choiceClass = (v) => /^yes/.test(v) ? "sgreen" : /^no/.test(v) ? "sred" : "schoice";
-/* Normalise strength suffix ("yes!"/"no!") to base state for exploit lookup. */
-const readBase = (s) => s === "yes!" ? "yes" : s === "no!" ? "no" : s;
+/* …and like every yes/no it has a strong step: a second tap on Yes is Yes!, on No is No! (Phil). */
+const choiceHasStrong = (v) => /^(yes|no)/.test(v);
+/* Normalise strength suffix ("yes!"/"no!", "yessp!") to base state for exploit lookup. */
+const readBase = (s) => typeof s === "string" && s.endsWith("!") ? s.slice(0, -1) : s;
 function oppReads(o) {
   if (!o.reads || typeof o.reads !== "object")
     o.reads = Array.isArray(o.tags) ? Object.fromEntries(o.tags.map((id) => [id, "yes"])) : {};
@@ -115,8 +117,9 @@ function nextReadState(id, cur) {
 const readChip = (id, state) => {
   const lbl = TAG_BY_ID[id]?.label || id;
   if (isChoiceRead(id)) {
-    const v = choiceLabel(id, state);
-    return `<span class="chip mini on schoice" title="${esc(lbl)}: ${esc(v)}">${esc(lbl)} · ${esc(v)}</span>`;
+    const b = readBase(state), v = choiceLabel(id, state) + (isStrongRead(state) ? "!" : "");
+    const cls = choiceClass(b) + (isStrongRead(state) ? " sstrong" : "");
+    return `<span class="chip mini on ${cls}" title="${esc(lbl)}: ${esc(v)}">${esc(lbl)} · ${esc(v)}</span>`;
   }
   if (isPositionRead(id)) {
     return `<span class="chip mini on sgreen" title="${esc(lbl)}: ${esc(state)}">${esc(lbl)} · ${esc(state)}</span>`;
@@ -190,7 +193,7 @@ const READ_LAYOUT = [
        As PFC is asked three ways: the reads that hold either way stay up top,
        the rest sit under the seat they belong to (Phil). */
     { label: "As PFC", rows: [
-      { lines: true, ids: ["floats-wide", "fold-cbet-t-hu", { id: "t-call-style-absv", label: "Turn call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Play"], ["t-call-style-wide", "Wide"]] }, ["raise-nuts-t", "Raise nuts"], ["bsti-t", "BSTI"]] },
+      { lines: true, ids: ["floats-wide", "fold-cbet-t-hu", { id: "t-call-style-absv", label: "Turn call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Play"], ["t-call-style-wide", "Wide"]] }, { id: "raise-nuts-t", label: "Raise nuts", also: [["raise-nuts-t-even-boat", "Even Boat"], ["raise-nuts-t-even-ip", "Even IP"]] }, ["bsti-t", "BSTI"]] },
       { label: "OOP", lines: true, ids: [{ label: "Probe T", subs: [["t-probe-hu", "HU"], ["t-probe-mw", "MWP"]] }, { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"]] }, "t-protect-flush"] },
       { label: "IP", lines: true, ids: [{ id: "t-bet-vol-high", label: "Bet vol", chip: "High", chips: true, also: [["t-bet-vol-low", "Low"]] }, ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"]] },
     ] },
@@ -248,7 +251,7 @@ const LIVE_LAYOUT = [
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [
-      { label: "Aggression", ids: [["station-t", "Station"], ["raise-nuts-t", "Raise nuts"], ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
+      { label: "Aggression", ids: [["station-t", "Station"], { id: "raise-nuts-t", label: "Raise nuts", also: [["raise-nuts-t-even-boat", "Even Boat"], ["raise-nuts-t-even-ip", "Even IP"]] }, ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
       { label: "As PFR", lines: true, ids: [{ label: "Barrels", subs: [["t-barrel-air", "Air"], ["t-barrel-equity", "Equity"], ["t-barrel-sdv", "SDV"], ["t-barrel-tight", "Tight"], ["t-barrel-one-done", "One&Done"]] }, { label: "Turn Cards", subs: [["t-bcard-4str", "4Str"], ["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] }, { id: "t-low-boards-passive", label: "Low boards", chip: "Passive", chips: true, also: [["t-low-boards-aggro", "Aggro"]] }, "punchbag-t-pfr", "t-hero-fold", "t-cb-gu"] },
       { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", { id: "t-bet-vol-high", label: "Bet vol", chip: "High", chips: true, also: [["t-bet-vol-low", "Low"]] }, { id: "t-call-style-absv", label: "Turn call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Play"], ["t-call-style-wide", "Wide"]] }, { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"]] }, "t-protect-flush", ["bsti-t", "BSTI"]] },
       { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq-hu", "t-fold-to-xr-hu"] },
@@ -351,7 +354,7 @@ function pillTag(o) {
    Weighted: yes!/no! (strong) count more than yes/no; compound rules count more
    than singles. Suggestions sort best-first. Compounds require at least one
    strong key so a wall of weak reads doesn't produce a confident-looking exploit. */
-const isStrongRead = (state) => state === "yes!" || state === "no!";
+const isStrongRead = (state) => typeof state === "string" && state.endsWith("!");   // yes!/no!, and a choice's Yes!/No!
 function suggestedExploits(o) {
   const reads = oppReads(o);
   const dismissed = new Set(o.exploitDismissed || []);
@@ -782,7 +785,7 @@ async function migrateLegacyReads() {
     // Choice reads hold an option id; the old 0–100 slider numbers and any
     // yes/no left by early imports map onto the nearest option (or clear).
     for (const id of Object.keys(r)) {
-      if (!isChoiceRead(id) || choiceOptions(id).some((o) => o[0] === r[id])) continue;
+      if (!isChoiceRead(id) || choiceOptions(id).some((o) => o[0] === readBase(r[id]) && (r[id] === o[0] || choiceHasStrong(o[0])))) continue;
       const next = legacyChoice(id, r[id]);
       if (next != null) r[id] = next; else delete r[id];
       dirty = true;
@@ -3135,7 +3138,8 @@ function renderOppReads(o) {
       const opts = choiceOptions(id).map(([v, l]) =>
         /* readBase so a read converted from yes/no still lights up for anyone
            who had stored the emphatic yes!/no! before the conversion. */
-        `<button class="bubble${st === v || readBase(st) === v ? " on " + choiceClass(v) : ""}" data-choice="${id}" data-val="${v}">${esc(l)}</button>`).join("");
+        `<button class="bubble${readBase(st) === v ? " on " + choiceClass(v) + (isStrongRead(st) ? " sstrong" : "") : ""}" data-choice="${id}" data-val="${v}">` +
+        `${esc(l)}${readBase(st) === v && isStrongRead(st) ? "!" : ""}</button>`).join("");
       return `<div class="bubbles">${opts}</div>`;
     }
     if (isStatRead(id)) {
@@ -6704,11 +6708,13 @@ function bindStatic() {
       return;
     }
     const ch = e.target.closest("[data-choice]");
-    if (ch) {                       // one-of-N read: tap picks, tapping the active option clears
+    if (ch) {                       // one-of-N read: tap picks; a Yes/No option taps on to Yes!/No!, then clears
       const o = oppById(curOppId);
       const reads = oppReads(o);
       const { choice: id, val } = ch.dataset;
-      if (reads[id] === val) delete reads[id]; else reads[id] = val;
+      const cur = reads[id];
+      if (cur === val && choiceHasStrong(val)) reads[id] = val + "!";
+      else if (readBase(cur) === val) delete reads[id]; else reads[id] = val;
       o.updatedAt = Date.now();
       await dbPut("opponents", o);
       renderOppReads(o);

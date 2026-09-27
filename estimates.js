@@ -291,6 +291,11 @@ const readEstimates = (() => {
     S({ id: "raise-nuts-" + L.toLowerCase(), grp: "Raises", rule: "SHARE", yes: 70, no: 30, def: `${s[0].toUpperCase() + s.slice(1)} raises shown: share that were two pair or better.`,
       ch: (F) => { const T = F.st[s]; return F.cards && T.tier && T.raised ? { ok: T.tier.t === 4, why: g(T) } : null; } });
   }
+  // Turn → Raise nuts: Even Boat / Even IP (Phil 2026-09-28): facing a turn bet with the hand, did they raise it.
+  S({ id: "raise-nuts-t-even-boat", grp: "Raises", rule: "SHARE", yes: 65, no: 35, def: "Faced a turn bet holding a full house or better (their own, not the board's): share they raised.",
+    ch: (F) => { const T = F.st.turn; return F.cards && T.tier && T.faced && T.tier.t === 4 && T.tier.cat >= 6 ? { ok: T.resp === "raise", why: T.resp + " with " + g(T) } : null; } });
+  S({ id: "raise-nuts-t-even-ip", grp: "Raises", rule: "SHARE", yes: 65, no: 35, def: "Faced a turn bet in position holding two pair or better: share they raised.",
+    ch: (F) => { const T = F.st.turn; return F.cards && T.tier && T.faced && T.ip && T.tier.t === 4 ? { ok: T.resp === "raise", why: T.resp + " IP with " + g(T) } : null; } });
   S({ id: "have-b3b-v-f", grp: "Raises", rule: "CAN", def: "Bet the flop, got raised, re-raised — showed two pair or better.",
     ch: (F) => { const T = F.st.flop, i = T.my.indexOf("bet"); return F.cards && T.tier && i >= 0 && T.my.slice(i + 1).some((x) => ["raise", "jam", "3bet"].includes(x)) ? { ok: T.tier.t === 4, why: g(T) } : null; } });
   S({ id: "have-b3b-b-f", grp: "Raises", rule: "CAN", def: "Bet the flop, got raised, re-raised — showed a bluff or draw.",
