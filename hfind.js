@@ -258,6 +258,18 @@ function hqInfo(h) {
   hqCache.set(h, info);
   return info;
 }
+/* Table sense, shared with the Role chips: the preflop raiser is whoever put
+   in the last raise; a preflop caller called that raise and didn't fold. */
+const isPFR = (h, me) => hqInfo(h).pfr === me;
+function isPFC(h, me) {
+  const { pfr, tagged } = hqInfo(h);
+  if (!pfr || pfr === me) return false;
+  const pre = tagged.filter((t) => t.st === "pre");
+  let j = -1;
+  pre.forEach((t, k) => { if (t.k.has("agg")) j = k; });
+  const after = pre.slice(j + 1).filter((t) => t.a.actor === me);
+  return after.some((t) => t.a.act === "call") && !after.some((t) => t.a.act === "fold");
+}
 const hqSize = (t, sz) => sz === "ob" ? t.ratio !== null && t.ratio > 1.001 : t.step === sz;
 function hqClause(h, oppId, c) {
   const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
@@ -273,14 +285,8 @@ function hqClause(h, oppId, c) {
       /* Table sense, not HUD sense: the preflop raiser is whoever put in the
          last raise, so an opener who called a 3-bet is the caller in that pot.
          The caller called that last raise and stayed in. A limped pot has neither. */
-      case "pfr": return hqInfo(h).pfr === me;
-      case "pfc": {
-        const { pfr } = hqInfo(h);
-        const pre = hqInfo(h).tagged.filter((t) => t.st === "pre");
-        const j = pre.findIndex((t) => t.a.actor === pfr && t.k.has("agg") && !pre.slice(pre.indexOf(t) + 1).some((u) => u.k.has("agg")));
-        return !!pfr && pfr !== me && j >= 0 && pre.slice(j + 1).some((t) => t.a.actor === me && t.a.act === "call")
-          && !pre.slice(j + 1).some((t) => t.a.actor === me && t.a.act === "fold");
-      }
+      case "pfr": return isPFR(h, me);
+      case "pfc": return isPFC(h, me);
       case "sd": return oppSD(h, oppId);
       case "cards": return cardsSeen(h, oppId);
       case "ip": case "oop": {

@@ -1058,8 +1058,11 @@ function villainRoles(h, oppId) {
   const out = [];
   if (limpReraiseClass(pre)) out.push("LRR");
   if (pre.includes("limp")) out.push("Limp");
-  else if (pre.some((a) => ["raise", "3bet", "4bet", "5bet", "jam"].includes(a))) out.push("PFR");
-  else if (pre.includes("call")) out.push("PFC");
+  /* PFR / PFC in table sense (last raiser / called it), same as the search:
+     a 3-bettor who calls a 4-bet is the caller, a limp-reraiser the raiser. */
+  const me0 = "v" + idx;
+  if (isPFR(h, me0)) out.push("PFR");
+  else if (isPFC(h, me0)) out.push("PFC");
   /* 3b and c3b sit outside the exclusive chain on purpose: a 3-bet is also a
      raise and a called 3-bet is also a call, so these narrow what is already
      there rather than replacing it — the same way LRR sits over Limp. */
@@ -1170,7 +1173,7 @@ function renderHandFilters(oppId, allHands) {
   const HF_TIP = { Flop: "He acted on the flop (not an all-in runout)", Turn: "He acted on the turn (not an all-in runout)",
     River: "He acted on the river (not an all-in runout)", HU: "Two players saw the flop", MW: "Three or more saw the flop",
     "3BP": "Hands where he 3-bet or called a 3-bet",
-    PFR: "Preflop raiser — he raised preflop (open, 3-bet or more)", PFC: "Preflop caller — he called preflop and never raised",
+    PFR: "Preflop raiser — he put in the last raise preflop", PFC: "Preflop caller — he called the last preflop raise",
     "3b": "He 3-bet preflop", c3b: "He called somebody's 3-bet preflop",
     R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
   const chip = (dim, val, label) => {
