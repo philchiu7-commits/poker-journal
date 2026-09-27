@@ -1546,6 +1546,10 @@ button.statcalc:active { color: var(--accent); }
    the replayer's history in columns across the page, an opponent's panels in two
    columns, the opponents list as a grid. Everything narrower keeps the phone
    layout untouched. */
+/* The phone opens a hand as its own screen: the page it came from is kept
+   in the DOM for the laptop pop-up but never shown here. */
+#hv-backdrop { display: none; }
+@media (max-width: 999px) { main > section.under { display: none; } }
 @media (min-width: 1000px) {
   body { padding-left: 92px; }
   main { max-width: 1480px; padding: 12px 28px 48px; }
@@ -1565,12 +1569,20 @@ button.statcalc:active { color: var(--accent); }
      the whole hand sits on one screen. */
   /* The hand view as one grid: the run rail is the whole left column, the
      felt with its controls under it and the line beside, then the history. */
+  /* A hand is a pop-up over the page it came from, not a page of its own. */
+  body.hvopen { overflow: hidden; }
+  body.hvopen #hv-backdrop { display: block; position: fixed; inset: 0; z-index: 14;
+    background: rgba(0,0,0,.62); backdrop-filter: blur(2px); }
+  main > #view-handview { position: fixed; inset: 0; margin: auto; z-index: 15;
+    width: min(1280px, calc(100vw - 140px)); height: calc(100vh - 64px); max-width: none;
+    overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 16px;
+    padding: 6px 24px 24px; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
   #view-handview:not(.hidden) { display: grid; grid-template-columns: auto auto minmax(0, 1fr);
     grid-template-rows: auto auto auto auto auto auto auto 1fr; align-items: start; }
   #view-handview > .vhead { grid-column: 1 / -1; grid-row: 1; }
   .hvmain, .hvside { display: contents; }
   #hv-pager { position: sticky; top: 12px; grid-column: 1; grid-row: 2 / -1; width: 84px;
-    height: calc(100vh - 96px); margin-right: 24px; }
+    height: calc(100vh - 146px); margin-right: 24px; }
   .hvside.rail #hv-table { margin-left: 0; }
   #hv-table { grid-column: 2; grid-row: 2; justify-self: center; }
   #hv-transport { grid-column: 2; grid-row: 3; justify-self: center; margin-bottom: 8px; }
@@ -1585,7 +1597,7 @@ button.statcalc:active { color: var(--accent); }
   /* The table is the point of this page: as tall as the screen allows once the
      header and the transport under it are paid for, and never so wide the
      betting line loses its column. */
-  .rpfelt { width: min(calc((100vh - 230px) / 1.08), calc(100vw - 560px)); min-width: 420px; max-height: none; }
+  .rpfelt { width: min(calc((100vh - 278px) / 1.08), calc(min(1280px, 100vw - 140px) - 520px)); min-width: 420px; max-height: none; }
   .rpmid { gap: 10px; }
   .rpboard { gap: 6px; }
   .rpboard .ctile { font-size: 28px; padding: 7px 10px; }

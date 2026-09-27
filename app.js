@@ -888,6 +888,9 @@ function hideSheet() {
 const VIEWS = ["opponents", "opp", "hand", "table", "handview", "ranges", "data"];
 const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", ranges: "ranges", data: "data" };
 
+let curView = null, hvUnder = null, hvUnderY = 0;
+function closeHandPopup() { if (curView === "handview") history.back(); }
+
 function route() {
   const raw = (location.hash || "#opponents").slice(1);
   // Only split on the FIRST slash — base64 import payloads can contain "/".
@@ -915,7 +918,22 @@ function route() {
     resetHandFilters(); noCardsOpen = true; handFiltersFor = arg;
     rangeTab = "history";   // "default" means per player, not once per app launch
   }
-  VIEWS.forEach((x) => $("view-" + x).classList.toggle("hidden", x !== v));
+  /* Laptop: a hand opens as a pop-up over the page it came from (Phil, v247),
+     which stays behind it as it was — not redrawn, not scrolled — and closing
+     it lands back where he was. The phone keeps the hand as its own screen:
+     CSS hides the page underneath there. */
+  const from = curView; curView = v;
+  const wide = matchMedia("(min-width: 1000px)").matches;
+  if (v === "handview" && from !== "handview") {
+    hvUnder = from; hvUnderY = window.scrollY;
+    if (!hvUnder) { hvUnder = "opponents"; renderOpponents(); }   // opened straight from a link
+  }
+  const under = v === "handview" ? hvUnder : null;
+  VIEWS.forEach((x) => {
+    $("view-" + x).classList.toggle("hidden", x !== v && x !== under);
+    $("view-" + x).classList.toggle("under", x === under);
+  });
+  document.body.classList.toggle("hvopen", v === "handview");
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
   hideSheet();
@@ -923,7 +941,9 @@ function route() {
   ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
      table: renderTableTab, handview: () => renderHandView(arg), ranges: renderRangeLib,
      data: renderData })[v]();
-  window.scrollTo(0, 0);
+  if (v === "handview" && wide) $("view-handview").scrollTop = 0;
+  else window.scrollTo(0, from === "handview" && v === hvUnder && wide ? hvUnderY : 0);
+  if (v !== "handview") hvUnder = null;
   if (swPending) applySwUpdate();      // left the entry screen — safe to take the new build
 }
 
@@ -6127,6 +6147,7 @@ function bindStatic() {
   document.querySelectorAll("[data-back]").forEach((b) =>
     b.onclick = () => history.back());
   $("hv-transport").onclick = rpClick;
+  $("hv-backdrop").onclick = closeHandPopup;
   /* The written hand is still the fastest way to read a line you already know,
      so it stays one tap under the table rather than being replaced by it. */
   $("hv-textbtn").onclick = () => {
@@ -6655,7 +6676,12 @@ function bindStatic() {
       && !e.target.closest("[data-statdrill]") && !e.target.closest("[data-hud]")
       && !e.target.closest("[data-sz3]")) hideRangePeek();
   }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideRangePeek(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    hideRangePeek();
+    if (document.body.classList.contains("hvopen") && $("sheet").classList.contains("hidden")
+        && matchMedia("(min-width: 1000px)").matches) closeHandPopup();
+  });
   window.addEventListener("scroll", () => hideRangePeek(), true);
   window.addEventListener("hashchange", () => hideRangePeek());
   $("od-tags").addEventListener("change", async (e) => {
