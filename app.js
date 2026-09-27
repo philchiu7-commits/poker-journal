@@ -169,7 +169,7 @@ const READ_LAYOUT = [
   ] },
   { title: "Flop exploit", subs: [
     { label: "As PFR", rows: wb([{ label: "Cbet freq", subs: [["f-cbet-freq-hu", "HU"], ["f-cbet-freq-mw", "MWP"]] },
-      { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid"], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "f-protect-oop", label: "Protect OOP", chip: "Yes", chips: true, also: ["protect-disadv-board", "f-bf-disadv-board"] },
+      { label: "Fold to xR", subs: [["f-fold-to-xr-hu", "HU"], ["f-fold-to-xr-mw", "MWP"]] }, "force-squid", "f-b3b-nut"], ["f-oop-x-range-hu", "f-xr-freq-pfr", { id: "f-protect-oop", label: "Protect OOP", chip: "Yes", chips: true, also: ["protect-disadv-board", "f-bf-disadv-board"] },
       { id: "f-adv-weak-check", label: "Adv Board", chips: true }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
       { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
@@ -182,7 +182,7 @@ const READ_LAYOUT = [
     ] },
   ] },
   { title: "Turn exploit", subs: [
-    { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", { label: "Barrels", subs: [["t-barrel-air", "Air"], ["t-barrel-equity", "Equity"], ["t-barrel-sdv", "SDV"], ["t-barrel-tight", "Tight"]] }, { label: "Turn Cards", subs: [["t-bcard-4str", "4Str"], ["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] }, "t-low-boards"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
+    { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", { id: "t-barrel-air", label: "Barrels", chip: "Air", chips: true, also: [["t-barrel-equity", "Equity"], ["t-barrel-sdv", "SDV"], ["t-barrel-tight", "Tight"]] }, { id: "t-bcard-4str", label: "Turn Cards", chip: "4Str", chips: true, also: [["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] }, "t-low-boards"], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu"]) },
     /* Whether he is in or out of position changes what a turn read means, so
        As PFC is asked three ways: the reads that hold either way stay up top,
        the rest sit under the seat they belong to (Phil). */
@@ -238,7 +238,7 @@ const LIVE_LAYOUT = [
   ] }] },
   { title: "Postflop", cat: "postflop", subs: [
     { label: "Flop", rows: [
-      { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
+      { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"], "f-b3b-nut"] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
       { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-pfc-equity", "f-xr-pfc-air", "f-xr-pfc-gu-turn", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], "f-thin-xt-srp", "f-thin-xt-mwp", "f-thin-xt-3bp"] },
@@ -3203,7 +3203,9 @@ function renderOppReads(o) {
           /* `chips`: the line's label names the spot and every read on it is a
              named chip — "Protect OOP: xR DisAdv. · BetF" — rather than one
              unnamed yes/no control with companions. */
-          : x.chips ? [idOf(x), ...alsoOf(x).map(idOf)].filter(live).map((id) => readBtn(id, id === idOf(x) && x.chip || TAG_BY_ID[id].label, false)).join("")
+          : x.chips ? [x, ...alsoOf(x)].filter((v) => live(idOf(v))).map((v) =>
+              // a companion given as ["id", "Short"] shows the short word — the line label names the spot
+              readBtn(idOf(v), v === x ? x.chip || TAG_BY_ID[idOf(x)].label : labelOf(v), false)).join("")
           : readBtn(idOf(x), labelOf(x), true) +
             alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("");
         return `<span class="rllab${idsOf(x).some(isSet) ? " on" : ""}${wide(x)}">${esc(labelOf(x))}</span>` +

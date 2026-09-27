@@ -166,6 +166,8 @@ const TENDENCY_TAGS = [
   { id: "bluff-raise-r",        cat: "postflop", label: "Bluff raise R" },
   { id: "have-b3b-v-f",        cat: "postflop", label: "B3b V F" },
   { id: "have-b3b-b-f",        cat: "postflop", label: "B3b B F" },
+  /* His flop bet-3bet as the nuts (Phil's "B3b Nut", Flop As PFR → When bet). */
+  { id: "f-b3b-nut",           cat: "postflop", label: "B3b Nut" },
   { id: "bluff-xt-f",           cat: "postflop", label: "Bluff XT F" },
   { id: "bluff-xt-t",           cat: "postflop", label: "Bluff XT T" },
   { id: "bluff-xt-r",           cat: "postflop", label: "Bluff XT R" },
