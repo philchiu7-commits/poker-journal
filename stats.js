@@ -47,7 +47,7 @@ function hudCount(oppId, hands) {
     const seat = {};                       // "v3" -> villain index, for our player only
     V.forEach((v, i) => { if (v.opponentId === oppId) seat["v" + i] = v; });
     if (!Object.keys(seat).length) continue;
-    const A = h.actions || [];
+    const A = actsAsPlayed(h);
     const pre = A.filter((a) => a.street === "pre");
     const me = Object.keys(seat)[0];
     const myPos = (seat[me].pos || "?");
@@ -580,6 +580,39 @@ function sizeMult(s, level) {
   return isFinite(v) && v > 1 ? v * level : null;
 }
 const SZ_AGG = new Set(["bet", "raise", "3bet", "4bet", "5bet", "jam"]);
+/* The hand as the table played it. A "jam" token only says he went all in; for
+   no more than the bet in front of him it was a call — "calls all-in 147bb" —
+   and every stat and filter that reads a jam as aggression turned that call
+   into a raise, so check → call-off showed up as a check-raise (Phil, v253).
+   Same test the replayer uses: walk the street's "to" amounts, and a jam that
+   doesn't go over the level is a call. Where a size can't be read the street
+   stops being judged and its jams stay jams — unknown is left as recorded,
+   not guessed at. The copies keep `src` so lookups keyed on the original
+   action (handRungs) still find it. */
+const asPlayedCache = new WeakMap(), jamCallSets = new WeakMap();
+const isAllInCall = (h, a) => { actsAsPlayed(h); return jamCallSets.get(h).has(a); };
+function actsAsPlayed(h) {
+  /* Cached per hand, but a draft being logged gains actions in place, so the
+     entry only counts while it's the same list at the same length. */
+  const acts = h.actions || [];
+  const hit = asPlayedCache.get(h);
+  if (hit && hit.acts === acts && hit.n === acts.length) return hit.out;
+  const calls = new Set();
+  for (const st of SZ_STREETS) {
+    let level = 0, known = true;
+    for (const a of acts) {
+      if (a.street !== st || !known || !SZ_AGG.has(a.act)) continue;
+      const v = sizeAmount(a.size) ?? sizeMult(a.size, level);
+      if (v === null) { known = false; continue; }
+      if (a.act === "jam" && level > 0 && v <= level) calls.add(a);
+      level = Math.max(level, v);
+    }
+  }
+  jamCallSets.set(h, calls);
+  const out = calls.size ? acts.map((a) => calls.has(a) ? { ...a, act: "call", allInCall: true, src: a } : a) : acts;
+  asPlayedCache.set(h, { acts, n: acts.length, out });
+  return out;
+}
 /* Which tokens are a raise when the money can't be walked — a size written down
    as "60%" carries no pot to compare against, so the token is all there is. A
    jam is not on the list: whether it was a bet or a raise depends on what it
@@ -814,6 +847,7 @@ function sizingAuto(oppId, hands) {
     for (const a of h.actions || []) {
       const need = SZ_BOARD_N[a && a.street];
       if (!need || !SZ_AGG.has(a.act)) continue;                // preflop, or not a bet
+      if (isAllInCall(h, a)) continue;                          // called off all in: no size of his own
       const m = /^v(\d+)$/.exec(String(a.actor || ""));
       const v = m && V[Number(m[1])];
       if (!v || v.opponentId !== oppId) continue;               // not him

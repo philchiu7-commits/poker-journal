@@ -173,7 +173,7 @@ const READ_LAYOUT = [
       { id: "f-adv-weak-check", label: "Adv Board", chips: true }, "punchbag-f-pfc"]) },
     { label: "As PFC", rows: [
       { lines: true, ids: [{ label: "xR freq", subs: [["f-xr-freq-pfc-hu", "HU"], ["f-xr-freq-pfc-mw", "MWP"]] }] },
-      { label: "OOP", lines: true, ids: ["f-xr-hands-pfc-oop"] },
+      { label: "OOP", lines: true, ids: [{ label: "xR", subs: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }] },
       { label: "Streets vs Him", lines: true, ids: [
         { label: "HU", subs: [["fold-cbet-f-hu", "F"], ["fold-cbet-t-hu", "T"], ["fold-cbet-r-hu", "R"]] },
         { label: "MWP", subs: [["fold-cbet-f-mw", "F"]] }] },
@@ -241,7 +241,7 @@ const LIVE_LAYOUT = [
       { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"]] },
       { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float OOP"], ["f-float-ip", "Float IP"], "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check"] },
       { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-hands-pfc-oop", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
+      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "f-xr-pfc-equity", "f-xr-pfc-air", "f-xr-pfc-gu-turn", "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"]] },
       { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
     ] },
     { label: "Turn", rows: [
@@ -1010,7 +1010,7 @@ function posBucket(pos) {
 function potBucket(h) {
   const LEVEL = { raise: 1, "3bet": 2, "4bet": 3, "5bet": 4 };
   let lv = 0;
-  for (const a of h.actions || []) {
+  for (const a of actsAsPlayed(h)) {
     if (a.street !== "pre") continue;
     if (a.act === "jam") lv = Math.max(lv + 1, 1);
     else if (LEVEL[a.act]) lv = Math.max(lv, LEVEL[a.act]);
@@ -1022,11 +1022,11 @@ function potBucket(h) {
    never actually played, and it isn't what you asked for when you tapped 3BP
    (Phil, v144). */
 function made3bet(h, me) {
-  return (h.actions || []).some((a) => a.street === "pre" && a.act === "3bet" && a.actor === me);
+  return actsAsPlayed(h).some((a) => a.street === "pre" && a.act === "3bet" && a.actor === me);
 }
 /* Called a 3-bet: a preflop call of his that lands after somebody's 3-bet. */
 function called3bet(h, me) {
-  const pre = (h.actions || []).filter((a) => a.street === "pre");
+  const pre = actsAsPlayed(h).filter((a) => a.street === "pre");
   const three = pre.findIndex((a) => a.act === "3bet");
   if (three < 0) return false;
   return pre.slice(three + 1).some((a) => a.actor === me && a.act === "call");
@@ -1053,7 +1053,7 @@ function squidBucket(h) {
 function villainRoles(h, oppId) {
   const idx = (h.villains || []).findIndex((v) => v.opponentId === oppId);
   if (idx < 0) return [];
-  const pre = (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
+  const pre = actsAsPlayed(h).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
   if (!pre.length) return [];
   const out = [];
   if (limpReraiseClass(pre)) out.push("LRR");
@@ -1081,7 +1081,7 @@ function postRoles(h, oppId) {
   const out = new Set();
   for (const st of ["flop", "turn", "river"]) {
     let open = false, checked = false;                   // per street, both of them
-    for (const a of (h.actions || []).filter((x) => x.street === st)) {
+    for (const a of actsAsPlayed(h).filter((x) => x.street === st)) {
       const agg = POST_AGG.includes(a.act);
       if (a.actor === me) {
         if (a.act === "check") checked = true;
@@ -1224,7 +1224,7 @@ function limpReraiseClass(preActs) {
 const RANK_ACT = { Lrr: 6, "4bet+": 5, "3bet": 3, raise: 2, bet: 2, limp: 1, call: 1, check: 0, fold: 0 };
 /* This villain's preflop action tokens, in order. */
 const preActs = (h, idx) =>
-  (h.actions || []).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
+  actsAsPlayed(h).filter((a) => a.actor === "v" + idx && a.street === "pre").map((a) => a.act);
 /* The single preflop action that characterises this villain's line in a hand. */
 function topPreGroup(h, idx) {
   const pre = preActs(h, idx);

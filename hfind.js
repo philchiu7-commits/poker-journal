@@ -40,6 +40,7 @@ const HQ_PHRASES = [
   [/\bpre[\s-]?flop\s+(?:raiser|aggressor)\b|\bpfa\b/g, " pfr "],
   [/\bpre[\s-]?flop\s+caller\b/g, " pfc "],
   [/\bpre[\s-]?flop\b/g, " pre "],
+  [/\bpost[\s-]flop\b/g, " postflop "],
   [/\b([345])[\s-]bet/g, "$1bet"],
 ];
 /* Single words → what they are. Street and size words attach to the action
@@ -58,11 +59,11 @@ const HQ_WORDS = {
   flat: "a:flat", flats: "a:flat", flatted: "a:flat", flatting: "a:flat",
   "3bet": "a:3bet", "3bets": "a:3bet", "3betting": "a:3bet", "4bet": "a:4bet", "4bets": "a:4bet",
   "5bet": "a:5bet", "5bets": "a:5bet", lrr: "a:lrr",
-  xr: "a:xr", xc: "a:xc", xf: "a:xf", xb: "a:xb", bf: "a:bf", bc: "a:bc",
+  xr: "a:xr", xc: "a:xc", xf: "a:xf", xb: "a:xb", bf: "a:bf", bc: "a:bc", line: "line", lines: "line",
   barrel: "a:barrel2", barrels: "a:barrel2", barreled: "a:barrel2", barrelled: "a:barrel2",
   barrel2: "a:barrel2", barrel3: "a:barrel3",
   pre: "st:pre", pf: "st:pre", flop: "st:flop", flops: "st:flop", turn: "st:turn", turns: "st:turn",
-  river: "st:river", rivers: "st:river",
+  river: "st:river", rivers: "st:river", postflop: "st:post",
   s33: "sz:33", s50: "sz:50", s66: "sz:66", s75: "sz:75", s100: "sz:100", ob: "sz:ob",
   b33: "sz:33", b50: "sz:50", b66: "sz:66", b75: "sz:75", b100: "sz:100", b150: "sz:150",
   button: "f:pos:BTN", btn: "f:pos:BTN", bn: "f:pos:BTN", bu: "f:pos:BTN", dealer: "f:pos:BTN",
@@ -99,7 +100,7 @@ function hqParse(text) {
   for (const [re, to] of HQ_PHRASES) s = s.replace(re, to);
   const words = s.split(/\s+/).filter(Boolean);
   const clauses = [], unknown = [];
-  let cur = null, pend = { st: null, sz: null, neg: false, or: false };
+  let cur = null, pend = { st: null, sz: null, neg: false, or: false, line: false };
   const push = (c) => {
     c.neg = pend.neg; c.or = pend.or && clauses.length > 0;
     pend.neg = false; pend.or = false;
@@ -107,6 +108,11 @@ function hqParse(text) {
   };
   for (let k = 0; k < words.length; k++) {
     const w = words[k], t = HQ_WORDS[w];
+    /* A line: one letter per street from the flop ("bxb", "rcb"; "bx" leaves
+       the river open). Two letters that already mean something — bb, xb, xr…
+       — need "line" in front. */
+    if (t === "line") { pend.line = true; continue; }
+    if (/^[bxcrf]{2,3}$/.test(w) && (pend.line || !t)) { pend.line = false; cur = push({ kind: "line", line: w }); continue; }
     if (!t) { if (!HQ_STOP.has(w)) unknown.push(w); continue; }
     if (t === "neg") { pend.neg = true; continue; }
     if (t === "or") { pend.or = true; continue; }
@@ -169,6 +175,7 @@ const HQ_NAME = {
   xb: "checks back", bf: "bet-folds", bc: "bet-calls", barrel2: "double-barrels (flop + turn)",
   barrel3: "triple-barrels (flop + turn + river)", agg: "bets or raises", seen: "plays",
 };
+const HQ_LINE_ACT = { b: "bet", x: "check", c: "call", r: "raise", f: "fold" };
 const HQ_FACE_NAME = { cbet: "a c-bet", bet: "a bet", raise: "a raise", "3bet": "a 3-bet", "4bet": "a 4-bet",
   "5bet": "a 5-bet", jam: "a jam", donk: "a donk" };
 const HQ_POS_NAME = { BTN: "on the button", CO: "in the CO", HJ: "in the HJ", EP: "in early position",
@@ -185,27 +192,29 @@ function hqLabel(c) {
       hu: "heads-up on the flop", mw: "multiway on the flop", sd: "gets to showdown", cards: "has his cards on record",
       ip: "in position on the flop", oop: "out of position on the flop" }[c.f];
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
+  } else if (c.kind === "line") {
+    t = "goes " + [...c.line].map((L, j) => HQ_LINE_ACT[L] + " " + ["flop", "turn", "river"][j]).join(", ")
+      + (c.line.length === 2 ? " (river: anything)" : "");
   } else {
     const verb = HQ_NAME[c.kind] || c.kind;
     t = verb + (c.facing ? (c.kind === "fold" ? " to " : " ") + HQ_FACE_NAME[c.facing] : "")
-      + (c.st ? (c.kind === "seen" ? " the " : " ") + (c.st === "pre" ? "preflop" : c.st) : "")
+      + (c.st ? (c.kind === "seen" && c.st !== "post" ? " the " : " ") + (c.st === "pre" ? "preflop" : c.st === "post" ? "postflop" : c.st) : "")
       + (c.sz ? " at " + (c.sz === "ob" ? "an overbet" : "B" + c.sz) : "");
   }
   return (c.neg ? "never " : "") + t;
 }
 
 /* ---- matching ---- */
-let hqCache = new WeakMap();
-const hqReset = () => { hqCache = new WeakMap(); };
+const hqCache = new WeakMap();
 const HQ_LEVEL = { raise: 1, "3bet": 2, "4bet": 3, "5bet": 4 };
 /* One pass over the hand, tagging every action with what it was: a lead or a
    raise by where it sits in the street (the tokens can't be trusted to say),
    the preflop level it took the pot to, c-bets and donks against the last
    street's aggressor, and its rung off the same pricing the Sizings grid uses. */
 function hqInfo(h) {
+  const acts = actsAsPlayed(h);   // an all-in call reads as a call
   let info = hqCache.get(h);
-  if (info) return info;
-  const acts = h.actions || [];
+  if (info && info.acts === acts && info.n === (h.actions || []).length) return info;
   let rungs = null;
   try { rungs = typeof handRungs === "function" ? handRungs(h) : null; } catch (e) { rungs = null; }
   const tagged = [];
@@ -238,14 +247,14 @@ function hqInfo(h) {
         } else k.add("raise");
         open = true; lastAgg = a.actor;
       }
-      const rg = rungs && rungs.get(a);
+      const rg = rungs && rungs.get(a.src || a);
       tagged.push({ a, st, k, step: rg ? rg.step : null, ratio: rg ? rg.ratio : null });
       acted.add(a.actor);
     }
     if (st === "pre") pfr = lastAgg;
     prevAgg = lastAgg;
   }
-  info = { tagged, pfr };
+  info = { tagged, pfr, acts, n: (h.actions || []).length };
   hqCache.set(h, info);
   return info;
 }
@@ -286,7 +295,8 @@ function hqClause(h, oppId, c) {
   }
   const { tagged } = hqInfo(h);
   const mine = (st) => tagged.filter((t) => t.a.actor === me && (!st || t.st === st));
-  const streets = c.st ? [c.st] : HQ_PRE_ONLY.has(c.kind) ? ["pre"]
+  /* "postflop" is any street after the flop is dealt: flop, turn or river. */
+  const streets = c.st === "post" ? ["flop", "turn", "river"] : c.st ? [c.st] : HQ_PRE_ONLY.has(c.kind) ? ["pre"]
     : HQ_POST_ONLY.has(c.kind) ? ["flop", "turn", "river"] : ["pre", "flop", "turn", "river"];
   const onStreet = (st) => {
     const all = tagged.filter((t) => t.st === st);
@@ -322,6 +332,12 @@ function hqClause(h, oppId, c) {
     const b = (st) => mine(st).some((t) => t.k.has("bet"));
     return b("flop") && b("turn") && (c.kind === "barrel2" || b("river"));
   }
+  /* X only when every move he made there was a check; B/R/C/F when he made
+     that move at any point on the street (bet then called a raise is B). */
+  if (c.kind === "line") return [...c.line].every((L, j) => {
+    const my = mine(["flop", "turn", "river"][j]);
+    return my.length > 0 && (L === "x" ? my.every((t) => t.a.act === "check") : my.some((t) => t.k.has(HQ_LINE_ACT[L])));
+  });
   if (c.kind === "agg") return streets.some((st) => mine(st).some((t) => t.k.has("agg") && hqSize(t, c.sz)));
   return streets.some(onStreet);
 }

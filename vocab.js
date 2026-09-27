@@ -243,7 +243,14 @@ const TENDENCY_TAGS = [
   { id: "f-float-ip",     cat: "postflop", label: "Float IP" },
   /* What he check-raises with as the OOP caller: a draw he can keep betting,
      or nothing at all (Phil, 2026-09-27). */
-  { id: "f-xr-hands-pfc-oop", cat: "postflop", label: "xR", kind: "tally", options: [["equity", "Equity"], ["air", "Air"]] },
+  /* Superseded by the three yes/no reads below (Phil, 2026-09-27). Kept, not
+     retired, so any counts already on it stay visible under Live → Other. */
+  { id: "f-xr-hands-pfc-oop", cat: "postflop", label: "xR hands (old tally)", kind: "tally", options: [["equity", "Equity"], ["air", "Air"]] },
+  /* His flop check-raise as the OOP caller, as three yes/no questions: does he
+     do it with equity, with air, and does he give up on the turn after it. */
+  { id: "f-xr-pfc-equity",   cat: "postflop", label: "xR Equity" },
+  { id: "f-xr-pfc-air",      cat: "postflop", label: "xR Air" },
+  { id: "f-xr-pfc-gu-turn",  cat: "postflop", label: "xR GuTurn" },
   // turn
   { id: "t-barrel2-freq-hu", cat: "postflop", label: "2nd barrel freq HU",  kind: "stat", calc: "barrelHu" },
   { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
