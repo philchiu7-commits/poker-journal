@@ -258,7 +258,7 @@ const TENDENCY_TAGS = [
   { id: "t-fold-to-xr-hu", cat: "postflop", label: "Fold to xR HU",  kind: "stat", calc: "foldXrTHu" },
   { id: "t-bluff-hands",  cat: "postflop", label: "Barrels",         kind: "tally",  options: [["air", "Air"], ["equity", "Equity"], ["sdv", "SDV"], ["tight", "Tight"]] },
   /* The turn cards he fires his second barrel on, counted like Barrels. */
-  { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards",      kind: "tally",  options: [["4str", "4Str"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },
+  { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards",      kind: "tally",  options: [["4str", "4Str"], ["3flush", "3Flush"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },
   { id: "t-low-boards",   cat: "postflop", label: "Low boards",      kind: "choice", options: [["passive", "Passive"], ["aggro", "Aggro"]] },
   { id: "t-call-range",   cat: "postflop", label: "T call range",    kind: "tally",  options: [["2ndp", "2ndP"], ["sd", "SD"], ["wfd", "wFD"], ["lt3rdp", "<3rdP"]] },
   { id: "punchbag-t-pfr", cat: "postflop", label: "Punch bag" },
