@@ -311,6 +311,9 @@ const TENDENCY_TAGS = [
   { id: "f-xb-pfc-sd",   cat: "postflop", label: "Check Backs SD" },
   { id: "f-xb-pfc-topp", cat: "postflop", label: "Check Backs TopP" },
   { id: "f-xb-pfc-2p",   cat: "postflop", label: "Check Backs 2P+" },
+  /* Turn probe: what the bet is made of. */
+  { id: "t-probe-merge", cat: "postflop", label: "Probe T Merge" },
+  { id: "t-probe-polar", cat: "postflop", label: "Probe T Polar" },
   /* Superseded by the yes/no Turn Cards reads below (Phil, 2026-09-27). Kept,
      not retired, so any counts already on it stay visible under Live → Other. */
   { id: "t-barrel-cards", cat: "postflop", label: "Turn Cards (old tally)", kind: "tally",  options: [["4str", "4Str"], ["3flush", "3Flush"], ["4flush", "4Flush"], ["overcards", "Overcards"], ["blank", "Blank"]] },

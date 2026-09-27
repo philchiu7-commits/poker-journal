@@ -138,7 +138,7 @@ const readEstimates = (() => {
       F.st[st] = S;
     }
     const P = F.st.pre;
-    F.pfr = preAgg === me; F.limped = preRaises === 0;
+    F.pfr = preAgg === me; F.preAgg = preAgg; F.limped = preRaises === 0;
     F.pfc = !F.pfr && P.my.some((x) => x === "call") && !P.my.includes("fold");
     F.pot = preRaises === 0 ? "limped" : preRaises === 1 ? "SRP" : "3BP+";
     F.threebet = P.my.includes("3bet"); F.fourbet = P.my.includes("4bet");
@@ -339,6 +339,19 @@ const readEstimates = (() => {
     ch: (F) => { const T = lowIP(F); return T ? { ok: T.my[0] === "check", why: T.my[0] + " on " + F.board.slice(0, 3).join(" ") } : null; } });
   S({ id: "f-low-board-ip-canbluff", grp: "Bets when checked to", rule: "CAN", def: "Preflop raiser in position on a 9-high-or-lower flop, checked to, bet — showed a bluff: no pair of their own (air or a draw).",
     ch: (F) => { const T = lowIP(F); return T && F.cards && T.tier && T.firstBetBy === F.me ? { ok: T.tier.name === "no pair", why: g(T) } : null; } });
+  /* Turn → OOP → Probe T: Merge / Polar (Phil 2026-09-28). The HUD's probe (stats.js): the raiser
+     checked the flop through, they bet the turn acting before the raiser, no bet ahead of them.
+     Merge = shown with one pair; Polar = two pair or better, or no pair of their own. */
+  const probeT = (F) => {
+    const f = F.st.flop, T = F.st.turn; if (!F.cards || !T.tier || F.pfr || !F.preAgg || f.firstBetBy != null) return null;
+    const ri = T.acts.findIndex((a) => a.actor === F.preAgg), mi = T.acts.findIndex((a) => a.actor === F.me);
+    return ri >= 0 && mi >= 0 && mi < ri && !T.acts.slice(0, mi).some((a) => AGG.has(a.act)) && AGG.has(T.acts[mi].act) ? T : null;
+  };
+  const polar = (T) => T.tier.t === 4 || T.tier.name === "no pair";
+  S({ id: "t-probe-merge", grp: "Probes", rule: "SHARE", yes: 65, no: 35, def: "Turn probes shown (raiser checked the flop through): share that were one pair — merged.",
+    ch: (F) => { const T = probeT(F); return T ? { ok: !polar(T), why: g(T) } : null; } });
+  S({ id: "t-probe-polar", grp: "Probes", rule: "SHARE", yes: 65, no: 35, def: "Turn probes shown (raiser checked the flop through): share that were two pair or better, or no pair of their own — polar.",
+    ch: (F) => { const T = probeT(F); return T ? { ok: polar(T), why: g(T) } : null; } });
   /* Flop → As PFC → Check Backs (Phil 2026-09-28): as preflop caller the flop was checked to them
      and they checked it back (no one bet the flop) — what they turned up with. */
   const pfcXB = (F) => { const T = F.st.flop; return F.pfc && F.cards && T.tier && T.firstBetBy == null && T.my[0] === "check" && checkedTo(F, T) ? T : null; };
