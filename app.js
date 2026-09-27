@@ -932,7 +932,7 @@ function route() {
    trip into a hand and back; only a different opponent clears them, and the
    Clear-filters button is showing the whole time any are on. */
 let handFiltersFor = null;                 // whose filters these are
-const HF_DIMS = ["pos", "pot", "field", "squid", "role", "post"];
+const HF_DIMS = ["pos", "pot", "seen", "field", "squid", "role", "post"];
 const blankHandFilters = () => ({ ...Object.fromEntries(HF_DIMS.map((d) => [d, new Set()])), sd: false, cards: false });
 let handFilters = blankHandFilters();
 const resetHandFilters = () => { handFilters = blankHandFilters(); };
@@ -1068,6 +1068,20 @@ function postRoles(h, oppId) {
   }
   return [...out];
 }
+/* Streets he was still in for. Folding on a street still counts as seeing it.
+   A street was dealt if its cards are on the board or anyone acted on it, so
+   an all-in runout counts. A seat with no action on record was never in the
+   hand (typed hands only write down the seats that mattered) — no chips. */
+function seenStreets(h, oppId) {
+  const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
+  const me = "v" + i, acts = h.actions || [];
+  if (i < 0 || !acts.some((a) => a.actor === me)) return [];
+  const fold = acts.find((a) => a.actor === me && a.act === "fold");
+  const cut = fold ? STREET_ORDER.indexOf(fold.street) : 3;
+  const n = (h.board || []).filter(Boolean).length;
+  return SEEN_BUCKETS.filter((_, k) => k + 1 <= cut
+    && (n >= k + 3 || acts.some((a) => a.street === STREET_ORDER[k + 1])));
+}
 function handMatchesFilters(h, oppId) {
   const f = handFilters;
   if (f.sd && !oppSD(h, oppId)) return false;
@@ -1077,6 +1091,7 @@ function handMatchesFilters(h, oppId) {
     if (!f.pot.has(b)) return false;
     if (b === "3BP" && !in3betPot(h, oppId)) return false;
   }
+  if (f.seen.size && !seenStreets(h, oppId).some((st) => f.seen.has(st))) return false;
   if (f.field.size) {
     const b = fieldBucket(h);
     if (!b || !f.field.has(b)) return false;
@@ -1109,6 +1124,8 @@ function fieldBucket(h) {
 }
 const POT_BUCKETS = ["Limped", "SRP", "3BP", "4BP+"];
 const FIELD_BUCKETS = ["HU", "MW"];
+const SEEN_BUCKETS = ["Flop", "Turn", "River"];
+const STREET_ORDER = ["pre", "flop", "turn", "river"];
 const SQUID_BUCKETS = ["nS", "w1S", "w2S+"];
 const ROLE_BUCKETS = ["PFR", "PFC", "Limp", "LRR", "3b", "c3b"];
 const POST_BUCKETS = ["R", "xR"];
@@ -1129,7 +1146,8 @@ function renderHandFilters(oppId, allHands) {
     handFilters = save;
     return n;
   };
-  const HF_TIP = { HU: "Two players saw the flop", MW: "Three or more saw the flop",
+  const HF_TIP = { Flop: "He was still in when the flop came", Turn: "He was still in when the turn came",
+    River: "He was still in when the river came", HU: "Two players saw the flop", MW: "Three or more saw the flop",
     "3BP": "Hands where he 3-bet or called a 3-bet",
     "3b": "He 3-bet preflop", c3b: "He called somebody's 3-bet preflop",
     R: "He raised somebody's postflop bet", xR: "He checked, then raised — also counted under R" };
@@ -1144,6 +1162,7 @@ function renderHandFilters(oppId, allHands) {
   $("od-handfilters").innerHTML =
     row("Pos", "pos", posBuckets(allHands)) +
     row("Pot", "pot", POT_BUCKETS) +
+    row("Seen", "seen", SEEN_BUCKETS) +
     row("Field", "field", FIELD_BUCKETS) +
     row("Squid", "squid", SQUID_BUCKETS) +
     row("Role", "role", ROLE_BUCKETS) +
