@@ -3527,7 +3527,8 @@ function renderOppSizing(o) {
   const defHTML = `<div class="sizedef${sizeDefShut ? " shut" : ""}">
     <button class="sizedefhead" data-sizedef aria-expanded="${!sizeDefShut}">From ${auto.n} bet${
       auto.n === 1 ? "" : "s"} and raise${auto.n === 1 ? "" : "s"} on record — what counts as what</button>
-    <div class="sizenote">Value is two pair or better, or top or second pair; everything under that
+    <div class="sizenote">Only sizes he chose himself — his own bets and raises. A bet of someone else's that he called is never counted here.
+      Value is two pair or better, or top or second pair; everything under that
       counts as a bluff, draws included. Second pair on the turn is the one exception: it counts as a
       bluff, however he got there — barrelled, raised, or led after calling the flop. Only a turn bet
       after nobody bet the flop is left out, as neither value nor bluff. Bluffs he never had to show don't appear, so read the bluff rows as a floor.
@@ -3545,10 +3546,10 @@ function renderOppSizing(o) {
        given flop bet size means, so the two readings of one street belong side
        by side rather than three rows apart. */
     ? head +
-      [["Flop", "Bet · flop"], ["Turn", "Bet · turn"], ["River", "Bet · river"]]
+      [["Flop", "He bets · flop"], ["Turn", "He bets · turn"], ["River", "He bets · river"]]
         .map(([st, t]) => `<div class="sizesub">${t}</div>` +
           SIZING_ROWS.filter((r) => r.mode === "bet" && r.street === st).map(autoRow).join("")).join("") +
-      `<div class="sizesub">Raise · flop, turn and river</div>` +
+      `<div class="sizesub">He raises · flop, turn and river</div>` +
       SIZING_ROWS.filter((r) => r.mode === "raise").map(autoRow).join("")
     : `<div class="sizenote">Nothing yet — this needs imported hands where his cards
          and the bet amounts are both on record.</div>`) + hidHTML + skipHTML + (auto.n ? defHTML : "");
