@@ -403,8 +403,9 @@ const readEstimates = (() => {
   S({ id: "f-adv-board-air", grp: "Postflop — betting", rule: "CAN", def: "As preflop caller, bet into the raiser on a low connected flop — showed air: no pair and no draw.",
     ch: (F) => { const x = advSpot(F); return x && x.donk && F.cards && x.T.tier ? { ok: air(x.T), why: g(x.T) } : null; } });
   for (const [s, L] of [["flop", "f"], ["turn", "t"], ["river", "r"]])
-    S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role) — showed a bluff: no pair of their own (air or a draw).`,
+    S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role${s === "turn" ? ", not the flop aggressor" : ""}) — showed a bluff: no pair of their own (air or a draw).`,
       ch: (F) => { const T = F.st[s]; if (!F.cards || !T.tier || T.firstBetBy !== F.me || !checkedTo(F, T)) return null;
+        if (s === "turn" && F.st.flop.lastAgg === F.me) return null;  // Bluff XT (turn): he wasn't the flop aggressor (Phil)
         return { ok: T.tier.name === "no pair", why: g(T) }; } });
   // Thin XT F (Phil 2026-09-28): flop only — as preflop caller, checked to on the flop, they bet: thin value?
   for (const [id, pot] of [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MW"], ["f-thin-xt-3bp", "3BP+"]])
@@ -413,8 +414,8 @@ const readEstimates = (() => {
         if (pot === "MW" ? f.alive < 3 : (F.pot !== pot || f.alive !== 2)) return null; return { ok: f.tier.t === 1 || f.tier.t === 2, why: g(f) }; } });
   // Weaker than top pair = second/third/under/bottom pair, still counted on 4-flush/straight boards (demoted top pair/overpair excluded).
   const belowTop = (T) => /^(second pair|third pair|underpair|bottom\/weak pair)/.test(T.tier.name);
-  S({ id: "thin-xt-t", grp: "Bets when checked to", rule: "CAN", def: "An opponent checked the turn to them and they bet (any role) — showed a pair weaker than top pair (thin value).",
-    ch: (F) => { const T = F.st.turn; if (!F.cards || !T.tier || T.firstBetBy !== F.me) return null;
+  S({ id: "thin-xt-t", grp: "Bets when checked to", rule: "CAN", def: "Not the flop aggressor, an opponent checked the turn to them and they bet (any role) — showed a pair weaker than top pair (thin value).",
+    ch: (F) => { const T = F.st.turn; if (!F.cards || !T.tier || T.firstBetBy !== F.me || F.st.flop.lastAgg === F.me) return null;
       const i = T.acts.findIndex((a) => a.actor === F.me); if (!T.acts.slice(0, i).some((a) => a.act === "check")) return null;
       return { ok: belowTop(T), why: g(T) }; } });
   // calls
