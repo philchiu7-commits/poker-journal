@@ -60,8 +60,8 @@ const HQ_PHRASES = [
   [/\b([345])[\s-]?bet(?:s|ted|ting)?\s+pots?\b|\b([345])[\s-]?bps?\b/g, (m, a, b) => ` ${a || b}bp `],
   [/\bsingle[\s-]?raised(?:\s+pots?)?\b|\bsrps?\b/g, " srp "],
   [/\blimped\s+pots?\b|\blimp\s+pots?\b/g, " limpedpot "],
-  [/\bheads[\s-]?up\b/g, " hu "],
-  [/\bmulti[\s-]?way\b/g, " mw "],
+  [/\bheads[\s-]?up(?:\s+pots?)?\b|\bhups?\b/g, " hu "],                 // HUP = heads-up pot
+  [/\bmulti[\s-]?way(?:\s+pots?)?\b|\bmwps?\b/g, " mw "],             // MWP = multiway pot
   [/\bwent\s+to\s+showdown\b|\bto\s+showdown\b|\bshow[\s-]?down\b/g, " sd "],
   [/\bcards?\s+(?:seen|shown)\b|\bshow(?:s|ed|n)\s+(?:his\s+)?(?:cards|hand)\b/g, " cards "],
   [/\bin\s+position\b/g, " ip "],
@@ -229,7 +229,16 @@ function hqParse(text) {
     if (HQ_PRE_ONLY.has(c.kind) && c.st && c.st !== "pre") c.bad = `${c.kind} is preflop only`;
     if (HQ_POST_ONLY.has(c.kind) && c.st === "pre") c.bad = `${c.kind} is postflop only`;
   }
-  const ok = clauses.filter((c) => !c.bad);
+  let ok = clauses.filter((c) => !c.bad);
+  /* He has one seat and one pot type, so "U7 U6" or "limped srp" back to back
+     can only mean either one; the same one twice is kept once. */
+  const ONE = new Set(["pos", "pot", "squid"]);
+  ok = ok.filter((c, j) => {
+    const p = ok[j - 1];
+    if (c.kind !== "f" || !ONE.has(c.f) || !p || p.kind !== "f" || p.f !== c.f || p.neg !== c.neg || c.neg) return true;
+    if (p.val === c.val) return false;
+    c.or = true; return true;
+  });
   /* "a or b" joins neighbours into one either-way group; groups are AND-ed. */
   const groups = [];
   for (const c of ok) (c.or && groups.length ? groups[groups.length - 1] : (groups[groups.length] = [])).push(c);
@@ -370,6 +379,7 @@ function isPFC(h, me) {
   return after.some((t) => t.a.act === "call") && !after.some((t) => t.a.act === "fold");
 }
 const hqSize = (t, sz) => sz === "ob" ? t.ratio !== null && t.ratio > 1.001 : t.step === sz;
+const hqFoldedPre = (h, me) => (h.actions || []).some((a) => a.actor === me && a.street === "pre" && a.act === "fold");
 function hqClause(h, oppId, c) {
   const i = (h.villains || []).findIndex((v) => v.opponentId === oppId);
   if (i < 0) return false;
@@ -378,7 +388,7 @@ function hqClause(h, oppId, c) {
     const pos = h.villains[i].pos;
     switch (c.f) {
       case "pos": return posBucket(pos) === c.val;
-      case "pot": return potBucket(h) === c.val && (c.val !== "3BP" || in3betPot(h, oppId));
+      case "pot": return potBucket(h) === c.val && !hqFoldedPre(h, me) && (c.val !== "3BP" || in3betPot(h, oppId));
       case "hu": return fieldBucket(h) === "HU" && seenStreets(h, oppId).includes("Flop");
       case "mw": return fieldBucket(h) === "MW" && seenStreets(h, oppId).includes("Flop");
       /* Table sense, not HUD sense: the preflop raiser is whoever put in the
