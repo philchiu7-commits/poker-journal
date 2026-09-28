@@ -308,8 +308,8 @@ const readEstimates = (() => {
   S({ id: "r-bluff-lines-mwp", grp: "River bluffs (any role)", rule: "CAN", def: "River bets or raises shown into 3+ players (any line): share that were bluffs.",
     ch: (F) => { const T = bets(F, "river"); return T && T.alive >= 3 ? { ok: T.tier.t === 0, why: T.alive + "-way: " + g(T) } : null; } });
   // a pair too weak to call with, bet or raised as a bluff instead of checked down
-  S({ id: "r-hand-to-bluff-pfc", grp: "River bluffs (as PFC)", rule: "CAN", def: "River bets or raises as preflop caller shown: a weak pair (third pair or worse) turned into a bluff.",
-    ch: (F) => { const T = F.pfc && rbluff(F); return T ? { ok: !!T.tier.weakPair && T.tier.name !== "no pair", why: g(T) } : null; } });
+  S({ id: "r-hand-to-bluff-pfc", grp: "River bluffs (as PFC)", rule: "CAN", def: "River bets or raises as preflop caller shown holding one pair (air and two pair+ don't count): share that were a weak pair (third pair or worse) turned into a bluff.",
+    ch: (F) => { const T = F.pfc && bets(F, "river"); if (!T || T.tier.name === "no pair" || T.tier.t === 4) return null; return { ok: T.tier.t === 0, why: g(T) }; } });
   S({ id: "r-can-raise-bluff", grp: "Raises", rule: "CAN", def: "River raises shown with a bluff (weaker than second pair).",
     ch: (F) => { const T = F.st.river; return F.cards && T.tier && T.raised ? { ok: T.tier.t === 0, why: g(T) } : null; } });
   S({ id: "r-can-raise-thin", grp: "Raises", rule: "CAN", def: "River raises shown with second or top pair.",
