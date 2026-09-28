@@ -214,10 +214,10 @@ const readEstimates = (() => {
     ch: (F) => { const f = F.st.flop, t = F.st.turn; if (!F.pfc || !f.xr || !t.my.length) return null;
       return { ok: !t.my.some((x) => ["bet", "raise", "jam"].includes(x)), why: "turn: " + t.my.join("/") + (t.tier ? " with " + g(t) : "") }; } });
   for (const [id, k, lab] of [["t-bcard-3flush", "flush", "a third card of a suit"], ["t-bcard-4flush", "4flush", "a fourth card of a suit"], ["t-bcard-4str", "4str", "a four-straight"], ["t-bcard-over", "over", "an overcard to the flop"], ["t-bcard-blank", "blank", "a blank"]])
-    S({ id, grp: "Turn cards he barrels", rule: "F", imp: true, def: `As preflop raiser, the turn brought ${lab} and was theirs to bet (turn only, any flop): bet it.`,
-      ch: (F) => { const t = F.st.turn; if (!F.pfr || !myTurnFirst(t, F.me) || F.board.length < 4) return null;
+    S({ id, grp: "Turn cards he barrels", rule: "F", imp: true, def: `As preflop raiser with a bluff hand shown (no pair better than third — air or a draw), the turn brought ${lab} and was theirs to bet (turn only, any flop): bet it.`,
+      ch: (F) => { const t = F.st.turn; if (!F.pfr || !F.cards || !t.tier || t.tier.t !== 0 || !myTurnFirst(t, F.me) || F.board.length < 4) return null;
         if (!hqBoardCard(F.board, 3)[k]) return null;
-        return { ok: t.firstBetBy === F.me, why: (t.firstBetBy === F.me ? "barrelled " : "checked ") + F.board[3] }; } });
+        return { ok: t.firstBetBy === F.me, why: (t.firstBetBy === F.me ? "barrelled " : "checked ") + F.board[3] + " with " + g(t) }; } });
   
   // ---------- what he holds (shown hands, any source)
   const bets = (F, s) => { const T = F.st[s]; return F.cards && T.tier && (T.iBet || T.raised) ? T : null; };
