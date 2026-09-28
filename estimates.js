@@ -293,11 +293,20 @@ const readEstimates = (() => {
      raise of someone else's bet is R. X is checks only. Lines no chip names
      (BCB, RBB, CCB…) still count as river bluffs shown, just not on any chip. */
   const own = (S) => S.iBet ? "B" : S.raised ? "R" : S.my.includes("call") ? "C" : S.my.includes("check") ? "X" : "-";
-  for (const L of ["BBB", "BXB", "XBB", "XXB", "CXB"])
-    S({ id: "r-bluff-lines-" + L.toLowerCase(), grp: "River bluffs (any role)", rule: "CAN", def: `River bluffs shown where their own flop-turn-river line was ${L} (B = they bet first, C = called, X = only checked, R = raised).`,
-      ch: (F) => { const T = rbluff(F); if (!T) return null; const l = ["flop", "turn", "river"].map((s) => own(F.st[s])).join(""); return { ok: l === L, why: "line " + l + ": " + g(T) }; } });
-  S({ id: "r-bluff-lines-mwp", grp: "River bluffs (any role)", rule: "CAN", def: "River bluffs shown: share that were bet into 3+ players (any line).",
-    ch: (F) => { const T = rbluff(F); return T ? { ok: T.alive >= 3, why: T.alive + "-way: " + g(T) } : null; } });
+  /* Bluff lines (Phil 2026-09-28): not "which line his bluffs take" but "given this line,
+     how often is the river bet a bluff" — every river bet shown on the line counts, a bluff
+     (third pair or worse, air, missed draws) is the yes. xCXB = out of position he check-called
+     the flop, the turn went check-check, he bet the river first (still OOP). */
+  const rbet = (F) => { const T = F.st.river; return F.cards && T.tier && T.iBet ? T : null; };
+  for (const L of ["BBB", "BXB", "XBB", "XXB"])
+    S({ id: "r-bluff-lines-" + L.toLowerCase(), grp: "River bluffs (any role)", rule: "CAN", def: `River bets shown where their own flop-turn-river line was ${L} (B = they bet first, X = only checked): share that were bluffs.`,
+      ch: (F) => { const T = rbet(F); if (!T) return null; const l = ["flop", "turn", "river"].map((s) => own(F.st[s])).join(""); return l === L ? { ok: T.tier.t === 0, why: "line " + l + ": " + g(T) } : null; } });
+  S({ id: "r-bluff-lines-cxb", grp: "River bluffs (any role)", rule: "CAN", def: "Out of position: check-called the flop, the turn went check-check, then bet the river first — river bets shown: share that were bluffs.",
+    ch: (F) => { const T = rbet(F), f = F.st.flop, t = F.st.turn; if (!T || f.ip || T.ip) return null;
+      if (f.my.join() !== "check,call" || !t.checkedThrough || !myTurnFirst(T, F.me)) return null;
+      return { ok: T.tier.t === 0, why: "xC-X-B: " + g(T) }; } });
+  S({ id: "r-bluff-lines-mwp", grp: "River bluffs (any role)", rule: "CAN", def: "River bets or raises shown into 3+ players (any line): share that were bluffs.",
+    ch: (F) => { const T = bets(F, "river"); return T && T.alive >= 3 ? { ok: T.tier.t === 0, why: T.alive + "-way: " + g(T) } : null; } });
   // a pair too weak to call with, bet or raised as a bluff instead of checked down
   S({ id: "r-hand-to-bluff-pfc", grp: "River bluffs (as PFC)", rule: "CAN", def: "River bets or raises as preflop caller shown: a weak pair (third pair or worse) turned into a bluff.",
     ch: (F) => { const T = F.pfc && rbluff(F); return T ? { ok: !!T.tier.weakPair && T.tier.name !== "no pair", why: g(T) } : null; } });
