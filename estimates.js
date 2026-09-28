@@ -44,8 +44,9 @@ const readEstimates = (() => {
      (third nut — the step counts past suit cards on the board). Anything under that drops to 0
      like a weak pair: not value, not air. */
   const HN = ["", "", "", "", "straight", "flush", "full house", "quads", "straight flush"], RN = "  23456789TJQKA";
-  function tier(hole, board) {
-    const all = hole.concat(board), s = best7(all), bc = boardCat(board), f = four(board);
+  // raw: the plain made hand, no 4-flush / 4-straight demotion (the Find box's "have 2pair+")
+  function tier(hole, board, raw) {
+    const all = hole.concat(board), s = best7(all), bc = boardCat(board), f = raw ? { fl: false, st: false } : four(board);
     const out = { t: 0, name: "no pair", cat: s[0] };
     const drop = (name) => ({ ...out, name: name + " (4-" + (f.fl ? "flush" : "straight") + " board)", weakPair: true });
     if (s[0] >= 4 && (board.length === 5 ? cmp(s, bc) > 0 : s[0] > bc[0])) {
@@ -475,6 +476,6 @@ const readEstimates = (() => {
     cache.set(oppId, { sig, out });
     return out;
   }
-  return Object.assign(readEstimates, { SPECS, RULE, facts, tier, pre2 });   // the node report reuses the same engine
+  return Object.assign(readEstimates, { SPECS, RULE, facts, tier, draws, pre2 });   // the node report reuses the same engine
 })();
 if (typeof module !== "undefined") module.exports = { readEstimates };

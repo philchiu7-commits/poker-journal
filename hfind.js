@@ -33,7 +33,30 @@ function hqBoardCard(board, j) {
   out.blank = !out.flush && !out["4flush"] && !out.straight && !out["4str"] && !out.over && !out.pair;
   return out;
 }
+/* Hand strength — what his shown cards made (Phil 2026-09-28: "have 2pair+").
+   One token, "hs_" + class + _ge/_le/_eq, so "+" / "or better" rides along.
+   Flush, straight and a bare "pair" collide with board words ("flush turn"),
+   so they need "have / has / with / makes" ahead of them or a "+" after. */
+const HQ_HS_OP = "(\\s*\\+|\\s+or\\s+(?:better|higher|more|above|stronger)|\\s*-(?=\\s)|\\s+or\\s+(?:worse|lower|less|below|weaker))?";
+const hqHsOp = (o) => !o ? "eq" : /\+|better|higher|more|above|stronger/.test(o) ? "ge" : "le";
+const HQ_HS_CUE = "(?:have|has|had|having|hold|holds|holding|held|with|make|makes|made|making)\\s+(?:an?\\s+)?";
+const HQ_HS = [
+  ["sf", "\\bstraight[\\s-]?flush(?:es)?"], ["boat", "\\bfull[\\s-]?house|\\bboats?|\\bfh"],
+  ["quads", "\\bquads|\\bfour[\\s-]of[\\s-]a[\\s-]kind"], ["nfd", "\\bnut[\\s-]?flush[\\s-]?draws?|\\bnfd"],
+  ["combo", "\\bcombo[\\s-]?draws?"], ["fd", "\\bflush[\\s-]?draws?|\\bfd"],
+  ["oesd", "\\bopen[\\s-]?end(?:ed|er|ers)?(?:[\\s-]straight)?(?:[\\s-]draws?)?|\\boesd"],
+  ["gut", "\\bgut[\\s-]?shots?|\\bgutters?"], ["sdraw", "\\bstraight[\\s-]?draws?"],
+  ["2pair", "\\btwo[\\s-]?pairs?|\\b2[\\s-]?pairs?|\\b2p"], ["set", "\\bsets?"],
+  ["trips", "\\btrips|\\bthree[\\s-]of[\\s-]a[\\s-]kind"], ["over", "\\bover[\\s-]?pairs?"],
+  ["top", "\\btop[\\s-]?pairs?|\\btopp|\\btp"], ["second", "\\b(?:second|2nd|middle)[\\s-]?pairs?|\\b2ndp"],
+  ["weak", "\\b(?:third|3rd|bottom|weak|low)[\\s-]?pairs?|\\bunder[\\s-]?pairs?|\\b3rdp"],
+  ["nopair", "\\bno[\\s-]pair"], ["air", "\\bair"], ["draw", "\\bdraws?"],
+].map(([k, re]) => [new RegExp(`(?:${HQ_HS_CUE})?(?:${re})\\b${HQ_HS_OP}`, "g"), (m, o) => ` hs_${k}_${hqHsOp(o)} `]).concat([
+  [new RegExp(`${HQ_HS_CUE}(flush|straight|pair)\\b${HQ_HS_OP}`, "g"), (m, k, o) => ` hs_${k === "pair" ? "pair" : k}_${hqHsOp(o)} `],
+  [/\b(flush|straight)\s*\+/g, (m, k) => ` hs_${k}_ge `],
+]);
 const HQ_PHRASES = [
+  ...HQ_HS,
   [/\b([345])[\s-]?bet(?:s|ted|ting)?\s+pots?\b|\b([345])[\s-]?bps?\b/g, (m, a, b) => ` ${a || b}bp `],
   [/\bsingle[\s-]?raised(?:\s+pots?)?\b|\bsrps?\b/g, " srp "],
   [/\blimped\s+pots?\b|\blimp\s+pots?\b/g, " limpedpot "],
@@ -152,6 +175,10 @@ function hqParse(text) {
       cur = push({ kind: "line", line: w.slice(2).split("_").map((u) => [...u].map((d) => HQ_LINE_CODE[d]).join("")) }); continue; }
     { const b = /^bt([tr])(flush|4flush|straight|4str|over|pair|blank)$/.exec(w);
       if (b) { cur = push({ kind: "f", f: "bcard", st: b[1] === "t" ? "turn" : "river", val: b[2] }); continue; } }
+    { const b = /^hs_([a-z0-9]+)_(ge|le|eq)$/.exec(w);
+      // "bet flop with top pair": no street of its own, it borrows the street of the action it hangs off
+      if (b) { const inh = !pend.st && cur && cur.kind !== "f" && cur.kind !== "line" && ["flop", "turn", "river"].includes(cur.st) ? cur.st : null;
+        cur = push({ kind: "f", f: "hs", val: b[1], op: b[2], st: pend.st || inh, stInh: !!inh }); pend.st = null; continue; } }
     { const b = /^hi(\d+)(le|ge|eq)([ftr])$/.exec(w);
       if (b) { cur = push({ kind: "f", f: "high", val: +b[1], op: b[2], st: { f: "flop", t: "turn", r: "river" }[b[3]] }); continue; } }
     if (!t) { if (!HQ_STOP.has(w)) unknown.push(w); continue; }
@@ -161,7 +188,7 @@ function hqParse(text) {
     if (t === "seen") { cur = push({ kind: "seen", st: null }); continue; }
     if (t.startsWith("st:")) {
       const st = t.slice(3);
-      if (cur && !cur.st && cur.kind !== "pos") { cur.st = st; continue; }
+      if (cur && (!cur.st || cur.stInh) && cur.kind !== "pos") { cur.st = st; cur.stInh = false; continue; }
       pend.st = st; continue;
     }
     if (t.startsWith("sz:")) {
@@ -246,7 +273,7 @@ const HQ_POS_NAME = { BTN: "on the button", CO: "in the CO", HJ: "in the HJ", EP
 function hqLabel(c) {
   let t;
   if (c.kind === "f") {
-    t = c.f === "sd" || c.f === "cards" ? "" : "is ";
+    t = c.f === "sd" || c.f === "cards" || c.f === "hs" ? "" : "is ";
     t += { pos: HQ_POS_NAME[c.val],
       pot: { "3BP": "in a 3-bet pot (he 3-bet or called it)", "4BP+": "in a 4-bet+ pot", SRP: "in a single-raised pot", Limped: "in a limped pot" }[c.val],
       pfr: "the preflop raiser", pfc: "a preflop caller",
@@ -255,10 +282,12 @@ function hqLabel(c) {
       high: (c.op === "eq" ? `on a${c.val === 14 || c.val === 8 ? "n" : ""} ${HQ_RANK_NAME[c.val] || c.val}-high ${c.st === "flop" ? "flop" : "board"}`
         : `on a ${c.st === "flop" ? "flop" : "board"} ${HQ_RANK_NAME[c.val] || c.val}-high or ${c.op === "le" ? "lower" : "higher"}`)
         + (c.st === "flop" ? "" : ` by the ${c.st}`),
+      hs: c.f === "hs" && hqHsLabel(c),
       bcard: { flush: `on a flush-completing ${c.st}`, "4flush": `on a ${c.st} that puts four to a flush on board`,
         straight: `on a straight-completing ${c.st}`, "4str": `on a ${c.st} that puts four to a straight on board`,
         over: `on an overcard ${c.st}`, pair: `on a board-pairing ${c.st}`,
         blank: `on a blank ${c.st} (no flush, straight, overcard or pair)` }[c.val] }[c.f];
+    if (c.neg && c.f === "hs") return "doesn't show " + t.slice(6);
     if (c.neg && t.startsWith("is ")) return "isn't " + t.slice(3);
   } else if (c.kind === "line") {
     const any = ["flop", "turn", "river"].filter((st, j) => !c.line[j] || c.line[j] === "-");
@@ -371,6 +400,7 @@ function hqClause(h, oppId, c) {
         if (!seenStreets(h, oppId).includes(c.st === "turn" ? "Turn" : "River")) return false;
         return hqBoardCard(b, j)[c.val];
       }
+      case "hs": return hqHs(h, i, c);
       case "sd": return oppSD(h, oppId);
       case "cards": return cardsSeen(h, oppId);
       case "ip": case "oop": {
@@ -435,8 +465,57 @@ function hqClause(h, oppId, c) {
   if (c.kind === "agg") return streets.some((st) => mine(st).some((t) => t.k.has("agg") && hqSize(t, c.sz)));
   return streets.some(onStreet);
 }
+/* Hand strength off his shown cards. Classes climb 0 no pair · 1 weak pair (third
+   or worse, underpair) · 2 second · 3 top · 4 overpair · 5 two pair · 6 set/trips ·
+   7 straight · 8 flush · 9 full house · 10 quads · 11 straight flush — his own
+   cards have to make it (a pair on the board is no pair of his). Plain made hand:
+   no 4-flush / 4-straight demotion here. With no street named it is the last
+   street he was still in on; draws, any street before the river. No cards on
+   record: the hand is left out either way, "not top pair" included. */
+const HQ_HS_R = { nopair: 0, air: 0, weak: 1, pair: 1, second: 2, top: 3, over: 4, "2pair": 5, set: 6, trips: 6,
+  straight: 7, flush: 8, boat: 9, quads: 10, sf: 11 };
+const HQ_HS_NAME = { nopair: "no pair", air: "air (no pair, no draw)", weak: "a weak pair (third pair or worse)", pair: "a pair",
+  second: "second pair", top: "top pair", over: "an overpair", "2pair": "two pair", set: "a set", trips: "trips",
+  straight: "a straight", flush: "a flush", boat: "a full house", quads: "quads", sf: "a straight flush",
+  fd: "a flush draw", nfd: "the nut flush draw", oesd: "an open-ender", gut: "a gutshot", sdraw: "a straight draw",
+  combo: "a combo draw (flush draw + straight draw)", draw: "a draw (flush or straight)" };
+const HQ_HS_DRAW = { fd: (d) => d.fd, nfd: (d) => d.nutFd, oesd: (d) => d.oesd, gut: (d) => d.gut,
+  sdraw: (d) => d.oesd || d.gut, combo: (d) => d.fd && (d.oesd || d.gut), draw: (d) => d.fd || d.oesd || d.gut };
+function hqHsLabel(c) {
+  const draw = !!HQ_HS_DRAW[c.val];
+  return "shows " + HQ_HS_NAME[c.val] + (!draw && c.op !== "eq" && HQ_HS_R[c.val] != null ? (c.op === "ge" ? " or better" : " or worse") : "")
+    + (c.st && c.st !== "pre" && c.st !== "post" ? " on the " + c.st : draw ? " on the flop or turn" : " by the last street he saw");
+}
+function hqHs(h, i, c) {
+  const E = typeof readEstimates === "function" ? readEstimates : null;
+  const hole = ((h.villains[i] || {}).cards || []).filter(Boolean), board = (h.board || []).filter(Boolean);
+  if (!E || hole.length !== 2 || ![...hole, ...board].every((x) => /^[2-9TJQKA][cdhs]$/.test(x))) return null;
+  const ORD = ["pre", "flop", "turn", "river"], N = { flop: 3, turn: 4, river: 5 };
+  const fold = (h.actions || []).find((a) => a.actor === "v" + i && a.act === "fold");
+  const reached = ["flop", "turn", "river"].filter((st) => board.length >= N[st] && (!fold || ORD.indexOf(fold.street) >= ORD.indexOf(st)));
+  if (!reached.length) return null;
+  const draw = HQ_HS_DRAW[c.val];
+  const sts = c.st === "flop" || c.st === "turn" || c.st === "river" ? (reached.includes(c.st) ? [c.st] : [])
+    : draw || c.st === "post" ? reached.filter((st) => st !== "river") : [reached[reached.length - 1]];
+  if (!sts.length) return null;
+  return sts.some((st) => {
+    const b = board.slice(0, N[st]);
+    if (draw) return !!draw(E.draws(hole, b));
+    const T = E.tier(hole, b, true);
+    const R = T.t === 4 ? (T.name === "two pair" ? 5 : T.name === "set" || T.name === "trips" ? 6 : ({ 4: 7, 5: 8, 6: 9, 7: 10, 8: 11 })[T.cat] || 5)
+      : T.name === "no pair" ? 0 : T.t + 1;
+    const want = HQ_HS_R[c.val];
+    if (c.op === "ge") return R >= want;
+    if (c.op === "le") return c.val === "pair" ? R >= 1 && R <= 4 : R <= want;
+    if (c.val === "air") return R === 0 && !HQ_HS_DRAW.draw(E.draws(hole, b));
+    if (c.val === "pair") return R >= 1 && R <= 4;
+    if (c.val === "set" || c.val === "trips") return T.name === c.val;
+    return R === want;
+  });
+}
 function hqMatch(h, oppId, q) {
-  return q.groups.every((g) => g.some((c) => hqClause(h, oppId, c) !== c.neg));
+  // null = can't tell (no cards on record): out whichever way the word is flipped
+  return q.groups.every((g) => g.some((c) => { const r = hqClause(h, oppId, c); return r !== null && r !== c.neg; }));
 }
 /* What the box read, in words, under it. */
 function hqReadHTML(q) {
