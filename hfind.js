@@ -484,7 +484,20 @@ const HQ_HS_DRAW = { fd: (d) => d.fd, nfd: (d) => d.nutFd, oesd: (d) => d.oesd, 
 function hqHsLabel(c) {
   const draw = !!HQ_HS_DRAW[c.val];
   return "shows " + HQ_HS_NAME[c.val] + (!draw && c.op !== "eq" && HQ_HS_R[c.val] != null ? (c.op === "ge" ? " or better" : " or worse") : "")
-    + (c.st && c.st !== "pre" && c.st !== "post" ? " on the " + c.st : draw ? " on the flop or turn" : " by the last street he saw");
+    + (c.st && c.st !== "pre" && c.st !== "post" ? " on the " + c.st : draw ? " on the flop or turn" : " by the last street he played");
+}
+/* The street his betting stopped on: he jammed, or everyone left against him
+   had and he called. Cards after it are a runout he could no longer act on, so
+   "made two pair" can't count a river that fell after the money was in (Phil,
+   2026-09-29). null = he was never all in. */
+function hqAllInStreet(h, me) {
+  const A = h.actions || [], ORD = ["pre", "flop", "turn", "river"], at = {};
+  A.forEach((a) => { if (!(a.actor in at) && (a.act === "jam" || a.size === "Jam")) at[a.actor] = a.street; });
+  if (at[me]) return at[me];
+  const out = new Set(A.filter((a) => a.act === "fold").map((a) => a.actor));
+  const rest = [...new Set(A.map((a) => a.actor))].filter((p) => p !== me && !out.has(p));
+  if (!rest.length || !rest.every((p) => at[p])) return null;
+  return rest.map((p) => at[p]).sort((x, y) => ORD.indexOf(y) - ORD.indexOf(x))[0];
 }
 function hqHs(h, i, c) {
   const E = typeof readEstimates === "function" ? readEstimates : null;
@@ -492,7 +505,9 @@ function hqHs(h, i, c) {
   if (!E || hole.length !== 2 || ![...hole, ...board].every((x) => /^[2-9TJQKA][cdhs]$/.test(x))) return null;
   const ORD = ["pre", "flop", "turn", "river"], N = { flop: 3, turn: 4, river: 5 };
   const fold = (h.actions || []).find((a) => a.actor === "v" + i && a.act === "fold");
-  const reached = ["flop", "turn", "river"].filter((st) => board.length >= N[st] && (!fold || ORD.indexOf(fold.street) >= ORD.indexOf(st)));
+  const shut = fold ? null : hqAllInStreet(h, "v" + i);
+  const reached = ["flop", "turn", "river"].filter((st) => board.length >= N[st] && (!fold || ORD.indexOf(fold.street) >= ORD.indexOf(st))
+    && (!shut || ORD.indexOf(shut) >= ORD.indexOf(st)));
   if (!reached.length) return null;
   const draw = HQ_HS_DRAW[c.val];
   const sts = c.st === "flop" || c.st === "turn" || c.st === "river" ? (reached.includes(c.st) ? [c.st] : [])
