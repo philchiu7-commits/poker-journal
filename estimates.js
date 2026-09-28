@@ -412,9 +412,9 @@ const readEstimates = (() => {
   S({ id: "f-adv-board-air", grp: "Postflop — betting", rule: "CAN", def: "As preflop caller, bet into the raiser on a low connected flop — showed air: no pair and no draw.",
     ch: (F) => { const x = advSpot(F); return x && x.donk && F.cards && x.T.tier ? { ok: air(x.T), why: g(x.T) } : null; } });
   for (const [s, L] of [["flop", "f"], ["turn", "t"], ["river", "r"]])
-    S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role${s === "turn" ? ", not the flop aggressor" : ""}) — showed a bluff: no pair of their own (air or a draw).`,
+    S({ id: "bluff-xt-" + L, grp: "Bets when checked to", rule: "CAN", def: `An opponent checked the ${s} to them and they bet (any role${s === "turn" ? ", not the flop aggressor" : s === "river" ? ", not the turn aggressor" : ""}) — showed a bluff: no pair of their own (air or a draw).`,
       ch: (F) => { const T = F.st[s]; if (!F.cards || !T.tier || T.firstBetBy !== F.me || !checkedTo(F, T)) return null;
-        if (s === "turn" && F.st.flop.lastAgg === F.me) return null;  // Bluff XT (turn): he wasn't the flop aggressor (Phil)
+        if (s !== "flop" && F.st[s === "turn" ? "flop" : "turn"].lastAgg === F.me) return null;  // Bluff XT T/R: he wasn't the previous street's aggressor (Phil)
         return { ok: T.tier.name === "no pair", why: g(T) }; } });
   // Thin XT F (Phil 2026-09-28): flop only — as preflop caller, checked to on the flop, they bet: thin value?
   for (const [id, pot] of [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MW"], ["f-thin-xt-3bp", "3BP+"]])
