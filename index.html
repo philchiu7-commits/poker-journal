@@ -36,10 +36,15 @@
   <header class="vhead sticky">
     <button class="backbtn" data-back>‹</button>
     <h1 id="od-name"></h1>
+    <button id="od-panelbtn" class="iconbtn" title="Show / hide panels">▤</button>
     <button id="od-edit" class="iconbtn" title="Edit">✎</button>
   </header>
   <div id="od-meta" class="muted sub2"></div>
   <div id="od-ptype" class="ptypebar"></div>
+  <div id="od-panels-box" class="panel hidden">
+    <div class="ptitle">Show on this page — tap to hide or bring back</div>
+    <div id="od-panels" class="chiprow readwrap"></div>
+  </div>
   <div id="od-editform" class="panel hidden">
     <input id="od-e-name" placeholder="Name" autocomplete="off">
     <input id="od-e-group" placeholder="Group" list="groups" autocomplete="off">
@@ -49,8 +54,6 @@
       <button id="od-e-merge" class="secondary">Merge…</button>
       <button id="od-e-del" class="danger">Delete</button>
     </div>
-    <div class="ptitle panelpick-title">Show on this page</div>
-    <div id="od-panels" class="chiprow readwrap"></div>
   </div>
   <!-- Two runs of panels, in phone order: one column on a phone, side by
        side on a laptop. -->

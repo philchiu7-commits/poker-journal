@@ -45,7 +45,7 @@ main {
   border-radius: 10px; width: 40px; height: 40px; font-size: 20px; cursor: pointer; flex: none;
 }
 .iconbtn.textbtn { width: auto; padding: 0 14px; font-size: 15px; font-weight: 600; }
-.iconbtn.textbtn.on { background: linear-gradient(180deg, var(--accent), var(--accent2)); color: #0a0d12; }
+.iconbtn.on { background: linear-gradient(180deg, var(--accent), var(--accent2)); color: #0a0d12; }
 .backbtn {
   background: none; border: 0; color: var(--accent); font-size: 30px; line-height: 1;
   padding: 0 6px 4px 0; cursor: pointer; flex: none;
@@ -1180,7 +1180,6 @@ button.sizecol:active { color: var(--text); }
 .readlines > .rlctl.rlwide { border-top: 0; }
 /* a long line of word chips: full width, laid out as a grid (2×2, or three across) */
 .rlctl.rlgrid { display: grid; grid-template-columns: repeat(var(--cols, 3), max-content); gap: 6px 8px; justify-items: start; }
-.panelpick-title { margin: 12px 0 6px; }
 
 /* HUD-stat reads: the number off his HUD, typed in. Tally reads: tap an option
    once per sighting; the count rides on the chip. */

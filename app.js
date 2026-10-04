@@ -3785,6 +3785,7 @@ function renderOppDetail(id) {
   renderOppSizing(o);
   renderOppHud(o);
   applyPanels();
+  $("od-panels-box").classList.add("hidden");
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
   $("od-e-group").value = o.group || "";
@@ -6593,6 +6594,11 @@ function bindStatic() {
     renderOppDetail(curOppId);
   };
   const handCount = (id) => HANDS.filter((h) => (h.villainIds || []).includes(id)).length;
+  $("od-panelbtn").onclick = () => {
+    const box = $("od-panels-box");
+    box.classList.toggle("hidden");
+    $("od-panelbtn").classList.toggle("on", !box.classList.contains("hidden"));
+  };
   $("od-panels").onclick = (e) => {
     const b = e.target.closest("[data-panelpick]");
     if (!b) return;
