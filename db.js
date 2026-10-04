@@ -336,9 +336,45 @@ async function forgetImport(logId) {
   await metaSet("importLog", log.filter((l) => l.id !== logId));
 }
 
+/* Fill the stack fields a stored hand lacks from an incoming copy of the same
+   hand, and touch nothing else. A stored hand usually wins on updatedAt — an
+   opponent merge or a note bumps it — so a corrected file never replaced it and
+   its stacks stayed blank. Only empty fields are filled: a value already there
+   is never overwritten. Seats pair by position; the action list only when both
+   copies have the same street/actor sequence (act names may differ — the
+   journal renames an imported first "raise" to "bet"). Returns fields filled. */
+const hasVal = (x) => x != null && x !== "";
+function fillStacks(h, rec) {
+  let n = 0;
+  if (!hasVal(h.effStack) && hasVal(rec.effStack)) { h.effStack = rec.effStack; n++; }
+  if (!hasVal(h.heroChips) && hasVal(rec.heroChips)) { h.heroChips = rec.heroChips; n++; }
+  const hv = h.villains || [], rv = rec.villains || [];
+  hv.forEach((v, i) => {
+    if (!v || hasVal(v.chips)) return;
+    const src = v.pos ? rv.find((r) => r && r.pos === v.pos) : (rv.length === hv.length ? rv[i] : null);
+    if (src && hasVal(src.chips)) { v.chips = src.chips; n++; }
+  });
+  const ha = h.actions || [], ra = rec.actions || [];
+  if (ha.length === ra.length && ha.every((a, i) => a && ra[i] && a.street === ra[i].street && a.actor === ra[i].actor))
+    ha.forEach((a, i) => { if (!hasVal(a.stack) && hasVal(ra[i].stack)) { a.stack = ra[i].stack; n++; } });
+  return n;
+}
+/* One key per real-world hand, so a hand that came in through the bulk sheet
+   (its own id) and again in a DX file (dxh- id) is known to be the same one.
+   DX round ids carry the table and second, so they stand alone; others need
+   the table too. */
+const roundKey = (h) => {
+  const im = h && h.imported;
+  if (!im || !im.roundId) return null;
+  return /^DX/.test(im.roundId) ? im.roundId : `${im.tableId || ""}|${im.roundId}`;
+};
+
 /* Merge by id (newer wins); when an incoming opponent's id is new but its NAME
-   uniquely matches an existing profile, fold it in and remap its hands' villain
-   refs — so re-logging hands for an existing opponent never spawns a duplicate.
+   uniquely matches an existing profile — or a name Phil merged away, kept as an
+   alias — fold it in and remap its hands' villain refs, so re-logging hands for
+   an existing opponent never spawns a duplicate or brings a merged one back.
+   A hand file (no `meta`: extractor output, not another device's backup) never
+   renames a profile — the journal's current name stands.
    Never wipes existing data. */
 async function importJSON(data, src) {
   const sd = shortDeckReason(data);
@@ -357,6 +393,18 @@ async function importJSON(data, src) {
   for (const o of existing) nameCount[normName(o.name)] = (nameCount[normName(o.name)] || 0) + 1;
   const nameToId = {};                       // only names unique among existing profiles
   for (const o of existing) if (nameCount[normName(o.name)] === 1) nameToId[normName(o.name)] = o.id;
+  const aliasCount = {}, aliasToId = {};     // names absorbed by a merge, unique ones only
+  for (const o of existing)
+    for (const a of new Set((o.aliases || []).map(normName).filter(Boolean))) {
+      aliasCount[a] = (aliasCount[a] || 0) + 1;
+      aliasToId[a] = o.id;
+    }
+  const matchName = (name) => {
+    const n = normName(name);
+    if (nameCount[n]) return nameToId[n] || null;          // a live profile's name beats any alias
+    return aliasCount[n] === 1 ? aliasToId[n] : null;
+  };
+  const handFile = !data.meta;
   const existingIds = new Set(existing.map((o) => o.id));
   const remap = {};                          // incoming id -> surviving id
 
@@ -369,13 +417,13 @@ async function importJSON(data, src) {
       const cur = await dbGet("opponents", rec.id);
       if (!cur) { await dbPut("opponents", rec); rc.added.opponents.push(rec.id); counts.opponents++; continue; }
       rc.prev.opponents.push({ id: rec.id, rec: copyRec(cur) });   // before the merge: it mutates `cur`
-      const [into, from] = (rec.updatedAt || 0) > (cur.updatedAt || 0) ? [rec, cur] : [cur, rec];
+      const [into, from] = !handFile && (rec.updatedAt || 0) > (cur.updatedAt || 0) ? [rec, cur] : [cur, rec];
       mergeOppRecords(into, from);
       await dbPut("opponents", into);
       counts.merged++;
       continue;
     }
-    const matchId = nameToId[normName(rec.name)];
+    const matchId = matchName(rec.name);
     if (matchId) {                           // new id but known name — fold into the existing profile
       const into = await dbGet("opponents", matchId);
       rc.prev.opponents.push({ id: matchId, rec: copyRec(into) });
@@ -393,6 +441,16 @@ async function importJSON(data, src) {
   }
 
   const hasRemap = Object.keys(remap).length > 0;
+  const byRound = new Map();
+  for (const h of await dbAll("hands")) { const k = roundKey(h); if (k && !byRound.has(k)) byRound.set(k, h.id); }
+  const fillInto = async (h, rec) => {
+    const before = copyRec(h);
+    if (!fillStacks(h, rec)) return;
+    rc.prev.hands.push({ id: h.id, rec: before });
+    await dbPut("hands", h);
+    counts.stacks++;
+  };
+  counts.stacks = 0;
   for (const rec of data.hands || []) {
     if (!rec.id) continue;
     if (hasRemap) {
@@ -400,11 +458,14 @@ async function importJSON(data, src) {
       if (Array.isArray(rec.villainIds)) rec.villainIds = [...new Set(rec.villainIds.map((x) => remap[x] || x))];
     }
     const cur = await dbGet("hands", rec.id);
+    const twinId = !cur && byRound.get(roundKey(rec));
+    const twin = twinId && twinId !== rec.id ? await dbGet("hands", twinId) : null;
+    if (twin) { await fillInto(twin, rec); continue; }   // same hand under another id: fill, never duplicate
     if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) {
       if (cur) rc.prev.hands.push({ id: rec.id, rec: cur }); else rc.added.hands.push(rec.id);
       await dbPut("hands", rec);
       counts.hands++;
-    }
+    } else await fillInto(cur, rec);
   }
   for (const rec of data.sessions || []) {
     if (!rec.id) continue;
