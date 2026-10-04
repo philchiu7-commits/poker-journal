@@ -31,7 +31,7 @@ let showReadPicker = true;        // Reads panel: full picker by default; collap
 /* Which sections of the read tree are folded shut. A view state, not a read:
    it is about what you are working on right now, not about the player, so it
    is the same for every opponent and it does not survive a reload. */
-const readCatShut = new Set();
+const readCatShut = new Set(["Earlier format"]);  // the Live tab's leftovers start folded
 let readTab = "online";           // which picker layout: "online" = street tree, "live" = by category. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
@@ -221,59 +221,124 @@ const POS_MATRIX = {
     ["Bluff", ["lrr-b-ns", "lrr-b-ws"]]] },
 };
 
-/* The Live tab's picker: the category-first layout the app used before the
-   street tree, with postflop split by street the way the tree does it, and
-   everything preflop — sizing included — in the one section at the top. Same
-   ids and the same stored reads as READ_LAYOUT: two ways of reading one set,
-   so a read set on one tab shows set on the other. `cat` names the tag
-   category whose unlisted reads land in this section's last block as "Other",
-   so a new read can't go missing on this tab either. An id may be written as
-   ["id", "Short"] to override the chip's label. onlineOnly rows are the HUD
-   numbers — listed so the catch-all counts them as placed, not drawn here,
-   because there is no HUD at a live table. */
+/* The Live tab's picker: Phil's "Live Journal" outline (2026-10-05) — squid
+   first, then preflop, the multiway limped pot, and each street split into
+   As PFR / As PFC, with the physical tells last. Same ids and the same stored
+   reads as READ_LAYOUT: two ways of reading one set, so a read set on one tab
+   shows set on the other. Every word on a line is its own yes/no read; where
+   an older read asked the same question its id is reused under the new word,
+   where none did the id is new. Reads the outline doesn't name — the format
+   this replaced is saved in Obsidian — still show, under Earlier format at the
+   bottom, which is the catch-all: it lists the hidden and online-only rows so
+   `placed` counts them, and takes every other unplaced read as Other, so
+   nothing stored can go missing. An id may be written as ["id", "Short"] to
+   override the chip's label. */
 const LIVE_LAYOUT = [
-  { title: "Preflop", cat: "preflop", subs: [{ rows: [
-    { label: "Opening", hidden: true, ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
-    { matrix: "First raise" },
-    { matrix: "LRR" },
-    { label: "Limping", ids: ["ep-range-limp", "attacks-limps", "limp-wide-multiplier"] },
-    { label: "vs 3-bet / 4-bet", ids: ["3bets-light", "3bet-tight", "over-folds-3bet", "can-4bet-light", "lrr-bluff"] },
-    { label: "Style", lines: true, ids: [{ id: "preflop-style-gto", label: "Preflop", chip: "GTO", chips: true, also: [["preflop-style-exp", "EXP"]] }, { id: "limp-scale-ws-tight", label: "Limp with wS", chip: "Tight", chips: true, also: [["limp-scale-ws-normal", "Normal"], ["limp-scale-ws-wide", "Wide"]] }, { id: "limp-scale-ns-tight", label: "Limp with nS", chip: "Tight", chips: true, also: [["limp-scale-ns-normal", "Normal"], ["limp-scale-ns-wide", "Wide"]] }] },
-    { label: "SlowP Open", lines: true, ids: [["slowp-open-ws", "wSquid"], ["slowp-open-ns", "nSquid"]] },
-    { label: "Sizing", ids: ["preflop-sizing", "3bet-sizing"] },
+  /* "Opens xRV xRB" per squid state is the two position matrices — Opens is
+     the first raise, xRV / xRB the limp-reraise for value / as a bluff — each
+     already split nS / wS. SlowP Open stays beside them. */
+  { title: "Squid", subs: [{ rows: [
+    { matrix: "First raise", label: "Opens" },
+    { matrix: "LRR", label: "xR" },
+    { lines: true, ids: [{ id: "slowp-open-ws", label: "SlowP Open", chip: "wS", chips: true, also: [["slowp-open-ns", "nS"]] }] },
   ] }] },
-  { title: "Postflop", cat: "postflop", subs: [
-    { label: "Flop", rows: [
-      { label: "Aggression", ids: [["station-f", "Station"], ["raise-nuts-f", "Raise nuts"], ["bluff-till-f", "Bluff till"], ["bluff-raise-f", "Bluff raise"], ["bluff-xt-f", "Bluff XT"], "f-b3b-nut"] },
-      { label: "Cbet & float", ids: ["pfr-oop-cbet", "over-cbet", "cb-light-mwp", "pfc-b-light-mwp", "floats-wide", ["f-float-oop", "Float F OOP"], ["f-float-ip", "Float F IP"], "f-protect-oop", "protect-disadv-board", "f-bf-disadv-board", "f-adv-weak-check", { id: "f-low-board-ip-passive", label: "Low Board IP", chip: "Passive", chips: true, also: [["f-low-board-ip-canbluff", "CanBluff"], ["f-low-board-ip-protect", "Protect"]] }] },
-      { label: "Leads", ids: ["lead-limped", "check-oop-limped"] },
-      { label: "As PFC", lines: true, ids: ["f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", { label: "xR", subs: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-air", "Air"], ["f-xr-pfc-gu-turn", "GuTurn"]] }, "punchbag-f-pfc", ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { label: "Thin XT F", subs: [["f-thin-xt-srp", "SRP"], ["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }, { label: "Check Back F", subs: [["f-xb-pfc-fd", "FD"], ["f-xb-pfc-sd", "SD"], ["f-xb-pfc-topp", "TopP"], ["f-xb-pfc-2p", "2P+"]] }, { id: "f-adv-board-bxt", label: "Adv. Board F", chip: "BXT", chips: true, also: [["f-adv-board-air", "Air"]] }] },
-      { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu"] },
+  { title: "Preflop", subs: [{ rows: [
+    { lines: true, ids: [
+      { id: "limp-scale-ws-tight", label: "Limps wS", chip: "Tight", chips: true, also: [["limp-scale-ws-normal", "Normal"], ["limp-scale-ws-wide", "Wide"]] },
+      { id: "limp-scale-ns-tight", label: "Limps nS", chip: "Tight", chips: true, also: [["limp-scale-ns-normal", "Normal"], ["limp-scale-ns-wide", "Wide"]] },
+      { id: "open-scale-tight", label: "Open", chip: "Tight", chips: true, also: [["open-scale-normal", "Normal"], ["open-scale-wide", "Wide"]] },
+      { id: "3bet-tight", label: "3bet", chip: "Tight", chips: true, also: [["3bet-linear", "Linear"], ["3bet-polar", "Polar"], ["3bet-wide", "Wide"]] },
+      { id: "over-folds-3bet", label: "Fold to 3bet", chip: "Yes", chips: true },
+      { id: "can-4bet-light", label: "Can 4bet light", chip: "Yes", chips: true },
     ] },
-    { label: "Turn", rows: [
-      { label: "Aggression", ids: [["station-t", "Station"], { id: "raise-nuts-t", label: "Raise nuts", also: [["raise-nuts-t-even-boat", "Even Boat"], ["raise-nuts-t-even-ip", "Even IP"], ["raise-nuts-t-xnut", "XNut"]] }, ["bluff-till-t", "Bluff till"], ["bluff-raise-t", "Bluff raise"], ["bluff-xt-t", "Bluff XT"], ["thin-xt-t", "Thin XT"], ["barrels-off", "Barrels"]] },
-      { label: "As PFR", lines: true, ids: [{ label: "Barrels", subs: [["t-barrel-air", "Air"], ["t-barrel-equity", "Equity"], ["t-barrel-sdv", "SDV"], ["t-barrel-tight", "Tight"], ["t-barrel-one-done", "One&Done"], ["t-barrel-mergy", "Mergy"]] }, { id: "t-bluff-xb", label: "Bluff", chip: "XB Line", chips: true }, { label: "Turn Cards", subs: [["t-bcard-4str", "4Str"], ["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] }, { id: "t-low-boards-passive", label: "Low boards", chip: "Passive", chips: true, also: [["t-low-boards-aggro", "Aggro"]] }, "punchbag-t-pfr", "t-hero-fold", "t-cb-gu", { id: "t-xr-pfr-nut", label: "xR", chip: "Nut", chips: true, also: [["t-xr-pfr-bluff", "Bluff"]] }] },
-      { label: "As PFC", lines: true, ids: ["t-probe-hu", "t-probe-mw", { id: "t-probe-merge", label: "Probe T", chip: "Merge", chips: true, also: [["t-probe-polar", "Polar"]] }, { id: "t-bet-vol-high", label: "Bet vol", chip: "High", chips: true, also: [["t-bet-vol-low", "Low"]] }, { id: "t-call-style-absv", label: "Turn call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Play"], ["t-call-style-wide", "Wide"]] }, { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-flush", "Flush"], ["have-lead-t-strong", "Strong"], ["have-lead-t-merge", "Merge"]] }, "t-protect-flush", ["bsti-t", "BSTI"]] },
-      { label: "HUD", onlineOnly: true, ids: ["t-barrel2-freq-hu", "t-fold-to-xr-hu"] },
+  ] }] },
+  { title: "MWP Limp", subs: [{ rows: [
+    { lines: true, ids: [
+      { id: "mwl-oop-probe-rangex", label: "Probe OOP F", chip: "Range X", chips: true, also: [["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKtp"], ["mwl-oop-probe-topp", "TopP+"]] },
+      { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] },
+      { id: "mwl-ip-stab-air", label: "IP Stab", chip: "Air", chips: true, also: [["mwl-ip-stab-merge", "Merge"], ["mwl-ip-stab-strong", "Strong"], ["mwl-ip-stab-fxr", "FxR"]] },
     ] },
-    { label: "River", rows: [
-      { label: "Aggression", ids: [["station-r", "Station"], ["raise-nuts-r", "Raise nuts"], ["bluff-till-r", "Bluff till"], ["bluff-raise-r", "Bluff raise"], ["bluff-xt-r", "Bluff XT"], ["bluffs-rivers", "Bluffs rivers"]] },
-      { label: "As PFR", lines: true, ids: [{ id: "r-bluff-lines-bbb", label: "Bluff lines (can?)", chip: "BBB", chips: true, also: [["r-bluff-lines-bxb", "BXB"], ["r-bluff-lines-xbb", "XBB"], ["r-bluff-lines-xxb", "XXB"], ["r-bluff-lines-cxb", "xCXB"], ["r-bluff-lines-mwp", "MWP"]] }, { id: "r-bh-fd", label: "Bluff hands", chip: "FD", chips: true, also: [["r-bh-oesd", "OESD"], ["r-bh-air", "Air"], ["r-bh-ahigh", "A-high"], ["r-bh-4flush", "4Flush"], ["r-bh-4str", "4Str"]] }, { id: "r-bluff-bal-overbluff", label: "Bluff balance", chip: "Overbluff", chips: true, also: [["r-bluff-bal-underbluff", "Underbluff"]] }, "r-thin", "r-draw-hyper-focus-pfr", "r-traps", "r-can-x-nsd", "r-xc-thin", "punchbag-r-pfr"] },
-      { label: "As PFC", lines: true, ids: [{ id: "r-fold-bal-overfold", label: "Fold balance", chip: "Overfold", chips: true, also: [["r-fold-bal-underfold", "Underfold"]] }, { id: "r-to-sizing-elastic", label: "To sizing", chip: "Elastic", chips: true, also: [["r-to-sizing-inelastic", "Inelastic"]] }, { id: "r-bet-vol-high", label: "Bet vol", chip: "High", chips: true, also: [["r-bet-vol-low", "Low"]] }, { id: "r-can-raise-bluff", label: "Can raise?", chip: "Bluff", chips: true, also: [["r-can-raise-thin", "Thin"]] }, { id: "t-call-range-2ndp", label: "T call range", chip: "2ndP", chips: true, also: [["t-call-range-sd", "SD"], ["t-call-range-wfd", "wFD"], ["t-call-range-lt3rdp", "<3rdP"]] }, { id: "r-call-range-wide", label: "Call range", chip: "Wide", chips: true, also: [["r-call-range-tight", "Tight"]] }, { id: "r-call-hands-light", label: "Bluff catch", chip: "Light", chips: true, also: [["r-call-hands-tight", "Tight"]] }, "r-draw-focus-pfc", "r-hand-to-bluff-pfc", { id: "have-lead-r-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"], ["have-lead-r-bluff", "Bluff"]] }, ["bsti-r", "BSTI"]] },
-      { label: "HUD", onlineOnly: true, ids: ["r-barrel3-freq-hu", "r-af-hu"] },
+  ] }] },
+  { title: "Flop Exploit", subs: [
+    { label: "As PFR", rows: [
+      { label: "When Bet", lines: true, ids: [
+        { id: "f-cbet-tight-hu", label: "Cbet", chip: "TightHU", chips: true, also: [["f-cbet-wide-hu", "WideHU"], ["f-cbet-tight-mw", "TightMW"], ["f-cbet-wide-mw", "WideMW"]] },
+        { id: "f-folds-to-xr", label: "Fold to xR", chip: "Yes", chips: true },
+        { id: "f-b3b-nut", label: "B3b Nut", chip: "Yes", chips: true },
+        { id: "f-low-board-toowide", label: "Low Board", chip: "Too wide", chips: true, also: [["f-low-board-abc", "ABC"], ["f-low-board-ip-protect", "Protective"]] },
+      ] },
+      { label: "When Check", lines: true, ids: [
+        { id: "f-protect-oop", label: "OOP Protective", chip: "Yes", chips: true },
+        { id: "f-xr-pfr-air", label: "xR", chip: "Air", chips: true, also: [["f-xr-pfr-draw", "Draw"], ["f-xr-pfr-strong", "Strong"]] },
+        { id: "f-adv-weak-check", label: "Adv Board", chip: "WeakCheck", chips: true },
+        { id: "punchbag-f-pfc", label: "Punching Bag", chip: "Yes", chips: true },
+      ] },
     ] },
-    { label: "All streets", rows: [
-      { label: "Lead", ids: [["ld-draws", "Draws"], ["ld-tp", "TP"], ["ld-2p", "2P+"]] },
-      { label: "Range shape", ids: ["merged", "polar", "bad-polar", "sp-dis-board", "oop-protect", "bet-merged-mwp", "protected-block"] },
-      { label: "MWP limp", lines: true, ids: [{ id: "mwl-oop-probe-have", label: "Probe OOP F", chip: "Have", chips: true, also: [["mwl-oop-probe-rangex", "RangeX"], ["mwl-oop-probe-draw", "Draw"], ["mwl-oop-probe-merge", "Merge"], ["mwl-oop-probe-wktp", "WKTp"], ["mwl-oop-probe-topp", "TopP+"]] }, { id: "mwl-xr-strong", label: "xR", chip: "Strong", chips: true, also: [["mwl-xr-bluff", "Bluff"]] }, { id: "mwl-ip-stab-merge", label: "IP stab", chip: "Merge", chips: true, also: [["mwl-ip-stab-air", "Air"]] }] },
-    ] },
+    { label: "As PFC", rows: [{ lines: true, ids: [
+      { id: "f-bet-vol-high", label: "Bet Volume", chip: "High", chips: true, also: [["f-bet-vol-low", "Low"]] },
+      { id: "f-xr-pfc-air", label: "xR or R", chip: "Air", chips: true, also: [["f-xr-pfc-equity", "Equity"], ["f-xr-pfc-strong", "Strong"]] },
+      { id: "f-bxt-overbluff", label: "BXT", chip: "Overbluff", chips: true, also: [["f-bxt-normal", "Normal"], ["f-bxt-merged", "Merged"], ["f-bxt-air", "Air"]] },
+      { id: "f-attack-adv", label: "Attack", chip: "Adv. Brd.", chips: true, also: [["f-attack-disadv", "Dis. Adv"]] },
+      { id: "have-lead-f-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-f-merge", "Merge"], ["have-lead-f-strong", "Strong"]] },
+    ] }] },
   ] },
-  { title: "Sizing", cat: "sizing", subs: [{ rows: [
-    { label: "Postflop", ids: ["bsti", "size-up-draws", "small-with-weak", "overbets-nuts", "inelastic-sizing"] },
-  ] }] },
-  { title: "Tells", cat: "live", subs: [{ rows: [
-    { label: "Physical / timing", ids: ["timing-tells", "snap-call-weak", "talks-when-strong"] },
-    { label: "Mental state", ids: ["tilts", "bluffcatch-losing", "force-squid"] },
+  { title: "Turn Exploit", subs: [
+    { label: "As PFR", rows: [{ lines: true, ids: [
+      { id: "t-barrel-one-done", label: "One and Done?", chip: "Yes", chips: true },
+      { id: "t-delay-bluff", label: "Delay Bluff", chip: "Yes", chips: true },
+      { id: "t-barrel-air", label: "Barrel", chip: "Air", chips: true, also: [["t-barrel-equity", "EquityBased"], ["t-barrel-mergy", "Mergy"], ["t-barrel-sdv", "SDV"], ["t-barrel-strong", "Strong"]] },
+      { id: "t-bcard-4str", label: "Bluff Turn", chip: "4Str", chips: true, also: [["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] },
+      { id: "t-low-boards-passive", label: "Low Boards", chip: "Passive", chips: true, also: [["t-low-boards-aggro", "Aggro"]] },
+      { id: "t-protect-flush", label: "Protect T Flush", chip: "Yes", chips: true },
+      { id: "punchbag-t-pfr", label: "Punching Bag", chip: "Yes", chips: true },
+    ] }] },
+    { label: "As PFC", rows: [{ lines: true, ids: [
+      { id: "t-bet-vol-high", label: "Bet Volume", chip: "High", chips: true, also: [["t-bet-vol-low", "Low"]] },
+      { id: "let-realize-t", label: "Let me Realize", chip: "Yes", chips: true },
+      { id: "f-float-oop", label: "Float/Wide F", chip: "OOP", chips: true, also: [["f-float-ip", "IP"]] },
+      { id: "t-call-style-absv", label: "Turn Call", chip: "AbsV", chips: true, also: [["t-call-style-play", "Playability"], ["t-call-style-wide", "Wide"]] },
+      { id: "t-bxt-overbluff", label: "BXT", chip: "Overbluff", chips: true, also: [["t-bxt-normal", "Normal"], ["t-bxt-merged", "Merged"], ["t-bxt-air", "Air"]] },
+      { id: "f-xb-pfc-fd", label: "Check back F", chip: "FD", chips: true, also: [["f-xb-pfc-oesd", "OESD"], ["f-xb-pfc-gs", "GS"], ["f-xb-pfc-topp", "TopP"]] },
+      { id: "t-probe-tight", label: "Probe Turn", chip: "Tight", chips: true, also: [["t-probe-normal", "Normal"], ["t-probe-wide", "Wide"], ["t-probe-merge", "Merge"], ["t-probe-polar", "Polar"]] },
+      { id: "have-lead-t-draw", label: "Have Lead", chip: "Draw", chips: true, also: [["have-lead-t-merge", "Merge"], ["have-lead-t-strong", "Strong"], ["have-lead-t-flush", "Flush"]] },
+    ] }] },
+  ] },
+  { title: "River Exploit", subs: [
+    { label: "As PFR", rows: [{ lines: true, ids: [
+      { id: "r-bluff-bal-overbluff", label: "Frequency", chip: "Overbluff", chips: true, also: [["r-bluff-bal-underbluff", "Underbluff"]] },
+      { id: "r-bluff-lines-bbb", label: "Bluff Lines", chip: "BBB", chips: true, also: [["r-bluff-lines-bxb", "BXB"], ["r-bluff-lines-xbb", "XBB"], ["r-bluff-lines-xxb", "XXB"], ["r-bluff-lines-cxb", "xCXB"], ["r-bluff-lines-mwp", "MWP"]] },
+      { id: "r-bh-fd", label: "Bluff hands", chip: "FD", chips: true, also: [["r-bh-sd", "SD"], ["r-bh-hl", "HL"], ["r-bh-spew", "SPEW"], ["r-bh-ahigh", "A-High"]] },
+      { id: "r-rcard-3flush", label: "Rivers", chip: "3Flush", chips: true, also: [["r-rcard-4flush", "4Flush"], ["r-rcard-4str", "4Str"], ["r-rcard-blank", "Blanks"], ["r-rcard-over", "OverCards"]] },
+      { id: "r-bluff-type-hit", label: "Bluff Type", chip: "DrawsHit", chips: true, also: [["r-bluff-type-miss", "DrawsMiss"]] },
+      { id: "r-force-bluff-nonsd", label: "Force Bluff", chip: "NonSD", chips: true },
+      { id: "r-thin", label: "Marginal hands", chip: "ThinV", chips: true, also: [["r-marg-bluffcatcher", "TurnBluffcatcher"]] },
+      { id: "r-hand-to-bluff-pfr", label: "Turn hand to Bluff", chip: "Yes", chips: true },
+      { id: "force-squid", label: "Force Squid", chip: "Yes", chips: true },
+      { id: "r-traps", label: "Can Trap", chip: "Yes", chips: true },
+    ] }] },
+    { label: "As PFC", rows: [{ lines: true, ids: [
+      { id: "r-bet-vol-high", label: "Bet Vol", chip: "High", chips: true, also: [["r-bet-vol-low", "Low"]] },
+      { id: "have-lead-r-bluff", label: "Have Leads", chip: "Bluffs", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"], ["have-lead-r-blankstrong", "BlankStrong"]] },
+      { id: "bsti-r", label: "BSTI", chip: "Yes", chips: true },
+      { id: "bluff-xt-r", label: "Bluff XT", chip: "Yes", chips: true },
+      { id: "r-fold-bal-overfold", label: "Frequency", chip: "Overfold", chips: true, also: [["r-fold-bal-underfold", "Underfold"]] },
+      { id: "r-bc-drawshit", label: "Bluffcatch", chip: "DrawsHit", chips: true, also: [["r-bc-drawsmiss", "DrawsMiss"]] },
+      { id: "r-to-sizing-elastic", label: "Sizing", chip: "Elastic", chips: true, also: [["r-to-sizing-inelastic", "Inelastic"]] },
+      { id: "r-can-raise-bluff", label: "Can Raise", chip: "Bluff", chips: true, also: [["r-can-raise-thin", "Thin"]] },
+      { id: "t-call-range-2ndp", label: "T call range", chip: "2ndP", chips: true, also: [["t-call-range-sd", "SD"], ["t-call-range-wfd", "wFD"], ["t-call-range-lt3rdp", "<3rdP"]] },
+      { id: "r-call-range-wide", label: "Call range", chip: "Wide", chips: true, also: [["r-call-range-tight", "Tight"]] },
+    ] }] },
+  ] },
+  { title: "Physical Tells", subs: [{ rows: [{ lines: true, ids: [
+    { id: "tell-long-strong", label: "Timing Long", chip: "S", chips: true, also: [["tell-long-weak", "W"]] },
+    { id: "tell-fast-strong", label: "Timing Fast", chip: "S", chips: true, also: [["tell-fast-weak", "W"]] },
+    { id: "talks-when-strong", label: "Chatty = Strong", chip: "Yes", chips: true },
+    { id: "tell-acting", label: "Acting", chip: "Yes", chips: true },
+  ] }] }] },
+  /* Everything the outline above doesn't name. Starts folded (readCatShut). */
+  { title: "Earlier format", catchAll: true, subs: [{ rows: [
+    { label: "Opening", hidden: true, ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
+    { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu", "f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "t-barrel2-freq-hu", "t-fold-to-xr-hu", "t-probe-hu", "t-probe-mw", "r-barrel3-freq-hu", "r-af-hu"] },
   ] }] },
 ];
 
@@ -3254,7 +3319,7 @@ function renderOppReads(o) {
         const body = mx.rows.map(([rl, ids]) =>
           `<span class="pmr">${esc(rl)}</span>` +
           ids.map((id) => (live(id) ? readBtn(id, "", true) : "<span></span>")).join("")).join("");
-        return `<div class="readsub"><span class="rslabel">${esc(r.matrix)}</span>` +
+        return `<div class="readsub"><span class="rslabel">${esc(r.label || r.matrix)}</span>` +
           `<div class="posmx"><span></span>` + mx.cols.map((c) => `<span class="pmh">${esc(c)}</span>`).join("") +
           `${body}</div></div>`;
       }
