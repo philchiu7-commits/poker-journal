@@ -143,6 +143,14 @@ const TENDENCY_TAGS = [
      the extra dead money is the reason to raise, or the reason to trap. */
   { id: "slowp-open-ws",        cat: "preflop",  label: "wSquid SlowP Open" },
   { id: "slowp-open-ns",        cat: "preflop",  label: "nSquid SlowP Open" },
+  /* Live tab Squid lines (Phil, 2026-10-05): per squid type, does he open,
+     limp-reraise for value, limp-reraise as a bluff — plain yes/no each. */
+  { id: "sq-opens-ws",          cat: "preflop",  label: "wS Opens" },
+  { id: "sq-xrv-ws",            cat: "preflop",  label: "wS xR Value" },
+  { id: "sq-xrb-ws",            cat: "preflop",  label: "wS xR Bluff" },
+  { id: "sq-opens-ns",          cat: "preflop",  label: "nS Opens" },
+  { id: "sq-xrv-ns",            cat: "preflop",  label: "nS xR Value" },
+  { id: "sq-xrb-ns",            cat: "preflop",  label: "nS xR Bluff" },
   // preflop — 3bet / 4bet (linear/polar/bluff are retired — see RETIRED_TAG_IDS)
   { id: "3bet-linear",          cat: "preflop",  label: "3bet linear" },
   { id: "3bet-polar",           cat: "preflop",  label: "3bet polar" },

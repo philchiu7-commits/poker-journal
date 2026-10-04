@@ -237,11 +237,10 @@ const LIVE_LAYOUT = [
   /* "Opens xRV xRB" per squid state is the two position matrices — Opens is
      the first raise, xRV / xRB the limp-reraise for value / as a bluff — each
      already split nS / wS. SlowP Open stays beside them. */
-  { title: "Squid", subs: [{ rows: [
-    { matrix: "First raise", label: "Opens" },
-    { matrix: "LRR", label: "xR" },
-    { lines: true, ids: [{ id: "slowp-open-ws", label: "SlowP Open", chip: "wS", chips: true, also: [["slowp-open-ns", "nS"]] }] },
-  ] }] },
+  { title: "Squid", subs: [{ rows: [{ lines: true, ids: [
+    { id: "sq-opens-ws", label: "wS", chip: "Opens", chips: true, also: [["sq-xrv-ws", "xRV"], ["sq-xrb-ws", "xRB"]] },
+    { id: "sq-opens-ns", label: "nS", chip: "Opens", chips: true, also: [["sq-xrv-ns", "xRV"], ["sq-xrb-ns", "xRB"]] },
+  ] }] }] },
   { title: "Preflop", subs: [{ rows: [
     { lines: true, ids: [
       { id: "limp-scale-ws-tight", label: "Limps wS", chip: "Tight", chips: true, also: [["limp-scale-ws-normal", "Normal"], ["limp-scale-ws-wide", "Wide"]] },
