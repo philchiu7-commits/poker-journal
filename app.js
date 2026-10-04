@@ -31,7 +31,7 @@ let showReadPicker = true;        // Reads panel: full picker by default; collap
 /* Which sections of the read tree are folded shut. A view state, not a read:
    it is about what you are working on right now, not about the player, so it
    is the same for every opponent and it does not survive a reload. */
-const readCatShut = new Set(["Earlier format"]);  // the Live tab's leftovers start folded
+const readCatShut = new Set();
 let readTab = "online";           // which picker layout: "online" = street tree, "live" = by category. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
@@ -228,11 +228,10 @@ const POS_MATRIX = {
    shows set on the other. Every word on a line is its own yes/no read; where
    an older read asked the same question its id is reused under the new word,
    where none did the id is new. Reads the outline doesn't name — the format
-   this replaced is saved in Obsidian — still show, under Earlier format at the
-   bottom, which is the catch-all: it lists the hidden and online-only rows so
-   `placed` counts them, and takes every other unplaced read as Other, so
-   nothing stored can go missing. An id may be written as ["id", "Short"] to
-   override the chip's label. */
+   this replaced is saved in Obsidian — are not shown here at all (Phil,
+   2026-10-05: no catch-all on the Live tab); they stay stored and still show
+   on the Online tab. An id may be written as ["id", "Short"] to override the
+   chip's label. */
 const LIVE_LAYOUT = [
   /* "Opens xRV xRB" per squid state is the two position matrices — Opens is
      the first raise, xRV / xRB the limp-reraise for value / as a bluff — each
@@ -335,11 +334,6 @@ const LIVE_LAYOUT = [
     { id: "talks-when-strong", label: "Chatty = Strong", chip: "Yes", chips: true },
     { id: "tell-acting", label: "Acting", chip: "Yes", chips: true },
   ] }] }] },
-  /* Everything the outline above doesn't name. Starts folded (readCatShut). */
-  { title: "Earlier format", catchAll: true, subs: [{ rows: [
-    { label: "Opening", hidden: true, ids: ["open-too-wide", "ep-open-weak", "open-small-pp-ep", "limps-are-weak", "attack-limped-blinds", "open-range-w1s", "wide-cc"] },
-    { label: "HUD", onlineOnly: true, ids: ["f-cbet-freq-hu", "f-cbet-freq-mw", "f-fold-to-xr-hu", "f-fold-to-xr-mw", "f-oop-x-range-hu", "f-xr-freq-pfr", "have-b3b-v-f", "have-b3b-b-f", "fold-cbet-f-hu", "fold-cbet-f-mw", "fold-cbet-t-hu", "fold-cbet-r-hu", "f-xr-freq-pfc-hu", "f-xr-freq-pfc-mw", "t-barrel2-freq-hu", "t-fold-to-xr-hu", "t-probe-hu", "t-probe-mw", "r-barrel3-freq-hu", "r-af-hu"] },
-  ] }] },
 ];
 
 /* Thinking checklists behind the street headings on the Online tab — what to
