@@ -32,6 +32,7 @@ let showReadPicker = true;        // Reads panel: full picker by default; collap
    it is about what you are working on right now, not about the player, so it
    is the same for every opponent and it does not survive a reload. */
 const readCatShut = new Set();
+let hiddenPanels = new Set();      // detail-page panels Phil has switched off (data-panel keys). Sticky.
 let readTab = "online";           // which picker layout: "online" = street tree, "live" = by category. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
@@ -3245,14 +3246,17 @@ function renderOppReads(o) {
     return estBadge(id, lbl, !compact, compact
       ? `<button class="chip mini pline${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}"` +
         ` title="${esc(lbl)}">${st ? esc(STATE_WORD[st] || st) : "–"}</button>`
-      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl)}</button>`);
+      /* a chip whose word is Yes answers in the word as well as the colour:
+         Yes / Yes! green, No / No! red (Phil, 2026-10-05) */
+      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl === "Yes" && STATE_WORD[st] ? STATE_WORD[st] : lbl)}</button>`);
   };
   /* The hands' own answer beside Phil's: a % off the shown hands, tap for all.
      The hover lives on the words that name the read — the row label, a cap, or
      a word chip's own word — never on the Yes/No he taps (Phil). Display only:
      it never sets the read. Worked out only while the tree is open, and cached
      per player until their hands change. */
-  const est = showReadPicker && typeof readEstimates === "function" ? readEstimates(o.id, HANDS) : {};
+  // the % off the hands stays on the Online tab — the Live tab is reads only (Phil, 2026-10-05)
+  const est = showReadPicker && readTab !== "live" && typeof readEstimates === "function" ? readEstimates(o.id, HANDS) : {};
   const hasEst = (id) => !!est[id]?.n;
   const estHover = (ids) => { const on = ids.filter(hasEst); return on.length ? ` data-estpeek="${on.join(",")}"` : ""; };
   const estBadge = (id, lbl, word, chip) => {
@@ -3327,8 +3331,14 @@ function renderOppReads(o) {
          has once a long label like "Fold flop cbet MWP" has set its width,
          so a grouped line of numbers takes the whole row and puts its label
          above. Grouped chips are narrow enough to stay beside theirs. */
+      /* Four or more word chips on one line wrapped ragged — Barrel's five
+         fell 3 + 2 wherever the width broke. Those take the whole row too and
+         sit in a grid: 2×2 for four, three across for five to nine (Phil). */
+      const nWords = (x) => (subsOf(x) ? (subsOf(x).every((v) => !laid(idOf(v))) ? subsOf(x).filter((v) => live(idOf(v))).length : 0)
+        : x.chips ? [x, ...alsoOf(x)].filter((v) => live(idOf(v))).length : 0);
+      const gridCols = (x) => (nWords(x) >= 5 ? 3 : nWords(x) === 4 ? 2 : 0);
       const wide = (x) => (subsOf(x) ? (subsOf(x).length >= 2 && subsOf(x).every((v) => isStatRead(idOf(v))) ? " rlwide" : "")
-        : isTallyRead(idOf(x)) && choiceOptions(idOf(x)).length >= 4 ? " rlwide" : "");
+        : isTallyRead(idOf(x)) && choiceOptions(idOf(x)).length >= 4 ? " rlwide" : "") || (gridCols(x) ? " rlwide" : "");
       const lines = items.filter(asLine).map((x) => {
         const sb = subsOf(x);
         /* A group of plain yes/no reads is word chips — the word is the button and
@@ -3348,7 +3358,7 @@ function renderOppReads(o) {
           : readBtn(idOf(x), labelOf(x), true) +
             alsoOf(x).filter((a) => live(idOf(a))).map((a) => readBtn(idOf(a), labelOf(a), false)).join("");
         return `<span class="rllab${idsOf(x).some(isSet) ? " on" : ""}${wide(x)}"${estHover(idsOf(x))}>${esc(labelOf(x))}</span>` +
-          `<div class="rlctl${wide(x)}">${body}</div>`;
+          `<div class="rlctl${wide(x)}${gridCols(x) ? " rlgrid" : ""}"${gridCols(x) ? ` style="--cols:${gridCols(x)}"` : ""}>${body}</div>`;
       }).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
       return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
@@ -3738,6 +3748,17 @@ function renderOppHud(o) {
     <div class="hudgrid">${afCell}</div>${sizing3HTML(o)}`;
 }
 
+/* Which panels the detail page shows. Every panel can go — HUD, Sizings,
+   Ranges, Hands, Exploits, Reads, Notes, the front-page card — one setting
+   for every opponent, kept in meta. The switches live in the ✎ edit form so
+   they are a tap away without sitting on the page. */
+const PANELS = [["hud", "HUD"], ["sizing", "Sizings"], ["ranges", "Ranges"], ["hands", "Hands"],
+  ["exploits", "Exploits"], ["reads", "Reads"], ["notes", "Notes"], ["card", "Front-page card"]];
+function applyPanels() {
+  for (const el of document.querySelectorAll("#view-opp [data-panel]")) el.classList.toggle("hidden", hiddenPanels.has(el.dataset.panel));
+  $("od-panels").innerHTML = PANELS.map(([k, l]) =>
+    `<button class="chip mini${hiddenPanels.has(k) ? "" : " on"}" data-panelpick="${k}">${l}</button>`).join("");
+}
 function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
@@ -3763,6 +3784,7 @@ function renderOppDetail(id) {
   renderOppReads(o);
   renderOppSizing(o);
   renderOppHud(o);
+  applyPanels();
   $("od-editform").classList.add("hidden");
   $("od-e-name").value = o.name;
   $("od-e-group").value = o.group || "";
@@ -6571,6 +6593,14 @@ function bindStatic() {
     renderOppDetail(curOppId);
   };
   const handCount = (id) => HANDS.filter((h) => (h.villainIds || []).includes(id)).length;
+  $("od-panels").onclick = (e) => {
+    const b = e.target.closest("[data-panelpick]");
+    if (!b) return;
+    const k = b.dataset.panelpick;
+    hiddenPanels.has(k) ? hiddenPanels.delete(k) : hiddenPanels.add(k);
+    metaSet("hiddenPanels", [...hiddenPanels]);
+    applyPanels();
+  };
   $("od-e-del").onclick = async () => {
     const o = oppById(curOppId);
     /* Delete sits a thumb-width from Save. Name what actually dies — the reads,
@@ -7224,6 +7254,7 @@ async function boot() {
   openSizeStats = (await metaGet("openSizeStats")) || {};
   showReadPicker = (await metaGet("showReadPicker")) ?? true;
   readTab = (await metaGet("readTab")) === "live" ? "live" : "online";
+  hiddenPanels = new Set((await metaGet("hiddenPanels")) || []);
   // Storage is the only writer, but a half-written or older-shape value must
   // not take the whole tab down — drop what doesn't parse, keep the rest.
   savedRanges = ((await metaGet("savedRanges")) || [])

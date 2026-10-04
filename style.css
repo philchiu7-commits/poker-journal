@@ -1178,6 +1178,10 @@ button.sizecol:active { color: var(--text); }
 .rllab.rlwide { padding-bottom: 0; }
 .rlctl.rlwide { padding-top: 4px; }
 .readlines > .rlctl.rlwide { border-top: 0; }
+/* a long line of word chips: full width, laid out as a grid (2×2, or three across) */
+.rlctl.rlgrid { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 6px; }
+.rlctl.rlgrid .chip.mini { width: auto; min-width: 0; text-align: center; padding: 7px 4px; overflow: hidden; text-overflow: ellipsis; }
+.panelpick-title { margin: 12px 0 6px; }
 
 /* HUD-stat reads: the number off his HUD, typed in. Tally reads: tap an option
    once per sighting; the count rides on the chip. */
