@@ -7315,9 +7315,14 @@ async function boot() {
   {
     const by = await metaGet("hiddenPanelsBy");
     if (by) hiddenPanelsBy = { online: new Set(by.online || []), live: new Set(by.live || []) };
-    else {   // one list before v318: it becomes Online's, and Live starts from it plus the defaults
+    else {   // one list before v318, switched off at the table: it becomes Live's; Online starts with everything
       const one = (await metaGet("hiddenPanels")) || [];
-      hiddenPanelsBy = { online: new Set(one), live: new Set([...one, "hud", "sizing"]) };
+      hiddenPanelsBy = { online: new Set(), live: new Set([...one, "hud", "sizing"]) };
+    }
+    if (!(await metaGet("panelsFix321"))) {   // v318 handed the old list to Online too; HUD and Sizings come back once (v321)
+      hiddenPanelsBy.online.delete("hud"); hiddenPanelsBy.online.delete("sizing");
+      if (by) await metaSet("hiddenPanelsBy", { online: [...hiddenPanelsBy.online], live: [...hiddenPanelsBy.live] });
+      await metaSet("panelsFix321", 1);
     }
   }
   // Storage is the only writer, but a half-written or older-shape value must
