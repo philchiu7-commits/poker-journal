@@ -32,6 +32,7 @@ let showReadPicker = true;        // Reads panel: full picker by default; collap
    it is about what you are working on right now, not about the player, so it
    is the same for every opponent and it does not survive a reload. */
 const readCatShut = new Set();
+let readsFold = false;             // the whole Reads panel folded for the moment — to get past it, not a setting. Reopens on the next opponent.
 /* Detail-page panels switched off, one set per display: Live (at the table —
    no HUD, no Sizings, Ranges last) and Online. Keyed by data-panel. Sticky. */
 let hiddenPanelsBy = { online: new Set(), live: new Set(["hud", "sizing"]) };
@@ -3277,6 +3278,7 @@ function renderOppReads(o) {
     : `<span class="chipnote">No reads yet — tap Edit to set some.</span>`;
   $("od-readsum").classList.toggle("hidden", showReadPicker);
   $("od-tags").classList.toggle("hidden", !showReadPicker);
+  applyReadsFold();
   const editBtn = $("od-reads-edit");
   editBtn.textContent = showReadPicker ? "Hide" : `Edit${setReads.length ? ` · ${setReads.length}` : ""}`;
   editBtn.classList.toggle("on", showReadPicker);
@@ -3757,6 +3759,12 @@ function renderOppHud(o) {
    sitting on the page. Live also sends Ranges to the foot (body.pagelive). */
 const PANELS = [["hud", "HUD"], ["sizing", "Sizings"], ["ranges", "Ranges"], ["hands", "Hands"],
   ["exploits", "Exploits"], ["reads", "Reads"], ["notes", "Notes"], ["card", "Front-page card"]];
+function applyReadsFold() {
+  document.querySelector('#view-opp [data-panel="reads"]').classList.toggle("folded", readsFold);
+  const b = $("od-reads-fold");
+  b.setAttribute("aria-expanded", String(!readsFold));
+  b.title = readsFold ? "Open Reads" : "Fold Reads away for now";
+}
 function applyPanels() {
   const live = readTab === "live", hid = panelSet();
   document.body.classList.toggle("pagelive", live);
@@ -3790,6 +3798,7 @@ function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
   if (curOppId !== id) { editNoteId = null; editExploitId = null; }
+  if (id !== curOppId) readsFold = false;
   curOppId = id;
   $("od-name").textContent = o.name;
   $("od-meta").textContent = [o.group, o.physical].filter(Boolean).join(" · ");
@@ -6635,6 +6644,7 @@ function bindStatic() {
     metaSet("hiddenPanelsBy", { online: [...hiddenPanelsBy.online], live: [...hiddenPanelsBy.live] });
     applyPanels();
   };
+  $("od-reads-fold").onclick = () => { readsFold = !readsFold; applyReadsFold(); };
   $("od-mode").onclick = () => {
     readTab = readTab === "live" ? "online" : "live";
     metaSet("readTab", readTab);

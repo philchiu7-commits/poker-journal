@@ -1155,6 +1155,12 @@ button.sizecol:active { color: var(--text); }
   transform: rotate(90deg); transition: transform .12s ease; }
 .readcat.shut .rcfold::before { transform: rotate(0deg); }
 .rcfold:active { color: var(--text); }
+/* the Reads panel folds as a whole, same triangle on its header */
+.ptitlegrp { display: inline-flex; align-items: center; gap: 5px; }
+.ptitlegrp .rcfold { margin: 0; }
+.panel.folded > :not(.cardpanel-head) { display: none; }
+.panel.folded .cardpanel-head { margin-bottom: 0; }
+.panel.folded .rcfold::before { transform: rotate(0deg); }
 .readcat.shut .rchead { border-bottom: 0; }
 .rcn { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--accent);
   background: #1c2c47; border: 1px solid var(--accent); border-radius: 999px; padding: 0 7px; }
