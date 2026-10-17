@@ -372,7 +372,7 @@ function hqInfo(h) {
           open = true; lastAgg = a.actor;
         }
         if (a.act === "limp") limps++;
-        if (a.act === "call" && was >= 1 && !tagged.some((x) => x.st === "pre" && x.a.actor === a.actor && x.k.has("agg"))) k.add("flat");
+        if (a.act === "call" && was >= 1 && !tagged.some((x) => x.st === "pre" && x.a.actor === a.actor)) k.add("flat");   // cold: his first move, no limp or raise of his in yet
         k.lv = was;
       } else if (POST_AGG.includes(a.act)) {
         k.add("agg");
@@ -545,7 +545,7 @@ const HQ_HS_DRAW = { fd: (d) => d.fd, nfd: (d) => d.nutFd, oesd: (d) => d.oesd, 
 function hqHsLabel(c) {
   const draw = !!HQ_HS_DRAW[c.val];
   if (c.val === "value" || c.val === "bluff") return "shows " + HQ_HS_NAME[c.val]
-    + (c.st && c.st !== "pre" && c.st !== "post" ? " on the " + c.st : " on the street he bet");
+    + (c.st && c.st !== "pre" && c.st !== "post" ? " when he bets or raises the " + c.st : " on a street he bet or raised");
   return "shows " + HQ_HS_NAME[c.val] + (!draw && c.op !== "eq" && HQ_HS_R[c.val] != null ? (c.op === "ge" ? " or better" : " or worse") : "")
     + (c.st && c.st !== "pre" && c.st !== "post" ? " on the " + c.st : draw ? " on the flop or turn" : " by the last street he played");
 }
@@ -564,7 +564,8 @@ function hqAllInStreet(h, me) {
 }
 /* Value or bluff exactly as the Sizings grid splits it (madeClass): top pair,
    second pair or better is value; second pair on the turn is a bluff after a
-   flop bet and neither when the flop checked through. null = can't grade. */
+   flop bet and neither when the flop checked through. null = can't grade.
+   Only on a street he bet or raised: a hand he checked or called down is neither. */
 function hqValue(h, hole, b, st) {
   const k = typeof madeClass === "function" ? madeClass(hole, b) : null;
   if (!k) return null;
@@ -581,9 +582,10 @@ function hqHs(h, i, c) {
   const reached = ["flop", "turn", "river"].filter((st) => board.length >= N[st] && (!fold || ORD.indexOf(fold.street) >= ORD.indexOf(st))
     && (!shut || ORD.indexOf(shut) >= ORD.indexOf(st)));
   if (!reached.length) return null;
-  const draw = HQ_HS_DRAW[c.val];
-  const sts = c.st === "flop" || c.st === "turn" || c.st === "river" ? (reached.includes(c.st) ? [c.st] : [])
-    : draw || c.st === "post" ? reached.filter((st) => st !== "river") : [reached[reached.length - 1]];
+  const draw = HQ_HS_DRAW[c.val], vb = c.val === "value" || c.val === "bluff";
+  let sts = c.st === "flop" || c.st === "turn" || c.st === "river" ? (reached.includes(c.st) ? [c.st] : [])
+    : vb ? reached : draw || c.st === "post" ? reached.filter((st) => st !== "river") : [reached[reached.length - 1]];
+  if (vb) sts = sts.filter((st) => (h.actions || []).some((a) => a.actor === "v" + i && a.street === st && POST_AGG.includes(a.act)));
   if (!sts.length) return null;
   return sts.some((st) => {
     const b = board.slice(0, N[st]);
