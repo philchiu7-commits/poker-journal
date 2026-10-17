@@ -388,7 +388,7 @@ function hqInfo(h) {
           else if (prevAgg && !acted.has(prevAgg)) k.add("donk");
           // checked to him: the last street's aggressor checked first — the PFR on the flop, and after a street checked through
           const ini = prevAgg || pfr;
-          if (ini && a.actor !== ini && acted.has(ini)) k.add("bxt");
+          if (ini && a.actor !== ini && acted.has(ini) && a.actor !== pfr) k.add("bxt");   // the PFR's own bet is never BXT, even once someone else took the lead
         } else k.add("raise");
         open = true; lastAgg = a.actor;
       }
