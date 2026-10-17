@@ -555,6 +555,7 @@ const TENDENCY_TAGS = [
    6px stripe throws away. */
 const PLAYER_TYPES = [
   { id: "whale",        label: "Whale",        icon: "🐋", color: "#35c2d8" },
+  { id: "fish",         label: "Fish",         icon: "🐠", color: "#1fb8a6" },   // back on the list 2026-10-18 (Phil), its own teal
   { id: "loose-fish",   label: "Loose fish",   icon: "🐟", color: "#4fbf5a" },
   { id: "station-fish", label: "Station fish", icon: "☎️", color: "#e06fa6" },
   { id: "aggro-fish",   label: "Aggro fish",   icon: "💥", color: "#8f5fe0" },
@@ -572,7 +573,6 @@ const PLAYER_TYPES = [
    same orange Reg wears now, and Tight fish the same yellow as Tight passive
    fish. */
 const RETIRED_PLAYER_TYPES = [
-  { id: "fish",       label: "Fish",       icon: "🐠", color: "#8b8378" },
   { id: "tight-fish", label: "Tight fish", icon: "🎣", color: "#8b8378" },
 ];
 const PLAYER_TYPE_BY_ID = Object.fromEntries(

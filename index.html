@@ -36,19 +36,24 @@
   <header class="vhead sticky">
     <button class="backbtn" data-back>‹</button>
     <h1 id="od-name"></h1>
+    <button id="od-mode" class="iconbtn textbtn" title="Live or Online display — each keeps its own panels">Live</button>
     <button id="od-panelbtn" class="iconbtn" title="Show / hide panels">▤</button>
     <button id="od-edit" class="iconbtn" title="Edit">✎</button>
   </header>
   <div id="od-meta" class="muted sub2"></div>
   <div id="od-ptype" class="ptypebar"></div>
   <div id="od-panels-box" class="panel hidden">
-    <div class="ptitle">Show on this page — tap to hide or bring back</div>
+    <div class="ptitle" id="od-panels-title">Show on this page — tap to hide or bring back</div>
     <div id="od-panels" class="chiprow readwrap"></div>
   </div>
   <div id="od-editform" class="panel hidden">
     <input id="od-e-name" placeholder="Name" autocomplete="off">
     <input id="od-e-group" placeholder="Group" list="groups" autocomplete="off">
     <input id="od-e-physical" placeholder="Looks like… (for re-identifying)" autocomplete="off">
+    <div class="row photorow">
+      <label class="chip mini photobtn">📷 Photo<input id="od-e-photo" type="file" accept="image/*" hidden></label>
+      <button id="od-e-photo-del" class="chip mini hidden">Remove photo</button>
+    </div>
     <div class="row">
       <button id="od-e-save" class="primary">Save</button>
       <button id="od-e-merge" class="secondary">Merge…</button>

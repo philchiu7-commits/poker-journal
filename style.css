@@ -259,6 +259,12 @@ textarea.noteedit { margin-bottom: 0; }
 .odcol { display: contents; }
 .odhands { order: 1; }
 .odcol > .cardpanel { order: 2; }
+/* the Live display reads Ranges last — after the card on a phone, foot of its column on a laptop */
+body.pagelive #view-opp [data-panel="ranges"] { order: 3; }
+.oppavatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; flex: none; }
+.oppavatar.lg { width: 34px; height: 34px; margin-right: 8px; }
+.photobtn { display: inline-flex; align-items: center; }
+.photorow { margin-bottom: 8px; }
 .cardpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .cardpanel-head .ptitle { margin: 0; }
 .cardchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

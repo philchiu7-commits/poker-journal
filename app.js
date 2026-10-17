@@ -32,7 +32,10 @@ let showReadPicker = true;        // Reads panel: full picker by default; collap
    it is about what you are working on right now, not about the player, so it
    is the same for every opponent and it does not survive a reload. */
 const readCatShut = new Set();
-let hiddenPanels = new Set();      // detail-page panels Phil has switched off (data-panel keys). Sticky.
+/* Detail-page panels switched off, one set per display: Live (at the table —
+   no HUD, no Sizings, Ranges last) and Online. Keyed by data-panel. Sticky. */
+let hiddenPanelsBy = { online: new Set(), live: new Set(["hud", "sizing"]) };
+const panelSet = () => hiddenPanelsBy[readTab === "live" ? "live" : "online"];
 let readTab = "online";           // which picker layout: "online" = street tree, "live" = by category. Sticky.
 let showConvertedNotes = {};      // per-opponent toggle: show notes already converted to hands
 let oppEditMode = false;          // opponents list: reorder / regroup mode
@@ -2648,7 +2651,7 @@ function oppRowHTML(o, st) {
   return `<div class="lrow opprow${typeCls}${oppEditMode ? " editing" : ""}" data-opp="${o.id}"${typeStyle}>
     ${handle}
     <div class="opprow-body">
-      <div class="t">${typePill}<span class="oppname">${esc(o.name)}</span>${hudLine}</div>
+      <div class="t">${avatarHTML(o)}${typePill}<span class="oppname">${esc(o.name)}</span>${hudLine}</div>
       ${physLine}
       ${showChips ? `<div class="chiprow cardchips">${chips}</div>` : ""}
     </div>
@@ -3749,15 +3752,40 @@ function renderOppHud(o) {
 
 /* Which panels the detail page shows. Every panel can go — HUD, Sizings,
    Ranges, Hands, Exploits, Reads, Notes, the front-page card — one setting
-   for every opponent, kept in meta. The switches live in the ✎ edit form so
-   they are a tap away without sitting on the page. */
+   per display (Live / Online, the header button) for every opponent, kept in
+   meta. The ▤ button opens the switches, so they are a tap away without
+   sitting on the page. Live also sends Ranges to the foot (body.pagelive). */
 const PANELS = [["hud", "HUD"], ["sizing", "Sizings"], ["ranges", "Ranges"], ["hands", "Hands"],
   ["exploits", "Exploits"], ["reads", "Reads"], ["notes", "Notes"], ["card", "Front-page card"]];
 function applyPanels() {
-  for (const el of document.querySelectorAll("#view-opp [data-panel]")) el.classList.toggle("hidden", hiddenPanels.has(el.dataset.panel));
+  const live = readTab === "live", hid = panelSet();
+  document.body.classList.toggle("pagelive", live);
+  $("od-mode").textContent = live ? "Live" : "Online";
+  $("od-mode").classList.toggle("on", live);
+  $("od-panels-title").textContent = `Show on the ${live ? "Live" : "Online"} page — tap to hide or bring back`;
+  for (const el of document.querySelectorAll("#view-opp [data-panel]")) el.classList.toggle("hidden", hid.has(el.dataset.panel));
   $("od-panels").innerHTML = PANELS.map(([k, l]) =>
-    `<button class="chip mini${hiddenPanels.has(k) ? "" : " on"}" data-panelpick="${k}">${l}</button>`).join("");
+    `<button class="chip mini${hid.has(k) ? "" : " on"}" data-panelpick="${k}">${l}</button>`).join("");
 }
+/* A photo of the player, kept on the record as a small JPEG data URL so it
+   travels with exports and backups. Shrunk here: a phone camera frame is
+   megabytes, the face it is for needs a thumbnail. */
+function shrinkPhoto(file, max = 192) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("not an image this browser can read")); };
+    img.src = url;
+  });
+}
+const avatarHTML = (o, cls = "") => (o.photo ? `<img class="oppavatar${cls}" src="${o.photo}" alt="">` : "");
 function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
@@ -3771,7 +3799,7 @@ function renderOppDetail(id) {
   const nameEl = $("od-name");
   nameEl.style.setProperty("--player-color", type ? type.color : "");
   nameEl.classList.toggle("has-player-type", !!type);
-  nameEl.innerHTML = esc(o.name) + (type
+  nameEl.innerHTML = avatarHTML(o, " lg") + esc(o.name) + (type
     ? ` <button class="ptypepill" data-ptype-open="${o.id}" style="background:${type.color};border-color:${type.color}">${type.icon} ${esc(type.label)}</button>`
     : ` <button class="ptypepill empty" data-ptype-open="${o.id}" title="Set player type">◦</button>`);
   // Every type on the page, one tap to set — the pill in the sticky header is
@@ -3789,6 +3817,7 @@ function renderOppDetail(id) {
   $("od-e-name").value = o.name;
   $("od-e-group").value = o.group || "";
   $("od-e-physical").value = o.physical || "";
+  $("od-e-photo-del").classList.toggle("hidden", !o.photo);
 
 
   {
@@ -6601,10 +6630,34 @@ function bindStatic() {
   $("od-panels").onclick = (e) => {
     const b = e.target.closest("[data-panelpick]");
     if (!b) return;
-    const k = b.dataset.panelpick;
-    hiddenPanels.has(k) ? hiddenPanels.delete(k) : hiddenPanels.add(k);
-    metaSet("hiddenPanels", [...hiddenPanels]);
+    const k = b.dataset.panelpick, hid = panelSet();
+    hid.has(k) ? hid.delete(k) : hid.add(k);
+    metaSet("hiddenPanelsBy", { online: [...hiddenPanelsBy.online], live: [...hiddenPanelsBy.live] });
     applyPanels();
+  };
+  $("od-mode").onclick = () => {
+    readTab = readTab === "live" ? "online" : "live";
+    metaSet("readTab", readTab);
+    if (curOppId) renderOppDetail(curOppId);
+  };
+  $("od-e-photo").onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    const o = oppById(curOppId); if (!o) return;
+    try { o.photo = await shrinkPhoto(f); }
+    catch (err) { toast("Photo: " + err.message); return; }
+    o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(curOppId); renderOpponents();
+    $("od-editform").classList.remove("hidden");
+  };
+  $("od-e-photo-del").onclick = async () => {
+    const o = oppById(curOppId); if (!o) return;
+    delete o.photo; o.updatedAt = Date.now();
+    await dbPut("opponents", o);
+    renderOppDetail(curOppId); renderOpponents();
+    $("od-editform").classList.remove("hidden");
   };
   $("od-e-del").onclick = async () => {
     const o = oppById(curOppId);
@@ -6744,7 +6797,7 @@ function bindStatic() {
     readTab = tab; showReadPicker = true;
     metaSet("readTab", readTab); metaSet("showReadPicker", true);
     const o = oppById(curOppId);
-    if (o) renderOppReads(o);
+    if (o) { renderOppReads(o); applyPanels(); }
   };
   $("od-reads-online").onclick = readTabClick("online");
   $("od-reads-live").onclick = readTabClick("live");
@@ -7259,7 +7312,14 @@ async function boot() {
   openSizeStats = (await metaGet("openSizeStats")) || {};
   showReadPicker = (await metaGet("showReadPicker")) ?? true;
   readTab = (await metaGet("readTab")) === "live" ? "live" : "online";
-  hiddenPanels = new Set((await metaGet("hiddenPanels")) || []);
+  {
+    const by = await metaGet("hiddenPanelsBy");
+    if (by) hiddenPanelsBy = { online: new Set(by.online || []), live: new Set(by.live || []) };
+    else {   // one list before v318: it becomes Online's, and Live starts from it plus the defaults
+      const one = (await metaGet("hiddenPanels")) || [];
+      hiddenPanelsBy = { online: new Set(one), live: new Set([...one, "hud", "sizing"]) };
+    }
+  }
   // Storage is the only writer, but a half-written or older-shape value must
   // not take the whole tab down — drop what doesn't parse, keep the rest.
   savedRanges = ((await metaGet("savedRanges")) || [])
