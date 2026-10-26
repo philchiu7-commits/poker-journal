@@ -385,6 +385,8 @@ const TENDENCY_TAGS = [
   { id: "have-lead-t-flush", cat: "postflop", label: "Have Lead Flush" },
   { id: "have-lead-t-strong", cat: "postflop", label: "Have Lead Strong" },
   { id: "have-lead-t-merge", cat: "postflop", label: "Have Lead Merge" },
+  { id: "have-lead-t-have",  cat: "postflop", label: "Have Lead T Have" },
+  { id: "have-lead-t-bluff", cat: "postflop", label: "Have Lead T Bluff" },
   // river
   /* Superseded by the yes/no Bluff lines (can?) reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
@@ -503,6 +505,8 @@ const TENDENCY_TAGS = [
   { id: "have-lead-f-draw",     cat: "postflop", label: "Have Lead F Draw" },
   { id: "have-lead-f-merge",    cat: "postflop", label: "Have Lead F Merge" },
   { id: "have-lead-f-strong",   cat: "postflop", label: "Have Lead F Strong" },
+  { id: "have-lead-f-have",  cat: "postflop", label: "Have Lead F Have" },
+  { id: "have-lead-f-bluff", cat: "postflop", label: "Have Lead F Bluff" },
   { id: "t-delay-bluff",        cat: "postflop", label: "Delay Bluff" },
   { id: "t-barrel-strong",      cat: "postflop", label: "Barrels Strong" },
   { id: "let-realize-t",        cat: "postflop", label: "Let me Realize T" },
@@ -529,6 +533,8 @@ const TENDENCY_TAGS = [
   { id: "r-marg-bluffcatcher",  cat: "postflop", label: "Marginal → Turn Bluffcatcher" },
   { id: "r-hand-to-bluff-pfr",  cat: "postflop", label: "Turn hand to bluff (PFR)" },
   { id: "have-lead-r-blankstrong", cat: "postflop", label: "Have Lead BlankStrong" },
+  { id: "have-lead-r-have",      cat: "postflop", label: "Have Lead R Have" },
+  { id: "have-lead-r-bluff-any", cat: "postflop", label: "Have Lead R Bluff (Any)" },
   { id: "r-bc-drawshit",        cat: "postflop", label: "Bluffcatch DrawsHit" },
   { id: "r-bc-drawsmiss",       cat: "postflop", label: "Bluffcatch DrawsMiss" },
   { id: "tell-long-strong",     cat: "live",     label: "Timing Long = Strong" },
