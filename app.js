@@ -811,7 +811,7 @@ function normaliseHand(h) {
     if (!Array.isArray(arr)) return;
     for (let i = 0; i < arr.length; i++) if (arr[i] != null && !CARD_RX.test(arr[i])) { arr[i] = null; dirty = true; }
   };
-  fixCards(h.board); fixCards(h.heroCards);
+  fixCards(h.board); fixCards(h.board2); fixCards(h.heroCards);
   for (const v of h.villains || []) fixCards(v && v.cards);
   return dirty;
 }
@@ -4452,6 +4452,7 @@ function newDraft() {
     heroPos: null, heroCards: [null, null],
     heroIn: false,   // Hero opts in explicitly via the "You" chip
     board: [null, null, null, null, null],
+    board2: null,    // second runout when the hand was run twice
     actions: [], street: "pre", actor: null, lastV: "v0",
     note: "", effStack: predictEffStack(),
     sb: blindsDefault.sb, bb: blindsDefault.bb, std: blindsDefault.std,
@@ -5294,14 +5295,32 @@ function handWinner(h) {
   if (board.length !== 5 || !live.every((p) => (cardsOf(p) || []).filter(Boolean).length === 2)) return null;
   if (!board.every((c) => EVALUABLE_CARD.test(c))
       || !live.every((p) => cardsOf(p).filter(Boolean).every((c) => EVALUABLE_CARD.test(c)))) return null;
-  let best = null, winners = [];
-  for (const p of live) {
-    const s = best7(board.concat(cardsOf(p)));
-    const d = best ? cmpScore(s, best) : 1;
-    if (d > 0) { best = s; winners = [p]; }
-    else if (d === 0) winners.push(p);
+  const run = (bd) => {
+    let best = null, winners = [];
+    for (const p of live) {
+      const s = best7(bd.concat(cardsOf(p)));
+      const d = best ? cmpScore(s, best) : 1;
+      if (d > 0) { best = s; winners = [p]; }
+      else if (d === 0) winners.push(p);
+    }
+    return winners;
+  };
+  const w1 = run(board);
+  /* Run twice: each board takes half the pot, so the winners are everyone who
+     took either half — a split between boards reads as a chop. */
+  const b2 = runTwiceBoard(h);
+  if (b2) {
+    const w2 = run(b2);
+    return { winners: parts.filter((p) => w1.includes(p) || w2.includes(p)), how: "showdown", runs: [w1, w2] };
   }
-  return { winners, how: "showdown" };
+  return { winners: w1, how: "showdown" };
+}
+/* The second board of a hand run twice, or null: five evaluable cards, and not
+   just the first board over again. */
+function runTwiceBoard(h) {
+  const b1 = (h.board || []).filter(Boolean), b2 = (h.board2 || []).filter(Boolean);
+  if (b1.length !== 5 || b2.length !== 5 || !b2.every((c) => EVALUABLE_CARD.test(c))) return null;
+  return b2.some((c, i) => c !== b1[i]) ? b2 : null;
 }
 /* Hero-relative outcome for dots/records: "won" | "lost" | "chop" | null. */
 function heroResult(h) {
@@ -5547,6 +5566,15 @@ function renderHandEntry() {
   let ch = `<div class="crow crow-board">` +
     d.board.map((c, i) => slotBtn("board", i, c, ["F", "F", "F", "T", "R"][i])).join("") +
     `</div>`;
+  /* Run it twice: a second row for the other runout, so the replayer can split
+     the pot between the boards. */
+  if (d.board2) {
+    ch += `<div class="crow crow-board"><span class="cdiv">run 2</span>` +
+      d.board2.map((c, i) => slotBtn("board2", i, c, ["F", "F", "F", "T", "R"][i])).join("") +
+      `<button class="chip mini" data-ritoff title="Remove the second board">✕</button></div>`;
+  } else if (d.board.some(Boolean)) {
+    ch += `<div class="crow"><button class="chip mini" data-riton>＋ Run it twice</button></div>`;
+  }
   if (d.heroIn) {
     ch += `<div class="crow crow-holes"><span class="cdiv">hero</span>` +
       d.heroCards.map((c, i) => slotBtn("hero", i, c, "?")).join("") + `</div>`;
@@ -5908,6 +5936,10 @@ function bindHandEntry() {
         const cur = v.squid;
         v.squid = cur == null ? 0 : (cur >= 3 ? null : cur + 1);
       });
+    } else if (b.dataset.riton !== undefined) {
+      mutate(() => { draft.board2 = [null, null, null, null, null]; });
+    } else if (b.dataset.ritoff !== undefined) {
+      mutate(() => { draft.board2 = null; });
     } else if (b.dataset.slot) {
       const g = groupForSlot(b.dataset.slot);
       if (["flop", "turn", "river"].includes(g)) {
@@ -5988,7 +6020,11 @@ function bindHandEntry() {
 
 /* --- card picker sheet --- */
 
-function usedCards() {
+function usedCards(g) {
+  /* The second board shares its early streets with the first, so only the
+     hole cards and its own cards are taken there. */
+  if (/2$/.test(g || "")) return new Set([...(draft.board2 || []), ...draft.heroCards,
+    ...draft.villains.flatMap((v) => v.cards || [])].filter(Boolean));
   return new Set([...draft.board, ...draft.heroCards,
     ...draft.villains.flatMap((v) => v.cards || [])].filter(Boolean));
 }
@@ -5998,12 +6034,16 @@ function usedCards() {
 function groupForSlot(key) {
   const [zone, iS] = key.split(":");
   if (zone === "board") { const i = Number(iS); return i <= 2 ? "flop" : i === 3 ? "turn" : "river"; }
+  if (zone === "board2") { const i = Number(iS); return i <= 2 ? "flop2" : i === 3 ? "turn2" : "river2"; }
   return zone;                                   // "hero" | "v0" | "v1" ...
 }
 function groupSlots(g) {                          // -> [{ arr, i }] in fill order
   if (g === "flop")  return [0, 1, 2].map((i) => ({ arr: draft.board, i }));
   if (g === "turn")  return [{ arr: draft.board, i: 3 }];
   if (g === "river") return [{ arr: draft.board, i: 4 }];
+  if (g === "flop2")  return [0, 1, 2].map((i) => ({ arr: draft.board2, i }));
+  if (g === "turn2")  return [{ arr: draft.board2, i: 3 }];
+  if (g === "river2") return [{ arr: draft.board2, i: 4 }];
   if (g === "hero")  return [0, 1].map((i) => ({ arr: draft.heroCards, i }));
   const vi = Number(g.slice(1));
   const arr = (draft.villains[vi] || {}).cards;
@@ -6011,6 +6051,7 @@ function groupSlots(g) {                          // -> [{ arr, i }] in fill ord
 }
 function groupTitle(g) {
   if (g === "flop") return "Flop"; if (g === "turn") return "Turn"; if (g === "river") return "River";
+  if (/^(flop|turn|river)2$/.test(g)) return "Run 2 · " + groupTitle(g.slice(0, -1));
   if (g === "hero") return "Hero cards";
   const nm = oppById(draft.villains[Number(g.slice(1))]?.opponentId)?.name;
   return (nm || "Villain") + " cards";
@@ -6026,7 +6067,7 @@ function openGroupSheet(g, active) {
     active = fe >= 0 ? fe : 0;
   }
   sheetActive = active;
-  const used = usedCards();
+  const used = usedCards(g);
   const cur = slots[sheetActive].arr[slots[sheetActive].i];
   const preview = slots.length > 1 ? `<div class="gcslots">` + slots.map((s, idx) => {
     const c = s.arr[s.i];
@@ -6274,6 +6315,7 @@ async function saveHand() {
       squid: v.squid == null ? null : Number(v.squid) })),
     villainIds: d.villains.map((v) => v.opponentId).filter(Boolean),
     board: d.board, actions: d.actions,
+    ...(d.board2 && d.board2.some(Boolean) ? { board2: d.board2 } : {}),
     effStack: d.effStack ? Number(d.effStack) : null,
     blinds: (d.sb || d.bb || d.std)
       ? { sb: d.sb ? Number(d.sb) : null, bb: d.bb ? Number(d.bb) : null, std: d.std ? Number(d.std) : null }
@@ -6344,6 +6386,7 @@ function loadHandIntoDraft(h) {
     heroIn: h.hero !== undefined ? h.hero : true,
     mode: "chips", focusPos: null,
     board: [...(h.board || [])].concat([null, null, null, null, null]).slice(0, 5),
+    board2: h.board2 ? [...h.board2].concat([null, null, null, null, null]).slice(0, 5) : null,
     actions: (h.actions || []).map((a) => ({ ...a })),
     street: STREETS[Math.max(0, ...streets)] || "pre",
     actor: null, lastV: "v0",
@@ -7322,6 +7365,7 @@ async function boot() {
   openSizeStats = (await metaGet("openSizeStats")) || {};
   showReadPicker = (await metaGet("showReadPicker")) ?? true;
   rpUnit = (await metaGet("replayUnit")) === "chips" ? "chips" : "bb";
+  rpBoth = (await metaGet("replayBoth")) !== false;
   readTab = (await metaGet("readTab")) === "live" ? "live" : "online";
   {
     const by = await metaGet("hiddenPanelsBy");

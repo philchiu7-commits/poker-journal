@@ -68,6 +68,7 @@ function rpBuild(h) {
   const actorAt = {};
   seats.forEach((s) => { actorAt[s.pos] = s.actor; });
   const board = (h.board || []).filter((c) => /^[2-9TJQKA][cdhs]$/.test(String(c)));
+  const board2 = runTwiceBoard(h);                    // the other runout, when the hand was run twice
 
   let money = b.bb !== null && b.bb !== undefined;     // can the pot be walked at all
   const inv = {};                                     // what each actor has in, this street
@@ -187,15 +188,25 @@ function rpBuild(h) {
   if (live.length === 1 && folded.size) result = { winners: [live[0].actor], how: "folds" };
   else if (live.length > 1 && inferred !== "unknown" && board.length === 5
       && live.every((s) => s.cards.length === 2 && s.cards.every((c) => RP_CARD.test(c)))) {
-    let best = null, winners = [];
-    const hands = {};
-    for (const s of live) {
-      const b5 = rpBest5(board.concat(s.cards));
-      hands[s.actor] = b5;
-      const d = best ? cmpScore(b5.score, best) : 1;
-      if (d > 0) { best = b5.score; winners = [s.actor]; } else if (d === 0) winners.push(s.actor);
-    }
-    result = { winners, how: "showdown", hands };
+    /* One run per board. Run twice, each board takes half the pot, so a seat
+       can win one half and lose the other; `winners` is everyone who took
+       either half, which is what reads as a chop. */
+    const runOn = (bd) => {
+      let best = null, winners = [];
+      const hands = {};
+      for (const s of live) {
+        const b5 = rpBest5(bd.concat(s.cards));
+        hands[s.actor] = b5;
+        const d = best ? cmpScore(b5.score, best) : 1;
+        if (d > 0) { best = b5.score; winners = [s.actor]; } else if (d === 0) winners.push(s.actor);
+      }
+      return { winners, hands };
+    };
+    /* (hands per run are kept so each board's winning five can be shown) */
+    const runs = [runOn(board)];
+    if (board2 && board2.every((c) => RP_CARD.test(c))) runs.push(runOn(board2));
+    result = { winners: live.map((s) => s.actor).filter((a) => runs.some((x) => x.winners.includes(a))),
+      how: "showdown", hands: runs[0].hands, runs };
   }
   const outs = Object.entries(inv).sort((x, y) => y[1] - x[1]);
   const uncalled = outs.length > 1 ? outs[0][1] - outs[1][1] : (outs[0]?.[1] || 0);
@@ -204,7 +215,10 @@ function rpBuild(h) {
      their owner and the pot to the winners, so the last frame shows the win. */
   const payout = {};
   if (money && uncalled) payout[outs[0][0]] = uncalled;
-  if (won !== null) for (const w of result.winners) payout[w] = (payout[w] || 0) + won / result.winners.length;
+  if (won !== null) {
+    const runs = result.runs || [{ winners: result.winners }];
+    for (const run of runs) for (const w of run.winners) payout[w] = (payout[w] || 0) + won / runs.length / run.winners.length;
+  }
   sweep();
   frames.push({ ...last, note: null, actor: null, a: null, end: true,
     potSettled: last.potSettled + last.potStreet - (money ? uncalled : 0), potStreet: 0, inv: {}, paid: { ...paid },
@@ -221,7 +235,7 @@ function rpBuild(h) {
     else if (s.actor === "hero" && h.effStack > 0) s.start = h.effStack * u;
     else s.start = null;
   });
-  return { seats, unseated, frames, board, h, inferred, result, won, payout, stakes,
+  return { seats, unseated, frames, board, board2: result?.runs?.length > 1 ? board2 : null, h, inferred, result, won, payout, stakes,
     blinds: { SB, BB, STD, ANTE, dealt: dealt.size }, stacks: seats.some((s) => s.start),
     allInOnly: seats.some((s) => s.start) && seats.every((s) => !s.start || s.allInStack) };
 }
@@ -233,6 +247,9 @@ function rpBuild(h) {
    Chips only where there is no big blind to divide by, or when the toggle
    under the felt is set to Chips (rpUnit, kept in meta "replayUnit"). */
 let rpUnit = "bb";
+/* Hands run twice: show both boards on the felt (rpBoth, kept in meta
+   "replayBoth"). The pot is split between the boards either way. */
+let rpBoth = true;
 function rpBB(n, BB) {
   if (!(BB > 0) || rpUnit === "chips") return chipStr(n);
   const v = n / BB;
@@ -330,10 +347,15 @@ function rpDraw() {
   }).join("");
   const boardHTML = r.board.slice(0, f.boardN).map((c) => tileHTML(c)).join("") ||
     `<span class="rpnoboard">—</span>`;
+  /* Run twice: the second board goes under the first once the cards diverge —
+     before that there is only one board on the table. */
+  const div2 = r.board2 ? r.board2.findIndex((c, k) => c !== r.board[k]) : -1;
+  const two = rpBoth && div2 >= 0 && f.boardN > div2;
+  const board2HTML = two ? r.board2.slice(0, f.boardN).map((c) => tileHTML(c)).join("") : "";
   $("hv-table").innerHTML =
     `<div class="rpfelt">${seatHTML}
-       <div class="rpmid">
-         <div class="rpboard">${boardHTML}</div>
+       <div class="rpmid${two ? " two" : ""}">
+         <div class="rpboard">${boardHTML}</div>${two ? `<div class="rpboard">${board2HTML}</div>` : ""}
          <div class="rppot${i > 0 && !f.a && !f.end && f.street !== "pre" ? " swept" : ""}">${f.money
            ? "Pot " + rpBB(f.potSettled, r.blinds.BB) +
              (f.potStreet ? `<span class="rpout">+${rpBB(f.potStreet, r.blinds.BB)}</span>` : "")
@@ -366,7 +388,8 @@ function rpTransport() {
       /* No big blind on record, nothing to divide by: chips only, no toggle. */
       r.blinds.BB > 0 ? `<span class="rpunit" role="group" aria-label="Show amounts in">` +
         [["bb", "BB"], ["chips", "Chips"]].map(([u, l]) =>
-          `<button class="chip mini${rpUnit === u ? " on" : ""}" data-rpunit="${u}" aria-pressed="${rpUnit === u}">${l}</button>`).join("") + `</span>` : ""}</div>
+          `<button class="chip mini${rpUnit === u ? " on" : ""}" data-rpunit="${u}" aria-pressed="${rpUnit === u}">${l}</button>`).join("") + `</span>` : ""}${
+      r.board2 ? `<span class="rpunit"><button class="chip mini${rpBoth ? " on" : ""}" data-rpboth aria-pressed="${rpBoth}" title="Show both boards of a hand run twice">2 boards</button></span>` : ""}</div>
      <div class="rpsteps">
        <button class="rpbtn rpnext" data-hvstep="-1" ${hvNextId(-1) ? "" : "disabled"} title="Previous hand">‹ Prev</button>
        <button class="rpbtn" data-rpgo="0" ${i === 0 ? "disabled" : ""} title="Start">⏮</button>
@@ -492,16 +515,30 @@ function rpHistory() {
     let cards = "";
     for (const s of live) {
       const won = !!res && res.winners.includes(s.actor);
-      const eq = res?.how === "showdown" ? (won ? Math.round(100 / res.winners.length) : 0) + "%" : "";
+      /* Share of the pot: a half per board when run twice, so winning one and
+         losing the other reads 50%. */
+      const runs = res?.runs || (res ? [{ winners: res.winners }] : []);
+      const eq = res?.how === "showdown"
+        ? Math.round(100 * runs.reduce((t, run) => t + (run.winners.includes(s.actor) ? 1 / run.winners.length : 0), 0) / runs.length) + "%" : "";
       cards += `<button class="rphh-card k-sd${won ? " won" : ""}${i === last ? " on" : ""}" data-rpgo="${last}">${who(s.actor)}` +
         `<span class="rphh-act rphh-sd">${s.cards.length ? tilesHTML(s.cards) : "<em>not shown</em>"}${eq ? `<b>${eq}</b>` : ""}</span></button>`;
     }
     if (res) {
-      const names = res.winners.map((a) => seatOf[a]?.name || a).join(" & ");
-      const hand = res.hands?.[res.winners[0]];
-      cards += `<div class="rphh-win"><div>${esc(names)} ${res.winners.length > 1 ? "chop" : "wins"}${r.won !== null ? " " + rpBB(r.won, b.BB) : ""}` +
-        `${res.how === "folds" ? " <small>all fold</small>" : ""}</div>` +
-        (hand ? `<div class="rphh-five">${tilesHTML(hand.cards)}<small>${RP_HAND_NAMES[hand.score[0]]}</small></div>` : "") + `</div>`;
+      const nm = (ws) => ws.map((a) => seatOf[a]?.name || a).join(" & ");
+      if (res.runs && res.runs.length > 1) {
+        /* Run twice: one line per board, each worth half the pot. */
+        res.runs.forEach((run, k) => {
+          const hand = res.runs[k].hands?.[run.winners[0]];
+          cards += `<div class="rphh-win"><div><small>Board ${k + 1}</small> ${esc(nm(run.winners))} ${run.winners.length > 1 ? "chop" : "wins"}` +
+            `${r.won !== null ? " " + rpBB(r.won / res.runs.length, b.BB) : ""}</div>` +
+            (hand ? `<div class="rphh-five">${tilesHTML(hand.cards)}<small>${RP_HAND_NAMES[hand.score[0]]}</small></div>` : "") + `</div>`;
+        });
+      } else {
+        const hand = res.hands?.[res.winners[0]];
+        cards += `<div class="rphh-win"><div>${esc(nm(res.winners))} ${res.winners.length > 1 ? "chop" : "wins"}${r.won !== null ? " " + rpBB(r.won, b.BB) : ""}` +
+          `${res.how === "folds" ? " <small>all fold</small>" : ""}</div>` +
+          (hand ? `<div class="rphh-five">${tilesHTML(hand.cards)}<small>${RP_HAND_NAMES[hand.score[0]]}</small></div>` : "") + `</div>`;
+      }
     }
     cols.push(`<div class="rphh-col">${head(last, res ? (res.how === "folds" ? "Result" : "Showdown") : "End", r.won !== null ? rpBB(r.won, b.BB) : fe.money ? rpBB(fe.potSettled, b.BB) : "")}${cards}</div>`);
   }
@@ -532,6 +569,12 @@ function rpClick(e) {
     rpUnit = un.dataset.rpunit === "chips" ? "chips" : "bb";
     metaSet("replayUnit", rpUnit);
     rpState.r = rpBuild(rpState.r.h);                  // the action notes are worded at build time
+    rpDraw();
+    return;
+  }
+  if (e.target.closest("[data-rpboth]")) {
+    rpBoth = !rpBoth;
+    metaSet("replayBoth", rpBoth);
     rpDraw();
     return;
   }

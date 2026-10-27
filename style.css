@@ -1476,6 +1476,10 @@ button.estn:active { color: var(--accent); }
 .rpjumps { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 /* BB / Chips: two chips side by side, set apart from the street jumps. */
 .rpunit { display: inline-flex; gap: 4px; margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--line); }
+/* Run twice: two boards stacked, a touch smaller so the pot still fits. */
+.rpmid.two { gap: 4px; }
+.rpmid.two .rpboard .ctile { font-size: 15px; padding: 3px 5px; }
+.rpmid.two .rpboard .ctile .suit { font-size: 12px; }
 .rpsteps { display: flex; align-items: center; gap: 10px; }
 /* Replaces jump-to-end: at the end of a hand what you want is the next one. */
 .rpbtn.rpnext { width: auto; height: 34px; border-radius: 999px; padding: 0 12px;
@@ -1643,6 +1647,8 @@ button.estn:active { color: var(--accent); }
   .rpboard { gap: 6px; }
   .rpboard .ctile { font-size: 28px; padding: 7px 10px; }
   .rpboard .ctile .suit { font-size: 22px; }
+  .rpmid.two .rpboard .ctile { font-size: 22px; padding: 5px 8px; }
+  .rpmid.two .rpboard .ctile .suit { font-size: 17px; }
   .rppot { font-size: 15px; padding: 3px 14px; }
   .rpfelt .ctile { font-size: 21px; padding: 4px 6px; }
   .rpfelt .ctile .suit { font-size: 17px; }
