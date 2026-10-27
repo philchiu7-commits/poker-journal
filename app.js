@@ -7321,6 +7321,7 @@ async function boot() {
   lineupSeats = (await metaGet("lineupSeats")) || 9;
   openSizeStats = (await metaGet("openSizeStats")) || {};
   showReadPicker = (await metaGet("showReadPicker")) ?? true;
+  rpUnit = (await metaGet("replayUnit")) === "chips" ? "chips" : "bb";
   readTab = (await metaGet("readTab")) === "live" ? "live" : "online";
   {
     const by = await metaGet("hiddenPanelsBy");

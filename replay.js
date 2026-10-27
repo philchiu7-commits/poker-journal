@@ -230,9 +230,11 @@ function rpBuild(h) {
    jam, everything else is itself. The felt reads by colour before it reads by
    words — orange is a raise wherever it appears, green is a call. */
 /* Amounts in big blinds, the unit a hand is thought in (Phil, 2026-09-27).
-   Chips only where there is no big blind to divide by. */
+   Chips only where there is no big blind to divide by, or when the toggle
+   under the felt is set to Chips (rpUnit, kept in meta "replayUnit"). */
+let rpUnit = "bb";
 function rpBB(n, BB) {
-  if (!(BB > 0)) return chipStr(n);
+  if (!(BB > 0) || rpUnit === "chips") return chipStr(n);
   const v = n / BB;
   return String(v >= 100 ? Math.round(v) : v >= 10 ? +v.toFixed(1) : +v.toFixed(2)) + "bb";
 }
@@ -360,7 +362,11 @@ function rpTransport() {
   const jumps = RP_STREETS.filter((st) => r.frames.some((f) => f.street === st && !f.end));
   $("hv-transport").innerHTML =
     `<div class="rpjumps">${jumps.map((st) =>
-      `<button class="chip mini${r.frames[i].street === st ? " on" : ""}" data-rpjump="${st}">${st === "pre" ? "Pre" : RP_STREET_LABEL[st]}</button>`).join("")}</div>
+      `<button class="chip mini${r.frames[i].street === st ? " on" : ""}" data-rpjump="${st}">${st === "pre" ? "Pre" : RP_STREET_LABEL[st]}</button>`).join("")}${
+      /* No big blind on record, nothing to divide by: chips only, no toggle. */
+      r.blinds.BB > 0 ? `<span class="rpunit" role="group" aria-label="Show amounts in">` +
+        [["bb", "BB"], ["chips", "Chips"]].map(([u, l]) =>
+          `<button class="chip mini${rpUnit === u ? " on" : ""}" data-rpunit="${u}" aria-pressed="${rpUnit === u}">${l}</button>`).join("") + `</span>` : ""}</div>
      <div class="rpsteps">
        <button class="rpbtn rpnext" data-hvstep="-1" ${hvNextId(-1) ? "" : "disabled"} title="Previous hand">‹ Prev</button>
        <button class="rpbtn" data-rpgo="0" ${i === 0 ? "disabled" : ""} title="Start">⏮</button>
@@ -521,6 +527,14 @@ function rpPlay() {
 function rpClick(e) {
   const hs = e.target.closest("[data-hvstep]");
   if (hs) { if (!hs.disabled) hvStep(Number(hs.dataset.hvstep)); return; }
+  const un = e.target.closest("[data-rpunit]");
+  if (un) {
+    rpUnit = un.dataset.rpunit === "chips" ? "chips" : "bb";
+    metaSet("replayUnit", rpUnit);
+    rpState.r = rpBuild(rpState.r.h);                  // the action notes are worded at build time
+    rpDraw();
+    return;
+  }
   const j = e.target.closest("[data-rpjump]");
   if (j) { rpStop(); rpGo(rpState.r.frames.findIndex((f) => f.street === j.dataset.rpjump && !f.end)); return; }
   const g = e.target.closest("[data-rpgo]");

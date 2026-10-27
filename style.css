@@ -1474,6 +1474,8 @@ button.estn:active { color: var(--accent); }
 .rptransport { display: flex; flex-direction: column; align-items: center; gap: 8px;
   margin: 0 0 10px; }
 .rpjumps { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+/* BB / Chips: two chips side by side, set apart from the street jumps. */
+.rpunit { display: inline-flex; gap: 4px; margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--line); }
 .rpsteps { display: flex; align-items: center; gap: 10px; }
 /* Replaces jump-to-end: at the end of a hand what you want is the next one. */
 .rpbtn.rpnext { width: auto; height: 34px; border-radius: 999px; padding: 0 12px;
