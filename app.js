@@ -207,7 +207,7 @@ const READ_LAYOUT = [
     { label: "As PFR", rows: wb(["r-barrel3-freq-hu", { id: "r-bluff-lines-bbb", label: "Bluff lines (can?)", chip: "BBB", chips: true, also: [["r-bluff-lines-bxb", "BXB"], ["r-bluff-lines-xbb", "XBB"], ["r-bluff-lines-xxb", "XXB"], ["r-bluff-lines-cxb", "xCXB"], ["r-bluff-lines-mwp", "MWP"]] }, { id: "r-bh-fd", label: "Bluff hands", chip: "FD", chips: true, also: [["r-bh-oesd", "OESD"], ["r-bh-air", "Air"], ["r-bh-ahigh", "A-high"], ["r-bh-4flush", "4Flush"], ["r-bh-4str", "4Str"]] }, "r-af-hu", { id: "r-bluff-bal-overbluff", label: "Bluff balance", chip: "Overbluff", chips: true, also: [["r-bluff-bal-underbluff", "Underbluff"]] }, "r-thin", "r-draw-hyper-focus-pfr", "force-squid"], ["r-traps", "r-can-x-nsd", "r-xc-thin", "punchbag-r-pfr"]) },
     { label: "As PFC", rows: [
       { lines: true, ids: [{ id: "r-fold-bal-overfold", label: "Fold balance", chip: "Overfold", chips: true, also: [["r-fold-bal-underfold", "Underfold"]] }, { id: "r-to-sizing-elastic", label: "To sizing", chip: "Elastic", chips: true, also: [["r-to-sizing-inelastic", "Inelastic"]] }, { id: "r-can-raise-bluff", label: "Can raise?", chip: "Bluff", chips: true, also: [["r-can-raise-thin", "Thin"]] }, { id: "t-call-range-2ndp", label: "T call range", chip: "2ndP", chips: true, also: [["t-call-range-sd", "SD"], ["t-call-range-wfd", "wFD"], ["t-call-range-lt3rdp", "<3rdP"]] }, { id: "r-call-range-wide", label: "Call range", chip: "Wide", chips: true, also: [["r-call-range-tight", "Tight"]] }, { id: "r-call-hands-light", label: "Bluff catch", chip: "Light", chips: true, also: [["r-call-hands-tight", "Tight"]] }, "r-draw-focus-pfc", "r-hand-to-bluff-pfc"] },
-      { label: "OOP", lines: true, ids: [{ id: "have-lead-r-draw", label: "Lead", chip: "Draw", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"], ["have-lead-r-bluff", "Bluff"], ["have-lead-r-have", "Have"], ["have-lead-r-bluff-any", "Bluff (Any)"]] }, ["bsti-r", "BSTI"]] },
+      { label: "OOP", lines: true, ids: [{ id: "have-lead-r-draw", label: "Lead", chip: "Draw", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"], ["have-lead-r-bluff", "Bluff"], ["have-lead-r-have", "Have"]] }, ["bsti-r", "BSTI"]] },
       { label: "IP", lines: true, ids: [{ id: "r-bet-vol-high", label: "Bet vol", chip: "High", chips: true, also: [["r-bet-vol-low", "Low"]] }, ["bluff-xt-r", "Bluff XT"]] },
     ] },
   ] },
@@ -321,7 +321,7 @@ const LIVE_LAYOUT = [
     ] }] },
     { label: "As PFC", rows: [{ lines: true, ids: [
       { id: "r-bet-vol-high", label: "Bet Vol", chip: "High", chips: true, also: [["r-bet-vol-low", "Low"]] },
-      { id: "have-lead-r-bluff", label: "Lead", chip: "Bluffs", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"], ["have-lead-r-blankstrong", "BlankStrong"], ["have-lead-r-have", "Have"], ["have-lead-r-bluff-any", "Bluff"]] },
+      { id: "have-lead-r-bluff", label: "Lead", chip: "Bluff", chips: true, also: [["have-lead-r-flush", "Flush"], ["have-lead-r-strong", "Strong"], ["have-lead-r-blankstrong", "BlankStrong"], ["have-lead-r-have", "Have"]] },
       { id: "bsti-r", label: "BSTI", chip: "Yes", chips: true },
       { id: "bluff-xt-r", label: "Bluff XT", chip: "Yes", chips: true },
       { id: "r-fold-bal-overfold", label: "Frequency", chip: "Overfold", chips: true, also: [["r-fold-bal-underfold", "Underfold"]] },
@@ -724,6 +724,10 @@ const READ_LEGACY_MAP = {
   "limp-wide-scale":   { to: "limp-scale-ws", state: "yes" },      // choice target: yes → wide, no → tight
   "limp-wide-squid":   { to: "limp-scale-ns", state: "yes" },      // nS wide → nS width, same wide/tight
 };
+/* Same read entered twice: the v325 "Bluff (Any)" chip sat beside the river
+   lead's Bluff (Phil, 2026-10-29). Fold it in, keeping whichever says more. */
+const READ_MERGE_MAP = { "have-lead-r-bluff-any": "have-lead-r-bluff" };
+const READ_STATE_RANK = { "yes!": 4, yes: 3, "no!": 2, no: 1 };
 /* One-time backfill: re-parse notes that were already converted to hands and,
    when the new parser extracts a squid state the saved hand doesn't have,
    patch the hand. Doesn't overwrite existing squid data — additive only.
@@ -835,6 +839,18 @@ async function migrateLegacyReads() {
     const r = oppReads(o);
     let dirty = false, tidy = false;
     if (Array.isArray(o.tags)) { delete o.tags; tidy = true; }   // legacy list already folded into reads above
+    for (const [oldId, to] of Object.entries(READ_MERGE_MAP)) {
+      if (r[oldId] != null && (r[to] == null || (READ_STATE_RANK[r[oldId]] || 0) > (READ_STATE_RANK[r[to]] || 0))) r[to] = r[oldId];
+      const feat = Array.isArray(o.featured) ? o.featured : [];
+      const hadOld = feat.some((f) => f.type === "read" && f.id === oldId);
+      if (r[oldId] == null && !hadOld) continue;
+      delete r[oldId];
+      if (hadOld) {
+        const hasTo = feat.some((f) => f.type === "read" && f.id === to);
+        o.featured = feat.flatMap((f) => f.type === "read" && f.id === oldId ? (hasTo ? [] : [{ ...f, id: to }]) : [f]);
+      }
+      dirty = true;
+    }
     for (const [oldId, { to, state }] of Object.entries(READ_LEGACY_MAP)) {
       if (r[oldId] == null) continue;
       const old = r[oldId], base = readBase(old);

@@ -534,7 +534,6 @@ const TENDENCY_TAGS = [
   { id: "r-hand-to-bluff-pfr",  cat: "postflop", label: "Turn hand to bluff (PFR)" },
   { id: "have-lead-r-blankstrong", cat: "postflop", label: "Lead R BlankStrong" },
   { id: "have-lead-r-have",      cat: "postflop", label: "Lead R Have" },
-  { id: "have-lead-r-bluff-any", cat: "postflop", label: "Lead R Bluff (Any)" },
   { id: "r-bc-drawshit",        cat: "postflop", label: "Bluffcatch DrawsHit" },
   { id: "r-bc-drawsmiss",       cat: "postflop", label: "Bluffcatch DrawsMiss" },
   { id: "tell-long-strong",     cat: "live",     label: "Timing Long = Strong" },
