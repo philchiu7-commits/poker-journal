@@ -2880,6 +2880,7 @@ function openSquidPicker(which) {
       mutate(() => {
         if (isHave) draft.squidHave = b.dataset.num;
         else draft.squidLeft = b.dataset.num;
+        draft.squidAuto = null;              // a hand-picked count settles the chop proposal
       });
       hideSheet();
     };
@@ -5609,6 +5610,14 @@ function renderHandEntry() {
   $("he-squidleft-btn").innerHTML = `Left<i>${d.squidLeft === "" ? "–" : d.squidLeft}</i>`;
   $("he-squidhave-btn").classList.toggle("set", d.squidHave !== "");
   $("he-squidleft-btn").classList.toggle("set", d.squidLeft !== "");
+  const sa = d.squidAuto;
+  $("he-squidhave-btn").classList.toggle("auto", !!sa);
+  $("he-squidleft-btn").classList.toggle("auto", !!(sa && d.squidLeft !== ""));
+  $("he-squidauto").classList.toggle("hidden", !sa);
+  $("he-squidauto").innerHTML = sa
+    ? `<span class="t">Last hand chopped, so +1 🦑 added: ${sa.have} → ${esc(d.squidHave)} up${sa.left != null ? `, ${sa.left} → ${esc(d.squidLeft)} left` : ""}. Skipped a hand? Check it.</span>
+       <span class="sabtns"><button class="chip mini on" data-squidkeep>Keep</button><button class="chip mini" data-squidundo>Undo</button></span>`
+    : "";
 
   // blinds + eff stack (don't clobber focused inputs)
   for (const [id, val] of [["he-sb", d.sb], ["he-bb", d.bb], ["he-effstack", d.effStack]])
@@ -5926,6 +5935,11 @@ function bindHandEntry() {
       });
     } else if (handActionClick(b)) {
       // street / actor / act / size — shared with the action sheet
+    } else if (b.dataset.squidkeep !== undefined) {
+      mutate(() => { draft.squidAuto = null; });
+    } else if (b.dataset.squidundo !== undefined) {
+      // back to what entry showed before the proposal: blank, not a guess
+      mutate(() => { draft.squidHave = ""; draft.squidLeft = ""; draft.squidAuto = null; });
     } else if (b.dataset.squidpick) {
       openSquidPicker(b.dataset.squidpick);
     } else if (b.dataset.vsquid !== undefined) {
@@ -6337,6 +6351,7 @@ async function saveHand() {
   // stash the pre-save draft so an accidental Save can be undone with one tap
   lastSaveUndo = { draft: JSON.parse(JSON.stringify(d)), handId: rec.id, ts: Date.now() };
   draft = newDraft();
+  chopSquidPrefill(draft);
   vSearch = "";
   await metaSet("draftHand", null);
   showSaveToast(primary ? `Saved vs ${primary.name} · tap to undo` : "Hand saved · tap to undo");
@@ -6370,6 +6385,25 @@ function showSaveToast(msg) {
     toast("Restored");
   };
   t.onclick = doUndo;
+}
+
+/* Phil's table rule: a chopped pot adds one more squid to the next hand,
+   unless the last one is already out. The previous hand is the latest logged
+   one (hands carry no session id), and only within a sitting — but hands can
+   go unlogged, so this only ever proposes: the draft keeps squidAuto until
+   Keep/Undo, or a manual squid pick, settles it. */
+const CHOP_SQUID_GAP = 6 * 3600e3;
+function chopSquidPrefill(d) {
+  let prev = null;
+  for (const h of HANDS) if (!h.imported && (!prev || (h.ts || 0) > (prev.ts || 0))) prev = h;
+  if (!prev || Date.now() - (prev.ts || 0) > CHOP_SQUID_GAP) return;
+  const have = prev.squid?.have, left = prev.squid?.left;
+  if (have == null || (left != null && left <= 0)) return;
+  const w = handWinner(prev);
+  if (!w || w.winners.length < 2) return;
+  d.squidHave = String(have + 1);
+  d.squidLeft = left != null ? String(left - 1) : "";
+  d.squidAuto = { from: prev.id, have, left: left ?? null };
 }
 
 /* --- edit an existing hand: load into draft --- */

@@ -507,6 +507,13 @@ body.pagelive #view-opp [data-panel="ranges"] { order: 3; }
    context cells share one rhythm — and "STD 200" can't clip a 12px pill. */
 .ctxstd.on { color: var(--text); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, var(--panel2)); }
 
+/* A chop-rule squid count waiting on Keep/Undo: amber like the duplicates banner. */
+.ctxpick.auto { border-color: #e0a63a; background: #2b220a; }
+.squidauto { display: flex; align-items: center; gap: 8px; margin: -4px 0 10px;
+  background: #2b220a; border: 1px solid #6b551f; border-radius: 10px; padding: 8px 10px;
+  color: #e0a63a; font-size: 13px; font-weight: 600; }
+.squidauto .t { flex: 1; min-width: 0; }
+.squidauto .sabtns { display: flex; gap: 6px; flex: none; }
 /* Position-kind read: label + native <select> dropdown */
 .posread {
   display: inline-flex; align-items: center; gap: 6px; margin: 4px 4px 4px 0;
