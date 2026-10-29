@@ -29,7 +29,8 @@ function rpSeats(h) {
     if (!RP_RING.includes(v.pos)) { unseated++; return; }
     out.push({ actor: "v" + i, pos: v.pos, id: v.opponentId,
       name: oppById(v.opponentId)?.name || v.name || "V" + (i + 1),
-      cards: (v.cards || []).filter(Boolean), chips: v.chips || null });
+      cards: (v.cards || []).filter(Boolean), chips: v.chips || null,
+      squid: v.squid == null ? null : Number(v.squid) });
   });
   if (RP_RING.includes(h.heroPos))
     out.push({ actor: "hero", pos: h.heroPos, id: null, name: "Hero",
@@ -341,6 +342,8 @@ function rpDraw() {
       </div>
       <div class="rpfront">
         ${s.pos === "BN" ? `<span class="rpdealer" title="Dealer">D</span>` : ""}
+        ${/* His own squid count, as logged on the hand (v.squid); unlogged shows nothing rather than a guess. */
+          s.squid !== null && s.squid >= 0 ? `<span class="rpsquid${s.squid ? "" : " none"}" title="${s.squid ? `Has ${s.squid} squid${s.squid > 1 ? "s" : ""}` : "No squid"}">🦑${s.squid}</span>` : ""}
         ${inFront ? `<span class="rpchip c-${f.how[s.actor] || "blind"}${fresh ? " fresh" : ""}">${rpBB(inFront, r.blinds.BB)}</span>` : ""}
       </div>
     </div>`;
@@ -365,6 +368,7 @@ function rpDraw() {
      <div class="rpfoot">
        <span class="rpstreet">${f.end ? "End" : RP_STREET_LABEL[f.street]}</span>
        ${!f.actor && f.note ? `<span class="rpnote">${esc(f.note)}</span>` : ""}
+       ${r.h.squid && (r.h.squid.have != null || r.h.squid.left != null) ? `<span class="rpnote" title="Squids on the table for this hand, as logged">🦑 ${r.h.squid.have ?? "?"} up${r.h.squid.left != null ? ` · ${r.h.squid.left} left` : ""}</span>` : ""}
        ${!f.money ? `<span class="rpwarn" title="A bet on this hand has no amount on record, so the pot stops here rather than guess">pot unknown</span>` : ""}
        ${!r.stacks && r.h.effStack > 0 ? `<span class="rpnote" title="The effective stack on record: the smaller of the stacks that played the hand, not any one seat's">Eff. stack ${rpBB(r.h.effStack * chipUnit(r.h), r.blinds.BB)}</span>`
         : !r.stacks ? `<span class="rpwarn" title="No starting stacks on record for this hand, so none can be shown">no stacks</span>` : ""}
