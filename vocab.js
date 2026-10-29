@@ -378,15 +378,15 @@ const TENDENCY_TAGS = [
   { id: "t-call-style-absv", cat: "postflop", label: "Turn call AbsV" },
   { id: "t-call-style-play", cat: "postflop", label: "Turn call Play" },
   { id: "t-call-style-wide", cat: "postflop", label: "Turn call Wide" },
-  /* Superseded by the yes/no Have Lead reads below (Phil, 2026-09-27). Kept, not
+  /* Superseded by the yes/no Lead reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
-  { id: "have-lead-t",    cat: "postflop", label: "Have Lead (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
-  { id: "have-lead-t-draw", cat: "postflop", label: "Have Lead Draw" },
-  { id: "have-lead-t-flush", cat: "postflop", label: "Have Lead Flush" },
-  { id: "have-lead-t-strong", cat: "postflop", label: "Have Lead Strong" },
-  { id: "have-lead-t-merge", cat: "postflop", label: "Have Lead Merge" },
-  { id: "have-lead-t-have",  cat: "postflop", label: "Have Lead T Have" },
-  { id: "have-lead-t-bluff", cat: "postflop", label: "Have Lead T Bluff" },
+  { id: "have-lead-t",    cat: "postflop", label: "Lead T (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  { id: "have-lead-t-draw", cat: "postflop", label: "Lead T Draw" },
+  { id: "have-lead-t-flush", cat: "postflop", label: "Lead T Flush" },
+  { id: "have-lead-t-strong", cat: "postflop", label: "Lead T Strong" },
+  { id: "have-lead-t-merge", cat: "postflop", label: "Lead T Merge" },
+  { id: "have-lead-t-have",  cat: "postflop", label: "Lead T Have" },
+  { id: "have-lead-t-bluff", cat: "postflop", label: "Lead T Bluff" },
   // river
   /* Superseded by the yes/no Bluff lines (can?) reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
@@ -457,13 +457,13 @@ const TENDENCY_TAGS = [
   { id: "r-call-hands",   cat: "postflop", label: "Bluff catch (old tally)",     kind: "tally",  options: [["light", "Light"], ["tight", "Tight"]] },
   { id: "r-call-hands-light", cat: "postflop", label: "Bluff catch Light" },
   { id: "r-call-hands-tight", cat: "postflop", label: "Bluff catch Tight" },
-  /* Superseded by the yes/no Have Lead reads below (Phil, 2026-09-27). Kept, not
+  /* Superseded by the yes/no Lead reads below (Phil, 2026-09-27). Kept, not
      retired, so any counts already on it stay visible under Live → Other. */
-  { id: "have-lead-r",    cat: "postflop", label: "Have Lead (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
-  { id: "have-lead-r-draw", cat: "postflop", label: "Have Lead Draw" },
-  { id: "have-lead-r-flush", cat: "postflop", label: "Have Lead Flush" },
-  { id: "have-lead-r-strong", cat: "postflop", label: "Have Lead Strong" },
-  { id: "have-lead-r-bluff", cat: "postflop", label: "Have Lead Bluff" },
+  { id: "have-lead-r",    cat: "postflop", label: "Lead R (old tally)",       kind: "tally",  options: [["draw", "Draw"], ["flush", "Flush"], ["strong", "Strong"]] },
+  { id: "have-lead-r-draw", cat: "postflop", label: "Lead R Draw" },
+  { id: "have-lead-r-flush", cat: "postflop", label: "Lead R Flush" },
+  { id: "have-lead-r-strong", cat: "postflop", label: "Lead R Strong" },
+  { id: "have-lead-r-bluff", cat: "postflop", label: "Lead R Bluff" },
   /* River draws: does he play the river off whether the draws got there? As
      PFC a yes is a focus, as PFR a yes is a hyper-focus (Phil, 2026-09-27). */
   { id: "r-draw-focus-pfc", cat: "postflop", label: "Draw Focus" },
@@ -502,11 +502,11 @@ const TENDENCY_TAGS = [
   { id: "f-bxt-air",            cat: "postflop", label: "BXT F Air" },
   { id: "f-attack-adv",         cat: "postflop", label: "Attack Adv. Brd." },
   { id: "f-attack-disadv",      cat: "postflop", label: "Attack Dis. Adv" },
-  { id: "have-lead-f-draw",     cat: "postflop", label: "Have Lead F Draw" },
-  { id: "have-lead-f-merge",    cat: "postflop", label: "Have Lead F Merge" },
-  { id: "have-lead-f-strong",   cat: "postflop", label: "Have Lead F Strong" },
-  { id: "have-lead-f-have",  cat: "postflop", label: "Have Lead F Have" },
-  { id: "have-lead-f-bluff", cat: "postflop", label: "Have Lead F Bluff" },
+  { id: "have-lead-f-draw",     cat: "postflop", label: "Lead F Draw" },
+  { id: "have-lead-f-merge",    cat: "postflop", label: "Lead F Merge" },
+  { id: "have-lead-f-strong",   cat: "postflop", label: "Lead F Strong" },
+  { id: "have-lead-f-have",  cat: "postflop", label: "Lead F Have" },
+  { id: "have-lead-f-bluff", cat: "postflop", label: "Lead F Bluff" },
   { id: "t-delay-bluff",        cat: "postflop", label: "Delay Bluff" },
   { id: "t-barrel-strong",      cat: "postflop", label: "Barrels Strong" },
   { id: "let-realize-t",        cat: "postflop", label: "Let me Realize T" },
@@ -532,9 +532,9 @@ const TENDENCY_TAGS = [
   { id: "r-force-bluff-nonsd",  cat: "postflop", label: "Force Bluff NonSD" },
   { id: "r-marg-bluffcatcher",  cat: "postflop", label: "Marginal → Turn Bluffcatcher" },
   { id: "r-hand-to-bluff-pfr",  cat: "postflop", label: "Turn hand to bluff (PFR)" },
-  { id: "have-lead-r-blankstrong", cat: "postflop", label: "Have Lead BlankStrong" },
-  { id: "have-lead-r-have",      cat: "postflop", label: "Have Lead R Have" },
-  { id: "have-lead-r-bluff-any", cat: "postflop", label: "Have Lead R Bluff (Any)" },
+  { id: "have-lead-r-blankstrong", cat: "postflop", label: "Lead R BlankStrong" },
+  { id: "have-lead-r-have",      cat: "postflop", label: "Lead R Have" },
+  { id: "have-lead-r-bluff-any", cat: "postflop", label: "Lead R Bluff (Any)" },
   { id: "r-bc-drawshit",        cat: "postflop", label: "Bluffcatch DrawsHit" },
   { id: "r-bc-drawsmiss",       cat: "postflop", label: "Bluffcatch DrawsMiss" },
   { id: "tell-long-strong",     cat: "live",     label: "Timing Long = Strong" },
