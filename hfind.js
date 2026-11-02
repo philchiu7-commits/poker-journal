@@ -43,9 +43,9 @@ const HQ_HS_CUE = "(?:have|has|had|having|hold|holds|holding|held|with|make|make
 const HQ_HS = [
   ["sf", "\\bstraight[\\s-]?flush(?:es)?"], ["boat", "\\bfull[\\s-]?house|\\bboats?|\\bfh"],
   ["quads", "\\bquads|\\bfour[\\s-]of[\\s-]a[\\s-]kind"], ["nfd", "\\bnut[\\s-]?flush[\\s-]?draws?|\\bnfd"],
-  ["combo", "\\bcombo[\\s-]?draws?"], ["fd", "\\bflush[\\s-]?draws?|\\bfd"],
+  ["combo", "\\bcombo[\\s-]?draws?"], ["fd", "\\bflush[\\s-]?draws?|\\bwfd|\\bfd"],
   ["oesd", "\\bopen[\\s-]?end(?:ed|er|ers)?(?:[\\s-]straight)?(?:[\\s-]draws?)?|\\boesd"],
-  ["gut", "\\bgut[\\s-]?shots?|\\bgutters?"], ["sdraw", "\\bstraight[\\s-]?draws?"],
+  ["gut", "\\bgut[\\s-]?shots?|\\bgutters?|\\bgs"], ["sdraw", "\\bstraight[\\s-]?draws?"],
   ["2pair", "\\btwo[\\s-]?pairs?|\\b2[\\s-]?pairs?|\\b2p"], ["set", "\\bsets?"],
   ["trips", "\\btrips|\\bthree[\\s-]of[\\s-]a[\\s-]kind"], ["over", "\\bover[\\s-]?pairs?"],
   ["top", "\\btop[\\s-]?pairs?|\\btopp|\\btp"], ["second", "\\b(?:second|2nd|middle)[\\s-]?pairs?|\\b2ndp"],
@@ -57,6 +57,8 @@ const HQ_HS = [
   [/\b(flush|straight)\s*\+/g, (m, k) => ` hs_${k}_ge `],
 ]);
 const HQ_PHRASES = [
+  [/\bbluff(?:s|ed|ing)?\s+(?:xt|when\s+checked\s+to)\b/g, " bluffxt "],
+  [/\bvoluntarily\s+put(?:s|ting)?\s+(?:money|chips)\s+in(?:\s+(?:the\s+)?pot)?\b/g, " vpip "],
   ...HQ_HS,
   [/\b([345])[\s-]?bet(?:s|ted|ting)?\s+pots?\b|\b([345])[\s-]?bps?\b/g, (m, a, b) => ` ${a || b}bp `],
   [/\bsingle[\s-]?raised(?:\s+pots?)?\b|\bsrps?\b/g, " srp "],
@@ -103,6 +105,7 @@ const HQ_PHRASES = [
      "checked to, he bets". "PFR checks and bets" stays his own check then bet. */
   [/\b(?:bet|stab)(?:s|ting|bed|bing)?\s+(?:when|after|once|if)\s+(?:its\s+|it\s+is\s+|(?:the\s+)?(?:pfr|aggressor|raiser)\s+)?check(?:s|ed)?(?:\s+to(?:\s+(?:him|them|her))?)?\b/g, " bxt "],
   [/\b(?:(?:when|if|once|after)\s+)?(?:(?:the\s+)?(?:pfr|aggressor|raiser)\s+check(?:s|ed)?(?:\s+to\s+(?:him|them|her))?(?:\s+(?:and|then))?\s+(?:he|they|she)|(?:(?:the\s+)?(?:pfr|aggressor|raiser)\s+|its\s+|it\s+is\s+|hes\s+|he\s+is\s+|gets\s+)?check(?:s|ed)\s+to(?:\s+(?:him|them|her))?(?:\s+(?:and|then))?(?:\s+(?:he|they|she))?)\s+(?:bet|stab)s?\b/g, " bxt "],
+  [/\b(?:checked[\s-]+to|xt)\b/g, " xt "],
   [/\bpre[\s-]?flop\b/g, " pre "],
   [/\bpost[\s-]flop\b/g, " postflop "],
   /* Board by its top flop card: "A-high", "Thigh", "T high or lower", "Q-high+".
@@ -123,6 +126,7 @@ const HQ_PHRASES = [
 /* Single words → what they are. Street and size words attach to the action
    next to them; everything else stands on its own. */
 const HQ_WORDS = {
+  vpip: "a:vpip", vpips: "a:vpip", vpipped: "a:vpip", xt: "a:xt", bluffxt: "a:bluffxt",
   bet: "a:bet", bets: "a:bet", betting: "a:bet", check: "a:check", checks: "a:check", checked: "a:check",
   checking: "a:check", call: "a:call", calls: "a:call", called: "a:call", calling: "a:call",
   raise: "a:raise", raises: "a:raise", raised: "a:raise", raising: "a:raise",
@@ -171,8 +175,8 @@ const HQ_STOP = new Set(("a an the and he him his hes she they villain player op
 
 /* Default street per action: preflop words live preflop, postflop words
    anywhere after it; plain verbs anywhere. */
-const HQ_PRE_ONLY = new Set(["open", "iso", "3bet", "4bet", "5bet", "limp", "lrr", "flat"]);
-const HQ_POST_ONLY = new Set(["cbet", "donk", "bxt", "xr", "xc", "xf", "xb", "bf", "bc"]);
+const HQ_PRE_ONLY = new Set(["vpip", "open", "iso", "3bet", "4bet", "5bet", "limp", "lrr", "flat"]);
+const HQ_POST_ONLY = new Set(["xt", "bluffxt", "cbet", "donk", "bxt", "xr", "xc", "xf", "xb", "bf", "bc"]);
 const HQ_SIZED = new Set(["bet", "raise", "cbet", "donk", "bxt", "jam", "3bet", "4bet", "5bet", "open", "iso", "xr", "agg"]);
 const HQ_FACEABLE = new Set(["cbet", "bet", "raise", "3bet", "4bet", "5bet", "jam", "donk", "bxt", "iso"]);
 const HQ_FACERS = new Set(["fold", "call", "raise", "jam", "3bet", "4bet", "5bet"]);
@@ -274,6 +278,7 @@ function hqParse(text) {
 }
 
 const HQ_NAME = {
+  vpip: "voluntarily puts money in preflop (VPIP)", xt: "is checked to (XT)", bluffxt: "bluffs when checked to (Bluff XT)",
   bet: "bets", check: "checks", call: "calls", raise: "raises", fold: "folds", limp: "limps", jam: "jams",
   cbet: "c-bets", donk: "donks / leads", bxt: "bets when checked to (BXT)", open: "opens", iso: "isolates", flat: "cold-calls", "3bet": "3-bets",
   "4bet": "4-bets", "5bet": "5-bets", lrr: "limp-reraises", xr: "check-raises", xc: "check-calls", xf: "check-folds",
@@ -364,6 +369,8 @@ function hqInfo(h) {
     const acted = new Set();
     for (const a of acts.filter((x) => x.street === st)) {
       const k = new Set([a.act]);
+      const ini = prevAgg || pfr;
+      if (st !== "pre" && !open && ini && a.actor !== ini && acted.has(ini)) k.add("xt");
       if (st === "pre") {
         /* Levels exactly as potBucket ranks them, so "3bet" here and the 3BP
            chip never disagree about the same hand. */
@@ -491,6 +498,11 @@ function hqClause(h, oppId, c) {
     const seq = (x, y) => my.some((t, j) => t.k.has(x) && my.slice(j + 1).some((u) => u.k.has(y)));
     switch (c.kind) {
       case "seen": return true;
+      case "vpip": return st === "pre" && my.some((t) => HUD_VOL.has(t.a.act));
+      case "bluffxt": {
+        if (!my.some((t) => t.k.has("bxt"))) return false;
+        return hqHs(h, i, { f: "hs", val: "bluff", op: "eq", st });
+      }
       case "xr": return seq("check", "raise") && (!c.sz || my.some((t) => t.k.has("raise") && hqSize(t, c.sz)));
       case "xc": return seq("check", "call");
       case "xf": return seq("check", "fold");
@@ -529,6 +541,10 @@ function hqClause(h, oppId, c) {
     return my.length > 0 && (L === "x" ? my.every((t) => t.a.act === "check") : my.some((t) => t.k.has(HQ_LINE_ACT[L])));
   });
   if (c.kind === "agg") return streets.some((st) => mine(st).some((t) => t.k.has("agg") && (!c.sz || hqSize(t, c.sz))));
+  if (c.kind === "bluffxt") {
+    const results = streets.map(onStreet);
+    return results.includes(true) ? true : results.includes(null) ? null : false;
+  }
   return streets.some(onStreet);
 }
 /* Hand strength off his shown cards. Classes climb 0 no pair · 1 weak pair (third
