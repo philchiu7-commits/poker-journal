@@ -1716,3 +1716,6 @@ button.estn:active { color: var(--accent); }
 .hfind-words { font-size: 12px; color: var(--muted); line-height: 1.6; background: var(--panel2); border: 1px solid var(--line);
   border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
 .hfind-words b { color: var(--text); margin-right: 4px; }
+
+.hand-sort { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.hand-sort select { flex: 1; min-width: 0; }

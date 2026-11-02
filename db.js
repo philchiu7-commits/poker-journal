@@ -463,6 +463,7 @@ async function importJSON(data, src) {
     if (twin) { await fillInto(twin, rec); continue; }   // same hand under another id: fill, never duplicate
     if (!cur || (rec.updatedAt || rec.ts || 0) > (cur.updatedAt || cur.ts || 0)) {
       if (cur) rc.prev.hands.push({ id: rec.id, rec: cur }); else rc.added.hands.push(rec.id);
+      rec.uploadedAt = cur ? (cur.uploadedAt || cur.updatedAt || cur.ts || rc.ts) : rc.ts;
       await dbPut("hands", rec);
       counts.hands++;
     } else await fillInto(cur, rec);

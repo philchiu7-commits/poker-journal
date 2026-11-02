@@ -85,6 +85,13 @@
     <div class="cardpanel-head"><span class="ptitle">Hands</span>
       <button id="od-play" class="linkbtn playbtn hidden">▶ Play</button>
       <button id="od-hf-clear" class="linkbtn hidden">Clear filters</button></div>
+    <label class="hand-sort">Sort hands
+      <select id="od-hand-sort">
+        <option value="played">Hand date · cards seen first</option>
+        <option value="uploaded">Newest uploaded first</option>
+      </select>
+    </label>
+    <div class="small muted">Upload order uses when a hand was first added. Older hands use saved timestamps if no upload record remains.</div>
     <div class="hfind">
       <input id="od-hfind" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search"
         placeholder="Type what to find — e.g. 3bet pot cbet flop b50 · check-raise turn · folds to cbet">

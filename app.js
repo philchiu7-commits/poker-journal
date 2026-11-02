@@ -1054,6 +1054,8 @@ function route() {
    Multi-select within a dimension (OR), AND across dimensions. They survive a
    trip into a hand and back; only a different opponent clears them, and the
    Clear-filters button is showing the whole time any are on. */
+let handSort = "played";
+const uploadTime = (h) => Number(h.uploadedAt || h.updatedAt || h.ts) || 0;
 let handFiltersFor = null;                 // whose filters these are
 const HF_DIMS = ["pos", "pot", "seen", "field", "squid", "role", "post"];
 const blankHandFilters = () => ({ ...Object.fromEntries(HF_DIMS.map((d) => [d, new Set()])), sd: false, cards: false, q: null });
@@ -3910,13 +3912,15 @@ function renderOppDetail(id) {
 
 
   const allHands = HANDS.filter((h) => (h.villainIds || []).includes(id)).sort((a, b) => b.ts - a.ts);
+  if (handSort === "uploaded") allHands.sort((a, b) => uploadTime(b) - uploadTime(a) || b.ts - a.ts);
+  $("od-hand-sort").value = handSort;
   renderHandFilters(id, allHands);
   const hands = handFiltersActive() ? allHands.filter((h) => handMatchesFilters(h, id)) : allHands;
   // Hands where we saw the cards lead; no-cards hands (stats-only) go in a
   // collapsed group so they don't bury the reviewable spots.
   const seen = hands.filter((h) => cardsSeen(h, id));
   const noCards = hands.filter((h) => !cardsSeen(h, id));
-  oppListIds = [...seen, ...noCards].map((h) => h.id);
+  oppListIds = (handSort === "uploaded" ? hands : [...seen, ...noCards]).map((h) => h.id);
   const seenHead = seen.length && noCards.length
     ? `<div class="grouphead"><span class="tagcat">Cards seen</span><span class="gcount">${seen.length}</span></div>` : "";
   const seenHTML = seenHead + seen.map((h) => handRowHTML(h, id)).join("");
@@ -3933,7 +3937,7 @@ function renderOppDetail(id) {
   const pb = $("od-play");
   pb.classList.toggle("hidden", oppListIds.length < 2);
   pb.textContent = `▶ Play ${oppListIds.length}`;
-  $("od-hands").innerHTML = (seenHTML + noCardsHTML) ||
+  $("od-hands").innerHTML = (handSort === "uploaded" ? hands.map((h) => handRowHTML(h, id)).join("") : seenHTML + noCardsHTML) ||
     (allHands.length ? `<div class="empty">No hands match these filters. ${allHands.length} total — try clearing.</div>` : `<div class="empty">No hands logged.</div>`);
 
   renderOppRanges(o);
@@ -6337,6 +6341,7 @@ async function saveHand() {
   const hIn = heroPresent(d);
   const rec = {
     id: d.id || uid(), ts: d.ts || Date.now(), updatedAt: Date.now(),
+    uploadedAt: HANDS.find((h) => h.id === d.id)?.uploadedAt || Date.now(),
     hero: hIn,
     heroPos: hIn ? d.heroPos : null,
     heroCards: hIn && d.heroCards.some(Boolean) ? d.heroCards : null,
@@ -6704,6 +6709,10 @@ function bindStatic() {
       $("od-hfind-read").innerHTML = hqReadHTML(q);
       if (curOppId) renderOppDetail(curOppId);
     }, 220);
+  };
+  $("od-hand-sort").onchange = () => {
+    handSort = $("od-hand-sort").value;
+    if (curOppId) renderOppDetail(curOppId);
   };
   $("od-hfind-help").onclick = () => $("od-hfind-words").classList.toggle("hidden");
   $("od-play").onclick = () => {
@@ -7396,6 +7405,12 @@ async function boot() {
      the tab bar work at all; a throw up here left nothing bound and nothing
      routed, on every launch from then on. Toast and carry on instead. */
   try {
+    const receipts = (await metaGet("importLog")) || [];
+    for (const h of HANDS) {
+      if (h.uploadedAt) continue;
+      h.uploadedAt = receipts.find((r) => (r.added?.hands || []).includes(h.id))?.ts || h.updatedAt || h.ts || 0;
+      await dbPut("hands", h);
+    }
     await migrateLegacyReads();
     await migrateNoteConvertedSquid();
     await migrateDupBoardCards();
