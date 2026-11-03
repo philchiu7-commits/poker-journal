@@ -799,6 +799,9 @@ const CARD_RX = /^[2-9TJQKAS][shdc]$/;
 const AGGRESSIVE_ACTS = new Set(["bet", "raise", "jam", "3bet", "4bet", "5bet"]);
 function normaliseHand(h) {
   let dirty = false;
+  if (h.blinds && !h.blinds.straddles?.length && straddlePosts(h).length > 1) {
+    h.blinds.straddles = straddlePosts(h); dirty = true;
+  }
   const out = [], betSeen = {};
   for (const a of Array.isArray(h.actions) ? h.actions : []) {
     if (!a || typeof a !== "object") { dirty = true; continue; }
@@ -4134,7 +4137,7 @@ function blindsStr(h) {
   const b = [];
   if (h.blinds.sb) b.push(kAmt(h.blinds.sb, u));
   if (h.blinds.bb) b.push(kAmt(h.blinds.bb, u));
-  if (h.blinds.std) b.push(kAmt(h.blinds.std, u));
+  for (const p of straddlePosts(h)) b.push(kAmt(p.amount, u));
   let bl = b.join("/");
   if (h.blinds.ante) bl += `(${kAmt(h.blinds.ante, u)})`;
   return bl;
@@ -5382,14 +5385,15 @@ function estimatePot(src, actions) {
      rule, mirrored here so the written hand and the sizing grid never quote
      two different pots. 15 hands in the export carry a straddle in `blinds`
      with nobody in STD, and they were the only ones the two disagreed on. */
-  const straddle = dealt.has("STD") ? std : 0;
+  const posts = straddlePosts(src);
+  const straddle = Math.max(0, ...posts.map((p) => p.amount));
   const unit = straddle || bb;                   // price of entry preflop
   let street = "pre", contrib = {}, curBet = unit;
   // Blinds posted by players in the hand are their preflop contribution (so
   // SB completing or BB calling isn't counted twice); the rest is dead money.
   const posOf = (p) => p === "hero" ? (src.hero === false ? null : src.heroPos) : src.villains?.[Number(p.slice(1))]?.pos;
-  const blindOf = { SB: sb, BB: bb, STD: straddle }, claimed = new Set();
-  let dead = sb + bb + straddle + ante * Math.max(1, dealt.size);
+  const blindOf = { SB: sb, BB: bb, ...Object.fromEntries(posts.map((p) => [p.pos, p.amount])) }, claimed = new Set();
+  let dead = sb + bb + posts.reduce((n, p) => n + p.amount, 0) + ante * Math.max(1, dealt.size);
   for (const p of ["hero", ...(src.villains || []).map((_, i) => "v" + i)]) {
     const pos = posOf(p);
     if (!blindOf[pos] || claimed.has(pos)) continue;

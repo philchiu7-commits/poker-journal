@@ -77,10 +77,10 @@ function rpBuild(h) {
   if (money) {
     if (SB) inv[actorAt.SB || "_SB"] = SB;
     if (BB) inv[actorAt.BB || "_BB"] = BB;
-    if (STD && actorAt.STD) inv[actorAt.STD] = STD;
+    for (const p of straddlePosts(h)) if (actorAt[p.pos]) inv[actorAt[p.pos]] = p.amount * u;
     for (const k of Object.keys(inv)) how[k] = "blind";
   }
-  const straddle = STD && actorAt.STD ? STD : 0;
+  const straddle = Math.max(0, ...straddlePosts(h).map((p) => p.amount * u));
   /* Every seat dealt in posts the ante — measured against Phil's own sizing
      buttons, one ante for the table puts 10% of his bets on a rung and one per
      seat puts 96% (see potWalk). */
@@ -112,7 +112,7 @@ function rpBuild(h) {
     boardN: Math.min(RP_BOARD_N[street], board.length),
   });
   const stakes = money
-    ? "Blinds " + [SB, BB, STD].filter(Boolean).map(chipStr).join("/") +
+    ? "Blinds " + [SB, BB, ...straddlePosts(h).map((p) => p.amount * u)].filter(Boolean).map(chipStr).join("/") +
       (ANTE ? ` (ante ${chipStr(ANTE)})` : "")
     : null;
   snap("pre", stakes, null);
@@ -143,7 +143,10 @@ function rpBuild(h) {
             : (a.act === "jam" ? "jams" : verb) + (a.act === "jam" || to ? " to " : " ") + rpBB(v, BB);
         }
       } else if (a.act === "call" || a.act === "limp") {
-        if (money) { inv[a.actor] = level; how[a.actor] = "call"; }
+        if (money) {
+          inv[a.actor] = level; how[a.actor] = "call";
+          if (st === "pre" && straddlePosts(h).length > 1) note = (a.act === "limp" ? "limps" : "calls") + " to " + rpBB(level, BB);
+        }
       }
       snap(st, note, a.actor, rung, a);
       if (allInCall) frames[frames.length - 1].allInCall = true;

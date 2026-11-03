@@ -69,7 +69,7 @@ function hudCount(oppId, hands) {
        discounted price and a different range, which is the whole reason the
        word "cold" is in the name. A limper who then calls a raise is out for
        the same reason. */
-    const cold = !HUD_BLIND_SEATS.has(myPos);
+    const cold = !HUD_BLIND_SEATS.has(myPos) && !straddlePosts(h).some((p) => p.pos === myPos);
     for (const a of pre) {
       const mine = a.actor === me;
       if (mine) {
@@ -637,6 +637,34 @@ const SZ_BOARD_N = { flop: 3, turn: 4, river: 5 };
    everyone actually quotes a size against. Bails out of a hand the moment an
    amount is missing rather than guessing, because one guessed number poisons
    every later street in that hand. */
+/* Keep every forced straddle, rather than assigning the largest post to STD.
+   Legacy repair requires action order AND two matching incremental calls. */
+function straddlePosts(h) {
+  const b = h.blinds || {};
+  if (Array.isArray(b.straddles) && b.straddles.length) return b.straddles;
+  const ring = ["SB", "BB", "STD", "U9", "U8", "U7", "U6", "HJ", "CO", "BN"];
+  const pos = (a) => a === "hero" ? h.heroPos : h.villains?.[Number(a.slice(1))]?.pos;
+  const seated = new Set((h.villains || []).map((v) => v.pos));
+  if (h.heroPos) seated.add(h.heroPos);
+  if (!b.std || !seated.has("STD")) return [];
+  const seats = ring.filter((p) => seated.has(p));
+  const pre = (h.actions || []).filter((a) => a.street === "pre");
+  const first = seats.indexOf(pos(pre[0]?.actor));
+  const second = seats[(first - 1 + seats.length) % seats.length];
+  const before = seats[(first - 2 + seats.length) % seats.length];
+  const u = b.bb > 0 && b.bb < 1 ? 1000 : 1, last = b.std * u;
+  const opening = pre.slice(0, pre.findIndex((a) => SZ_AGG.has(a.act)) < 0 ? pre.length : pre.findIndex((a) => SZ_AGG.has(a.act)));
+  const stdCall = opening.find((a) => pos(a.actor) === "STD" && ["call", "limp"].includes(a.act));
+  const sbCall = opening.find((a) => pos(a.actor) === "SB" && ["call", "limp"].includes(a.act));
+  const low = last - (sizeAmount(stdCall?.size) || 0);
+  if (before === "STD" && second !== "STD" && !["SB", "BB", "BN"].includes(second)
+      && low >= 2 * b.bb * u && last >= 2 * low && sbCall
+      && sizeAmount(sbCall.size) === last - (b.sb || 0) * u) {
+    return [{ pos: "STD", amount: low / u }, { pos: second, amount: b.std }];
+  }
+  return [{ pos: "STD", amount: b.std }];
+}
+
 function potWalk(h) {
   const b = h.blinds || {};
   if (b.bb === null || b.bb === undefined) return [];
@@ -663,7 +691,7 @@ function potWalk(h) {
   };
   put("SB", SB);
   put("BB", BB);
-  const straddle = actorAt.STD && STD ? put("STD", STD) : 0;
+  const straddle = Math.max(0, ...straddlePosts(h).map((p) => put(p.pos, p.amount * u)));
   /* Every seat dealt in posts the ante. The v147 note here claimed the
      opposite and it was wrong: measured against Phil's own B33/B50/B66/B75/
      B100 buttons, one ante for the table puts 10% of his bets on a rung and
