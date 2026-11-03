@@ -3815,7 +3815,100 @@ function shrinkPhoto(file, max = 192) {
     img.src = url;
   });
 }
-const avatarHTML = (o, cls = "") => (o.photo ? `<img class="oppavatar${cls}" src="${o.photo}" alt="">` : "");
+const avatarHTML = (o, cls = "") => (o.photo ? `<img class="oppavatar${cls}" src="${o.photo}" alt="" data-photo="${o.id}">` : "");
+
+/* Magnified photo. The viewport is pinned at scale 1 (maximum-scale=1), so
+   pinch, pan and double-tap zoom are done here on the image itself. Back
+   closes it too: one history entry with no hash change, so routing never sees it. */
+let photoBox = null;
+function openPhotoBox(id) {
+  const o = oppById(id);
+  if (!o || !o.photo || photoBox) return;
+  const el = document.createElement("div");
+  el.id = "photobox";
+  el.innerHTML = `<img src="${o.photoFull || o.photo}" alt="">
+    <div class="pbname">${esc(o.name)}</div><button class="pbclose" aria-label="Close">✕</button>`;
+  document.body.appendChild(el);
+  const img = el.querySelector("img");
+  let s = 1, x = 0, y = 0, pts = new Map(), start = null, moved = false, lastTap = 0, tapT = null;
+  const apply = () => { img.style.transform = `translate(${x}px, ${y}px) scale(${s})`; };
+  const clampS = (v) => Math.min(6, Math.max(1, v));
+  const snap = () => { if (s <= 1.02) { s = 1; x = 0; y = 0; } apply(); };
+  const state = () => {
+    const p = [...pts.values()];
+    if (p.length >= 2) return { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), cx: (p[0].x + p[1].x) / 2, cy: (p[0].y + p[1].y) / 2, s, x, y };
+    return p.length ? { d: 0, cx: p[0].x, cy: p[0].y, s, x, y } : null;
+  };
+  el.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".pbclose")) return;
+    el.setPointerCapture?.(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    start = state(); if (pts.size === 1) moved = false; else moved = true;
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const now = state(); if (!start || !now) return;
+    if (Math.hypot(now.cx - start.cx, now.cy - start.cy) > 8) moved = true;
+    if (pts.size >= 2 && start.d) {
+      const k = clampS(start.s * now.d / start.d) / start.s;
+      s = start.s * k;
+      // keep the point between the fingers under the fingers
+      const r = el.getBoundingClientRect(), ox = start.cx - r.width / 2, oy = start.cy - r.height / 2;
+      x = ox - (ox - start.x) * k + (now.cx - start.cx);
+      y = oy - (oy - start.y) * k + (now.cy - start.cy);
+    } else if (s > 1) { x = start.x + now.cx - start.cx; y = start.y + now.cy - start.cy; }
+    apply();
+  });
+  const up = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    start = state();
+    if (pts.size) return;
+    snap();
+    if (moved) return;
+    const t = Date.now();
+    if (t - lastTap < 300) {                       // double tap: 2.5× at the tap, or back to fit
+      clearTimeout(tapT); lastTap = 0;
+      if (s > 1) { s = 1; x = 0; y = 0; }
+      else { const r = el.getBoundingClientRect(); s = 2.5; x = -(e.clientX - r.width / 2) * 1.5; y = -(e.clientY - r.height / 2) * 1.5; }
+      apply(); return;
+    }
+    lastTap = t;
+    tapT = setTimeout(() => { if (s === 1) closePhotoBox(); }, 300);   // single tap at fit size closes
+  };
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.querySelector(".pbclose").onclick = () => closePhotoBox();
+  photoBox = { el, tapT: () => clearTimeout(tapT) };
+  history.pushState({ photobox: 1 }, "");
+}
+function closePhotoBox(fromPop) {
+  if (!photoBox) return;
+  photoBox.tapT(); photoBox.el.remove(); photoBox = null;
+  if (!fromPop && history.state?.photobox) history.back();
+}
+window.addEventListener("popstate", () => closePhotoBox(true));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePhotoBox(); });
+/* In the opponent list and Table tab a tap on a row opens the player, so the
+   photo there magnifies on a long press instead; the swallowed click after it
+   must not navigate. */
+function bindPhotoLongPress(root) {
+  let t = null, p0 = null, fired = false;
+  root.addEventListener("pointerdown", (e) => {
+    const im = e.target.closest("img[data-photo]");
+    fired = false;
+    if (!im || oppEditMode) return;
+    p0 = { x: e.clientX, y: e.clientY };
+    t = setTimeout(() => { fired = true; openPhotoBox(im.dataset.photo); }, 450);
+  });
+  const cancel = () => { clearTimeout(t); t = null; };
+  root.addEventListener("pointermove", (e) => { if (t && Math.hypot(e.clientX - p0.x, e.clientY - p0.y) > 10) cancel(); });
+  root.addEventListener("pointerup", cancel);
+  root.addEventListener("pointercancel", cancel);
+  root.addEventListener("contextmenu", (e) => { if (e.target.closest("img[data-photo]")) e.preventDefault(); });
+  root.addEventListener("click", (e) => { if (fired) { fired = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+}
 function renderOppDetail(id) {
   const o = oppById(id);
   if (!o) { location.hash = "#opponents"; return; }
@@ -6761,7 +6854,8 @@ function bindStatic() {
     e.target.value = "";
     if (!f) return;
     const o = oppById(curOppId); if (!o) return;
-    try { o.photo = await shrinkPhoto(f); }
+    // the thumbnail draws every row; the larger copy is only for magnifying
+    try { [o.photo, o.photoFull] = await Promise.all([shrinkPhoto(f), shrinkPhoto(f, 1600)]); }
     catch (err) { toast("Photo: " + err.message); return; }
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
@@ -6770,7 +6864,7 @@ function bindStatic() {
   };
   $("od-e-photo-del").onclick = async () => {
     const o = oppById(curOppId); if (!o) return;
-    delete o.photo; o.updatedAt = Date.now();
+    delete o.photo; delete o.photoFull; o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId); renderOpponents();
     $("od-editform").classList.remove("hidden");
@@ -6817,7 +6911,11 @@ function bindStatic() {
   $("od-name").onclick = (e) => {
     const b = e.target.closest("[data-ptype-open]");
     if (b) openPlayerTypeSheet(b.dataset.ptypeOpen);
+    const im = e.target.closest("img[data-photo]");
+    if (im) openPhotoBox(im.dataset.photo);
   };
+  bindPhotoLongPress($("opp-list"));
+  bindPhotoLongPress($("tbl-list"));
   $("od-hud").onclick = (e) => {
     const pc = e.target.closest("[data-poscol]");
     if (pc) {

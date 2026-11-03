@@ -263,6 +263,17 @@ textarea.noteedit { margin-bottom: 0; }
 body.pagelive #view-opp [data-panel="ranges"] { order: 3; }
 .oppavatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; flex: none; }
 .oppavatar.lg { width: 34px; height: 34px; margin-right: 8px; }
+#od-name .oppavatar { cursor: zoom-in; }
+img[data-photo] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#photobox { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.94);
+  display: flex; align-items: center; justify-content: center; touch-action: none; overflow: hidden; }
+#photobox img { max-width: 100vw; max-height: 100vh; object-fit: contain; transform-origin: center;
+  -webkit-user-drag: none; user-select: none; pointer-events: none; }
+#photobox .pbname { position: absolute; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom));
+  text-align: center; color: #dfe3ea; font-weight: 700; font-size: 15px; text-shadow: 0 1px 3px #000; pointer-events: none; }
+#photobox .pbclose { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2);
+  color: var(--text); font-size: 18px; cursor: pointer; }
 .photobtn { display: inline-flex; align-items: center; }
 .photorow { margin-bottom: 8px; }
 .cardpanel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
