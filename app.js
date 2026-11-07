@@ -1910,14 +1910,14 @@ function chartCellClick(e) {
   return true;
 }
 function hudDrillHands(o, key) {
-  const c = hudFor(o.id, HANDS);
+  const c = hudFor(o.id, HANDS, hudSquid);
   const evs = (c.ev || {})[key] || [];
   if (!evs.length) return null;
   const [stat, seat] = key.split("|");
   // The heading says the same thing the cell did, so the sheet is obviously
   // the number you just tapped and not some other slice.
   const label = (HUD_ROW_LABEL[stat] || (hudStats(c).find((r) => r.key === stat) || {}).label || stat)
-    + (seat ? " · " + seat : "");
+    + (seat ? " · " + seat : "") + (hudSquid === "all" ? "" : hudSquid === "have" ? " · Have squid" : " · No squid");
   const byId = new Map(HANDS.map((h) => [h.id, h]));
   const seen = new Set();
   const hands = [];
@@ -3523,7 +3523,7 @@ function showSizeSplit(btn) {
    so the two numbers differ and the foot says by how much. */
 function size3PeekHTML(o, rowId, stepId) {
   const r = SIZING_3BET_ROW_BY_ID[rowId], st = SIZING_STEP_BY_ID[stepId];
-  const cell = (sizingAuto(o.id, HANDS).rows[rowId] || {})[stepId] || { n: 0, cards: [] };
+  const cell = (sizingAuto(o.id, hudHands(o.id)).rows[rowId] || {})[stepId] || { n: 0, cards: [] };
   const seen = {};
   for (const cards of cell.cards || []) {
     const c = handClass(cards);
@@ -3653,7 +3653,7 @@ function renderOppSizing(o) {
    his raise sizes. A cell opens the range he showed at that size, not a hand
    list: the shape is the whole point here. */
 function sizing3HTML(o) {
-  const auto = sizingAuto(o.id, HANDS);
+  const auto = sizingAuto(o.id, hudHands(o.id));
   if (!auto.n3) return "";
   const t3cols = SIZING_3BET_STEPS.filter((st) => !szHidden.has(st.id));   // same ladder, same hidden rungs
   const t3head = `<div class="sizerow sizehdr"><div class="sizelab"></div><div class="sizechips">` +
@@ -3686,14 +3686,17 @@ function sizing3HTML(o) {
    your game is noise on everyone — so it is stored once, applies to every
    opponent and survives a reload. Every cell carries its own denominator, so
    folding a column away can never move a number. */
+let hudSquid = "all";
+const hudHands = (id) => handsForSquid(id, HANDS, hudSquid);
 let posHidden = new Set();
 const savePosHidden = () => metaSet("hudHiddenSeats", [...posHidden]);
 function renderOppHud(o) {
-  const c = hudFor(o.id, HANDS);
+  const c = hudFor(o.id, HANDS, hudSquid);
+  $("od-hud-squid").value = hudSquid;
   const nEl = $("od-hud-n"), box = $("od-hud");
   if (!c.seats) {
     nEl.textContent = "";
-    box.innerHTML = `<div class="hudempty">No imported hands for ${esc(o.name)} yet.
+    box.innerHTML = `<div class="hudempty">No imported hands for ${esc(o.name)}${hudSquid === "all" ? "" : hudSquid === "have" ? " with squid" : " with no squid"} yet.
       The HUD counts every seat and every preflop action, which only the
       bookmarklet import records — hand-typed hands are the ones worth writing
       down, so they would read far looser than the player really is.</div>` + sizing3HTML(o);
@@ -6914,6 +6917,12 @@ function bindStatic() {
   };
   bindPhotoLongPress($("opp-list"));
   bindPhotoLongPress($("tbl-list"));
+  $("od-hud-squid").onchange = () => {
+    hudSquid = $("od-hud-squid").value;
+    metaSet("hudSquid", hudSquid);
+    hideRangePeek();
+    if (curOppId) renderOppDetail(curOppId);
+  };
   $("od-hud").onclick = (e) => {
     const pc = e.target.closest("[data-poscol]");
     if (pc) {
@@ -7523,6 +7532,8 @@ async function boot() {
   collapsedGroups = new Set((await metaGet("collapsedGroups")) || []);
   szHidden = new Set((await metaGet("sizingHiddenCols")) || []);
   posHidden = new Set((await metaGet("hudHiddenSeats")) || []);
+  const savedHudSquid = await metaGet("hudSquid");
+  hudSquid = ["all", "have", "none"].includes(savedHudSquid) ? savedHudSquid : "all";
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
   dupeDismissed = new Set((await metaGet("dupeDismissed")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];

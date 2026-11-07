@@ -498,14 +498,24 @@ function hudAF(c) {
    300 hands is enough walking to feel on a phone. Memoise per opponent and
    throw the memo away whenever a hand is added, edited or deleted. */
 let _hudStamp = null, _hudMemo = new Map(), _hudPool = [];
-function hudFor(oppId, hands) {
+function handsForSquid(oppId, hands, mode = "all") {
+  if (mode === "all") return hands;
+  return hands.filter((h) => {
+    const v = (h.villains || []).find((v) => v.opponentId === oppId);
+    const n = v?.squid;
+    if (n == null || n === "" || !Number.isFinite(Number(n)) || Number(n) < 0) return false;
+    return mode === "have" ? Number(n) > 0 : Number(n) === 0;
+  });
+}
+function hudFor(oppId, hands, squid = "all") {
   let s = hands.length;
   for (const h of hands) s += (h.updatedAt || h.ts || 0);
   if (s !== _hudStamp) { _hudStamp = s; _hudMemo.clear(); _hudPool = hands.filter((h) => h.imported); }
-  if (!_hudMemo.has(oppId)) {
-    _hudMemo.set(oppId, hudCount(oppId, _hudPool.filter((h) => (h.villainIds || []).includes(oppId))));
+  const key = oppId + "|" + squid;
+  if (!_hudMemo.has(key)) {
+    _hudMemo.set(key, hudCount(oppId, handsForSquid(oppId, _hudPool.filter((h) => (h.villainIds || []).includes(oppId)), squid)));
   }
-  return _hudMemo.get(oppId);
+  return _hudMemo.get(key);
 }
 
 /* The one-line form for list rows: the standard VPIP/PFR/3-bet triplet that
