@@ -1786,7 +1786,7 @@ function openReadProof(o, label, ids, sub, other) {
    the ones that counted and the ones that did not. The split is the point — a
    fold-to-cbet of 60% is four hands you want to read and six you want to read
    for why he did not. */
-const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lfold: "Limp-fold", af: "Agg factor" };
+const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lcall: "Limp-call", af: "Agg factor" };
 const HUD_DRILL_LABEL = {
   vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
   iso: ["Isolated the limper", "Limped along, called or folded"],
@@ -1802,7 +1802,7 @@ const HUD_DRILL_LABEL = {
   bxtR: ["Bet when checked to", "Checked back"],
   af: ["Bet or raised more", "Called more"],
   limp: ["Limped", "Did not limp"], lrr: ["Limp-reraised", "Just limped"],
-  lfold: ["Folded the limp", "Defended the limp"],
+  lcall: ["Called after limping", "Did not call after limping"],
 };
 /* The hands behind a preflop HUD number, on the same 13x13 the Ranges panel
    draws. A filled cell is a hand he did it with, in that action's own colour;
@@ -1810,18 +1810,16 @@ const HUD_DRILL_LABEL = {
    Only hands he turned up can appear at all, so the foot says how many of them
    that is — most of a preflop stat's hands were never shown. */
 const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
-  f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lfold: "fold" };
+  f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lcall: "call" };
 /* The other bucket gets a fill of its own where the action has a name worth
    seeing: on Iso the hands he did not raise are the ones he came along with,
    and a hollow ring is nearly invisible next to 168 other squares (Phil). The
    fill is the Limp yellow, the same colour those hands carry in the Ranges
    grid, so one hand class reads the same in both places (Phil, v201). */
 const HUD_CHART_MISS = { iso: NOTCH_COLORS.limp };
-/* Which model ordering a stat's own percentage gets drawn as. Fold v 3B and
-   Limp-fold are absent on purpose: that number is how often he gives up, and a
-   folding range is not a shape you play against (Phil). */
+/* Which model ordering a stat's own percentage gets drawn as. */
 const HUD_MODEL_KIND = { vpip: "play", pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet",
-  limp: "limp", lrr: "lrr" };
+  limp: "limp", lrr: "lrr", lcall: "call" };
 /* The model is a wash over the same 13x13 rather than a second grid: the peek
    is already nearly a phone wide, two grids would run past the viewport, and
    the comparison you want is whether his shown hands sit inside a range that
@@ -3737,7 +3735,7 @@ function renderOppHud(o) {
   /* Each row carries its own denominator — raising and limping are out of the
      seats he was dealt, 3-betting is out of the hands he faced a live raise in,
      isolating is out of the hands somebody limped into ahead of him, what he
-     did after his own limp is out of those limps, and whether he folded is out
+     did after his own limp is out of those limps, and whether he called is out
      of the limps somebody actually raised. The count
      rides under every cell so two rows are never read off one base. */
   const row = (label, key, den, tip) => `<tr><th>${label}</th>` + seats.map((p) => {
@@ -3761,7 +3759,7 @@ function renderOppHud(o) {
          ${row("Iso", "iso", "isoOpp", "Raised over a limp with the pot unraised")}
          ${row("Limp", "limp", "seats", "Limped")}
          ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
-         ${row("Limp-fold", "lfold", "faced", "Limped, got raised, folded")}
+         ${row("Limp-call", "lcall", "faced", "Limped, got raised, called the first raise")}
        </table>`}${posHid}</div>`
     : "";
   /* Two blocks, not one wall: how he enters a pot and what he does once he is
