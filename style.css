@@ -1730,3 +1730,29 @@ button.estn:active { color: var(--accent); }
 
 .hand-sort { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .hand-sort select { flex: 1; min-width: 0; }
+
+/* Read Lab is a separate per-player view. */
+.rl-tabs { display:flex; gap:8px; margin:10px 0 16px; }
+.rl-tabs button { color:var(--text); background:var(--panel2); border:1px solid var(--line); padding:9px 18px; border-radius:10px; }
+.rl-tabs .on { background:var(--accent,#568bfa); color:white; }
+.rl-intro p { margin:8px 0 14px; color:var(--muted,#9aa4b3); font-size:14px; }
+.rl-controls { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.rl-controls label { display:flex; align-items:center; gap:8px; }
+.rl-controls select { max-width:190px; }
+.rl-group h2 { font-size:16px; margin:0 0 10px; }
+.rl-row { color:var(--text); display:flex; width:100%; align-items:center; justify-content:space-between; gap:12px; text-align:left; padding:13px 2px; border:0; border-bottom:1px solid #ffffff12; border-radius:0; background:none; }
+.rl-row:last-child { border-bottom:0; }
+.rl-row-label { font-size:14px; min-width:0; }
+.rl-value { text-align:right; font-size:13px; }
+.rl-positive .rl-value b,.rl-hit { color:#47d898; }
+.rl-stats { font-size:11px; font-weight:400; color:var(--muted,#9aa4b3); white-space:nowrap; }
+.rl-combined { display:block; font-size:10px; color:var(--muted,#9aa4b3); }
+.rl-flag { font-size:10px; color:#efbf69; }
+.rl-detail { padding:12px 16px; font-size:14px; line-height:1.5; }
+.rl-evidence { padding:12px 4px; border-bottom:1px solid #ffffff18; }
+.rl-note { padding:8px; margin:8px 0; border-left:2px solid #e1b363; }
+@media(max-width:600px) { .rl-row { align-items:flex-start; } .rl-stats { display:block; margin-top:3px; } #od-readlab { font-size:12px; padding:6px; } }
+
+.rl-edit-field { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0; }
+.rl-edit-field input { width:110px; }
+#rl-issue { display:block; width:100%; margin:12px 0; }

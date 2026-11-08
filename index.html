@@ -31,6 +31,17 @@
   <div id="opp-list" class="list"></div>
 </section>
 
+<section id="view-readlab" class="hidden">
+  <header class="vhead sticky"><button id="rl-journal" class="backbtn">‹</button><h1 id="rl-name">Read Lab</h1><button id="rl-refresh" class="iconbtn textbtn">Refresh</button></header>
+  <nav class="rl-tabs" aria-label="Player tabs"><button id="rl-journal-tab">Journal</button><button class="on" aria-current="page">Read Lab</button></nav>
+  <div class="panel rl-intro"><b>Automatic trial reads</b><p>Your saved reads are kept separately. Results update from the current hands when you import or edit them.</p>
+    <div class="rl-controls"><label>Squid <select id="rl-squid"><option value="all">All</option><option value="have">Have squid</option><option value="none">No squid</option></select></label>
+    <label>Show <select id="rl-show"><option value="all">All reads</option><option value="auto">Automatic</option><option value="yes">Established</option><option value="manual">Manual</option><option value="flagged">Flagged for review</option></select></label></div>
+    <div id="rl-status" class="muted sub2"></div>
+  </div>
+  <div id="rl-results"></div>
+</section>
+
 <!-- ===== Opponent detail ===== -->
 <section id="view-opp" class="hidden">
   <header class="vhead sticky">
@@ -40,6 +51,7 @@
     <button id="od-panelbtn" class="iconbtn" title="Show / hide panels">▤</button>
     <button id="od-edit" class="iconbtn" title="Edit">✎</button>
   </header>
+  <nav class="rl-tabs" aria-label="Player tabs"><button class="on" aria-current="page">Journal</button><button id="od-readlab">Read Lab</button></nav>
   <div id="od-meta" class="muted sub2"></div>
   <div id="od-ptype" class="ptypebar"></div>
   <div id="od-panels-box" class="panel hidden">
@@ -331,6 +343,7 @@
 <script src="db.js"></script>
 <script src="hfind.js"></script>
 <script src="estimates.js"></script>
+<script src="readlab.js"></script>
 <script src="app.js"></script>
 <script src="replay.js"></script>
 </body>

@@ -705,7 +705,9 @@ function openDupesSheet() {
 
 async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
+  if (readLabReady) { readLabOverrides = (await metaGet("readLabRulesV1")) || {}; readLabFeedback = (await metaGet("readLabFeedbackV1")) || []; }
   savedRanges = ((await metaGet("savedRanges")) || []).filter((r) => r && r.id && Array.isArray(r.hands));   // an import can add ranges too
+  if (curView === "readlab" && readLabPlayer) renderReadLab(readLabPlayer);
 }
 
 /* Legacy read migration: fold removed tags onto their surviving axis-mate. */
@@ -974,8 +976,8 @@ function hideSheet() {
 /* "ranges" — the saved-range library — keeps its view and its route but has no
    tab of its own (Phil, v139): ranges live on the opponent now. Reachable at
    #ranges, and nothing saved there was touched. */
-const VIEWS = ["opponents", "opp", "hand", "table", "handview", "ranges", "data"];
-const TAB_FOR = { opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", ranges: "ranges", data: "data" };
+const VIEWS = ["readlab", "opponents", "opp", "hand", "table", "handview", "ranges", "data"];
+const TAB_FOR = { readlab: "opponents", opponents: "opponents", opp: "opponents", hand: "hand", table: "table", handview: "opponents", ranges: "ranges", data: "data" };
 
 let curView = null, hvUnder = null;
 function closeHandPopup() { if (curView === "handview") history.back(); }
@@ -1042,7 +1044,7 @@ function route() {
     b.classList.toggle("on", b.dataset.tab === TAB_FOR[v]));
   hideSheet();
   if (v !== "handview" && typeof rpStop === "function") rpStop();
-  ({ opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
+  ({ readlab: () => renderReadLab(arg), opponents: renderOpponents, opp: () => renderOppDetail(arg), hand: renderHandEntry,
      table: renderTableTab, handview: () => renderHandView(arg), ranges: renderRangeLib,
      data: renderData })[v]();
   if (anchor) anchor.scrollIntoView({ block: "center" });
@@ -1051,6 +1053,88 @@ function route() {
   else if (!(from === "handview" && v === hvUnder && wide)) window.scrollTo(0, 0);
   if (v !== "handview") hvUnder = null;
   if (swPending) applySwUpdate();      // left the entry screen — safe to take the new build
+}
+
+/* Separate, derived trial reads. Rules and feedback are meta, never opponent.reads. */
+let readLabPlayer = null, readLabResults = [], readLabOverrides = {}, readLabFeedback = [], readLabReady = false;
+function renderReadLab(id) {
+  const o = oppById(id);
+  if (!o) { $("rl-results").innerHTML = '<div class="panel">Player not found.</div>'; return; }
+  readLabPlayer = id; curOppId = id;
+  $("rl-name").textContent = o.name + " · Read Lab";
+  readLabResults = ReadLab.evaluate(id, HANDS, { squid: $("rl-squid").value, overrides: readLabOverrides });
+  const filter = $("rl-show").value;
+  const rows = readLabResults.filter(r => filter === "all" || filter === "auto" && r.mode !== "manual" || filter === "manual" && r.mode === "manual" || filter === "yes" && ["Yes", "Strong Yes", "Wide", "Normal", "Aggro", "Passive", "Tight"].includes(r.state) || filter === "flagged" && readLabFeedback.some(f => f.player === id && f.rule === r.id));
+  const groups = new Map();
+  for (const r of rows) { if (!groups.has(r.section)) groups.set(r.section, []); groups.get(r.section).push(r); }
+  const count = HANDS.filter(h => h.imported && (h.villainIds || []).includes(id)).length;
+  const logged=HANDS.filter(h=>!h.imported&&(h.villainIds||[]).includes(id)).length;
+  $("rl-status").textContent = count + " imported + " + logged + " logged hands · " + readLabResults.filter(r => r.mode !== "manual").length + " automatic checks · recalculated now. Frequencies use imported hands; capability checks also use logged hands. Combined-squid rules are labelled.";
+  const sectionOrder=["Squid","Preflop","MWP Limp","Flop · PFR","Flop · PFC","Turn · PFR","Turn · PFC","River · PFR","River · PFC","Physical Tells"];
+  $("rl-results").innerHTML = [...groups].sort((a,b)=>sectionOrder.indexOf(a[0])-sectionOrder.indexOf(b[0])).map(([section, rs]) => '<section class="panel rl-group"><h2>' + esc(section) + '</h2>' + rs.map(r => {
+    const flags = readLabFeedback.filter(f => f.player === id && f.rule === r.id).length;
+    const active = r.state === "Yes" || r.state === "Strong Yes";
+    const stats = r.mode === "manual" ? '' : `<small class="rl-stats"> · ${r.pct == null ? '—' : +r.pct.toFixed(1) + '%'} · ${r.k}/${r.n}</small>`;
+    return `<button class="rl-row${active ? ' rl-positive' : ''}" data-lab-rule="${esc(r.id)}"><span class="rl-row-label">${esc(r.label)}${r.combined ? '<small class="rl-combined">combined squid</small>' : ''}</span><span class="rl-value"><b>${esc(r.state)}</b>${stats}${flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : ''}</span></button>`;
+  }).join('') + '</section>').join('') || '<div class="panel">No reads match this filter.</div>';
+}
+function readLabDetail(id) {
+  const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
+  const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
+  const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands; otherwise Not established.` : r.mode === "manual" ? 'You chose to fill this read manually.' : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
+  const rows = r.ev.slice().sort((a,b) => Number(b.ok)-Number(a.ok) || (b.h.ts||0)-(a.h.ts||0));
+  sheetGroup = null;
+  showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+    <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
+    ${r.mode === 'cap' ? '<p>The percentage is the share among classifiable cases; the verdict uses the distinct supporting-hand count.</p>' : ''}
+    <p>${r.k} supporting / ${r.n} eligible cases${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}. Unknown holdings and ineligible situations do not count. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
+    ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
+    ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
+    ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
+    <div class="list rgcell-hands">${rows.map(e => `<div class="rl-evidence"><b class="${e.ok?'rl-hit':'muted'}">${e.ok?'Supports':'Other outcome'}</b><div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}<button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`).join('') || '<div class="empty">No eligible evidence on record.</div>'}</div>`);
+}
+const labEditKeys = r => r.mode === 'cap' ? ['min'] : ['bands','interval'].includes(r.mode) ? ['low','high'] : r.mode === 'fold3' ? ['threshold','strong','hard'] : ['threshold',...('minOpp' in r?['minOpp']:[]),...('minHits' in r?['minHits']:[])];
+const labCountKey = key => ['min','minOpp','minHits'].includes(key);
+function editReadLab(id) {
+  const r=readLabResults.find(r=>r.id===id);if(!r)return;
+  const labels={min:'Supporting hands required',low:'Lower boundary (%)',high:'Upper boundary (%)',threshold:'Cutoff (%)',strong:'Strong Yes (%)',hard:'Hard No below (%)',minOpp:'Minimum eligible samples',minHits:'Minimum supporting hands'};
+  showSheet(`<div class="sheethead"><span class="t">Trial thresholds · ${esc(r.label)}</span><button data-lab-cancel="${esc(id)}">Back</button></div><div class="rl-detail"><p>These settings apply to every player’s Read Lab. Your saved reads stay unchanged.</p>${labEditKeys(r).map(key=>`<label class="rl-edit-field">${labels[key]}<input type="number" data-lab-key="${key}" value="${r[key]}" min="${labCountKey(key)?1:0}" ${labCountKey(key)?'step="1"':'max="100" step="any"'}></label>`).join('')}<button class="primary" data-lab-save="${esc(id)}">Save trial rule</button></div>`);
+}
+function flagReadLab(id,hand) {
+  showSheet(`<div class="sheethead"><span class="t">Flag a classification</span><button data-lab-cancel="${esc(id)}">Back</button></div><div class="rl-detail"><label>What should count differently, and why?<textarea id="rl-issue" rows="5" placeholder="Describe the expected result or missing information"></textarea></label><button class="primary" data-lab-save-issue="${esc(id)}" data-lab-hand="${esc(hand||'')}">Save review note</button></div>`);
+}
+
+function bindReadLab() {
+  $("od-readlab").onclick = () => location.hash = '#readlab/' + curOppId;
+  const journal = () => location.hash = '#opp/' + readLabPlayer;
+  $("rl-journal").onclick = journal; $("rl-journal-tab").onclick = journal;
+  $("rl-refresh").onclick = async () => { await refreshCache(); renderReadLab(readLabPlayer); };
+  $("rl-squid").onchange = $("rl-show").onchange = () => renderReadLab(readLabPlayer);
+  $("rl-results").onclick = e => { const b=e.target.closest('[data-lab-rule]'); if(b) readLabDetail(b.dataset.labRule); };
+  $("sheet").addEventListener('click',async e => {
+    const cancel=e.target.closest('[data-lab-cancel]');if(cancel){readLabDetail(cancel.dataset.labCancel);return;}
+    const save=e.target.closest('[data-lab-save]');if(save){
+      const id=save.dataset.labSave,r=readLabResults.find(r=>r.id===id);if(!r)return;
+      const next={updatedAt:Date.now()};
+      for(const input of $("sheet").querySelectorAll('[data-lab-key]')){
+        const key=input.dataset.labKey,n=Number(input.value);
+        if(!input.value.trim()||!Number.isFinite(n)||n<0||(labCountKey(key)?n<1||!Number.isInteger(n):n>100)){toast('Enter a valid number.');return;}next[key]=n;
+      }
+      if('low' in next&&next.low>=next.high||r.mode==='fold3'&&!(next.hard<=next.threshold&&next.threshold<=next.strong)){toast('Boundaries must be in ascending order.');return;}
+      readLabOverrides[id]=next;await metaSet('readLabRulesV1',readLabOverrides);renderReadLab(readLabPlayer);readLabDetail(id);return;
+    }
+    const reset=e.target.closest('[data-lab-reset]');if(reset){delete readLabOverrides[reset.dataset.labReset];await metaSet('readLabRulesV1',readLabOverrides);renderReadLab(readLabPlayer);readLabDetail(reset.dataset.labReset);return;}
+    const edit=e.target.closest('[data-lab-edit]');if(edit){editReadLab(edit.dataset.labEdit);return;}
+    const flag=e.target.closest('[data-lab-flag]');if(flag){flagReadLab(flag.dataset.labFlag,flag.dataset.labHand);return;}
+    const issue=e.target.closest('[data-lab-save-issue]');if(!issue)return;
+    const note=$("rl-issue").value.trim();if(!note){toast('Add a review note first.');return;}
+    readLabFeedback.push({player:readLabPlayer,rule:issue.dataset.labSaveIssue,hand:issue.dataset.labHand||null,note,ts:Date.now()});
+    await metaSet('readLabFeedbackV1',readLabFeedback);renderReadLab(readLabPlayer);readLabDetail(issue.dataset.labSaveIssue);
+  });
+  document.addEventListener('visibilitychange',async () => {
+    if(document.hidden || curView !== 'readlab' || !readLabReady)return;
+    await refreshCache(); renderReadLab(readLabPlayer);
+  });
 }
 
 /* ================= Hands-panel filters (per opponent detail) =================
@@ -6560,6 +6644,7 @@ function loadHandIntoDraft(h) {
 /* ================= static bindings + boot ================= */
 
 function bindStatic() {
+  bindReadLab();
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.onclick = () => { location.hash = "#" + b.dataset.tab; });
   document.querySelectorAll("[data-back]").forEach((b) =>
@@ -7508,6 +7593,9 @@ window.addEventListener("unhandledrejection", (e) => {
 async function boot() {
   await openDB();
   await requestDurableStorage();
+  readLabOverrides = (await metaGet("readLabRulesV1")) || {};
+  readLabFeedback = (await metaGet("readLabFeedbackV1")) || [];
+  readLabReady = true;
   await refreshCache();
   /* One bad record must not cost the whole app. The migrations walk arbitrary
      imported values, and everything below — bindStatic, route — is what makes

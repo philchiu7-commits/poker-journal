@@ -81,7 +81,9 @@ const NO_MIRROR = new Set(["autoSnapshot", "preImportSnapshot", "importLog"]);
 const metaSet = (key, value) => {
   if (NO_MIRROR.has(key)) { try { localStorage.removeItem(_mirrorKey(key)); } catch {} }
   else _mirrorSet(key, value);
-  return dbPut("meta", { key, value });
+  const write = dbPut("meta", { key, value });
+  if (key === "readLabRulesV1" || key === "readLabFeedbackV1") write.then(scheduleAutoSnapshot, () => {});
+  return write;
 };
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID()
@@ -93,7 +95,7 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID()
    a full copy of everything else (it would square the file on every export) and
    the live-game scratch — lineup, seats, draft hand — belongs to the phone in
    front of you, not to the archive. */
-const EXPORT_META_KEYS = ["savedRanges"];
+const EXPORT_META_KEYS = ["savedRanges", "readLabRulesV1", "readLabFeedbackV1"];
 
 async function exportData() {
   const [opponents, hands, sessions] = await Promise.all(
@@ -325,6 +327,10 @@ async function undoImport(logId) {
     }
     await metaSet("savedRanges", [...byId.values()]);
   }
+  for (const m of e.labMeta || []) {
+    if (JSON.stringify(await metaGet(m.key)) !== m.mark) { res.kept++; continue; }
+    await metaSet(m.key, m.prev); res.restored++;
+  }
   await metaSet("importLog", log.filter((l) => l.id !== logId));
   return res;
 }
@@ -492,6 +498,31 @@ async function importJSON(data, src) {
       }
     }
     if (counts.ranges) await metaSet("savedRanges", [...byId.values()]);
+  }
+  if (inMeta) {
+    for (const key of ["readLabRulesV1", "readLabFeedbackV1"]) {
+      const incoming = inMeta[key]; if (incoming == null) continue;
+      const prev = await metaGet(key); let merged;
+      if (key === "readLabRulesV1" && typeof incoming === "object" && !Array.isArray(incoming)) {
+        merged = { ...(prev || {}) };
+        for (const [id, cfg] of Object.entries(incoming)) {
+          if (["__proto__", "constructor", "prototype"].includes(id) || !cfg || typeof cfg !== "object") continue;
+          const clean = { updatedAt: Number.isFinite(cfg.updatedAt) ? cfg.updatedAt : 0 };
+          for (const k of ["min", "low", "high", "threshold", "strong", "hard", "minOpp", "minHits"])
+            if (typeof cfg[k] === "number" && Number.isFinite(cfg[k]) && cfg[k] >= 0) clean[k] = cfg[k];
+          if (!merged[id] || clean.updatedAt > (merged[id].updatedAt || 0)) merged[id] = clean;
+        }
+      } else if (key === "readLabFeedbackV1" && Array.isArray(incoming)) {
+        const valid = incoming.filter(f => f && typeof f.player === "string" && typeof f.rule === "string" && typeof f.note === "string" && Number.isFinite(f.ts));
+        const unique = new Map();
+        for (const f of [...(Array.isArray(prev) ? prev : []), ...valid]) unique.set(JSON.stringify([f.player,f.rule,f.hand,f.note,f.ts]),f);
+        merged = [...unique.values()];
+      } else continue;
+      if (JSON.stringify(merged) !== JSON.stringify(prev)) {
+        (rc.labMeta ||= []).push({ key, prev, mark: JSON.stringify(merged) });
+        await metaSet(key, merged);
+      }
+    }
   }
   await importLogAdd(rc);
   counts.logId = rc.id;
