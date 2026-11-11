@@ -541,6 +541,17 @@ const TENDENCY_TAGS = [
   { id: "tell-fast-strong",     cat: "live",     label: "Timing Fast = Strong" },
   { id: "tell-fast-weak",       cat: "live",     label: "Timing Fast = Weak" },
   { id: "tell-acting",          cat: "live",     label: "Acting" },
+  /* Most Important — overall (not street-tied) counterparts of existing
+     Nuts / Bet Volume / Donks / Frontload chips. New ids on purpose: the
+     per-street tags stay where they are and are not migrated. */
+  { id: "nuts-flop",            cat: "postflop", label: "Nuts Flop" },
+  { id: "nuts-turn",            cat: "postflop", label: "Nuts Turn" },
+  { id: "bet-vol-high",         cat: "postflop", label: "Bet Volume High" },
+  { id: "bet-vol-low",          cat: "postflop", label: "Bet Volume Low" },
+  { id: "donks-yes",            cat: "postflop", label: "Donks Yes" },
+  { id: "donks-no",             cat: "postflop", label: "Donks No" },
+  { id: "frontload-yes",        cat: "postflop", label: "Frontload Yes" },
+  { id: "frontload-no",         cat: "postflop", label: "Frontload No" },
 ];
 /* Player archetype — Phil sets it manually and it themes the opponent's row
    on the list plus a pill in the detail header. Its id is `plain-reg` because

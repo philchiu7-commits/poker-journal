@@ -59,6 +59,21 @@ const oppById = (id) => OPP.find((o) => o.id === id);
    barrels-off:no, etc.) migrate on boot. */
 const READ_CYCLE = {
   "size-up-draws":   ["green", "yellow", "red"],
+  /* Most Important Yes|No pairs: Yes stays on the yes side, No on the no
+     side, so the Yes chip never morphs into the word "No" beside its pair. */
+  "donks-yes":       ["yes", "yes!"],
+  "donks-no":        ["no", "no!"],
+  "frontload-yes":   ["yes", "yes!"],
+  "frontload-no":    ["no", "no!"],
+};
+/* Tapping one side of a Yes|No pair clears the other, the same way a
+   single-select choice would. High|Low and Flop|Turn stay independent,
+   matching the existing street Bet Volume and multi-chip rows. */
+const READ_EXCLUSIVE = {
+  "donks-yes":     ["donks-no"],
+  "donks-no":      ["donks-yes"],
+  "frontload-yes": ["frontload-no"],
+  "frontload-no":  ["frontload-yes"],
 };
 const readCycle = (id) => READ_CYCLE[id] || ["yes", "yes!", "no", "no!"];
 const CHOICE_READS = new Set(
@@ -158,8 +173,18 @@ const READ_LAYOUT = [
      tag that belongs on a street has to be named in a row below or it won't
      appear here. liveOnly rows are the limp / LRR / squid machinery, a live
      table's preflop rather than an online one. */
-  /* Squid first: it is the thing that changes every other read below it,
-     so it sits above the streets rather than inside Preflop (Phil). */
+  /* Most Important sits above every street on both tabs (Phil): four overall
+     reads, not tied to a flop/turn/river row, with their own ids. */
+  { title: "Most Important", subs: [{ rows: [
+    { lines: true, ids: [
+      { id: "nuts-flop", label: "Nuts", chip: "Flop", chips: true, also: [["nuts-turn", "Turn"]] },
+      { id: "bet-vol-high", label: "Bet Volume", chip: "High", chips: true, also: [["bet-vol-low", "Low"]] },
+      { id: "donks-yes", label: "Donks", chip: "Yes", chips: true, also: [["donks-no", "No"]] },
+      { id: "frontload-yes", label: "Frontload", chip: "Yes", chips: true, also: [["frontload-no", "No"]] },
+    ] },
+  ] }] },
+  /* Squid first among the streets: it is the thing that changes every other
+     read below it, so it sits above the streets rather than inside Preflop (Phil). */
   { title: "Squid exploit", subs: [{ rows: [
     { lines: true, ids: [{ label: "SlowP Open", subs: [["slowp-open-ws", "wSquid"], ["slowp-open-ns", "nSquid"]] }] },
   ] }] },
@@ -238,6 +263,16 @@ const POS_MATRIX = {
    on the Online tab. An id may be written as ["id", "Short"] to override the
    chip's label. */
 const LIVE_LAYOUT = [
+  /* Most Important sits above every street on both tabs (Phil): four overall
+     reads, not tied to a flop/turn/river row, with their own ids. */
+  { title: "Most Important", subs: [{ rows: [
+    { lines: true, ids: [
+      { id: "nuts-flop", label: "Nuts", chip: "Flop", chips: true, also: [["nuts-turn", "Turn"]] },
+      { id: "bet-vol-high", label: "Bet Volume", chip: "High", chips: true, also: [["bet-vol-low", "Low"]] },
+      { id: "donks-yes", label: "Donks", chip: "Yes", chips: true, also: [["donks-no", "No"]] },
+      { id: "frontload-yes", label: "Frontload", chip: "Yes", chips: true, also: [["frontload-no", "No"]] },
+    ] },
+  ] }] },
   /* "Opens xRV xRB" per squid state is the two position matrices — Opens is
      the first raise, xRV / xRB the limp-reraise for value / as a bluff — each
      already split nS / wS. SlowP Open stays beside them. */
@@ -3355,7 +3390,7 @@ function renderOppReads(o) {
         ` title="${esc(lbl)}">${st ? esc(STATE_WORD[st] || st) : "–"}</button>`
       /* a chip whose word is Yes answers in the word as well as the colour:
          Yes / Yes! green, No / No! red (Phil, 2026-10-05) */
-      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc(lbl === "Yes" && STATE_WORD[st] ? STATE_WORD[st] : lbl)}</button>`);
+      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc((lbl === "Yes" || lbl === "No") && STATE_WORD[st] ? STATE_WORD[st] : lbl)}</button>`);
   };
   /* The hands' own answer beside Phil's: a % off the shown hands, tap for all.
      The hover lives on the words that name the read — the row label, a cap, or
@@ -7217,6 +7252,7 @@ function bindStatic() {
     const ns = nextReadState(id, reads[id]);
     if (ns) reads[id] = ns;
     else delete reads[id];
+    for (const other of (READ_EXCLUSIVE[id] || [])) delete reads[other];
     o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppReads(o);
