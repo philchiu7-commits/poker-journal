@@ -259,14 +259,13 @@ function rpBB(n, BB) {
   const v = n / BB;
   return String(v >= 100 ? Math.round(v) : v >= 10 ? +v.toFixed(1) : +v.toFixed(2)) + "bb";
 }
-/* The rung a shove or an overbet would have been. The Sizings grid files
-   both under Jam, but read as a size B300 says more than "all in": what it
-   cost against the pot. Past B150 the fraction itself, to the nearest 10%. */
+/* Show the price of an all-in on the replay. Postflop bets at B150 and up
+   show their own fraction to the nearest 10%, regardless of their grid bucket. */
 function rpRung(rg, street) {
-  if (!rg || rg.step !== "jam") return rg;
+  if (!rg || (rg.step !== "jam" && rg.step !== "150")) return rg;
   if (rg.ratio === null || rg.ratio === undefined) return null;
-  if (street === "pre" && rg.ratio > SZ_JAM_OVER) return null;   // an open to 25bb is no "B960"
-  const step = rg.ratio > SZ_JAM_OVER ? "B" + Math.round(rg.ratio * 10) * 10 : sizeStepFor(rg.ratio, "bet");
+  if (street === "pre" && rg.ratio > 1.5) return null;   // an open to 25bb is no "B960"
+  const step = rg.ratio >= 1.5 ? "B" + Math.round(rg.ratio * 10) * 10 : sizeStepFor(rg.ratio, "bet");
   return { ...rg, step };
 }
 const rpKind = (act) => /^(raise|[345]bet)$/.test(act) ? "raise" : act;

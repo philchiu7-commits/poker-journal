@@ -170,12 +170,16 @@ const readEstimates = (() => {
   const lineOf = (F) => ["flop", "turn", "river"].map((s) => F.st[s].line || "-").join("");
   
   // ---------- preflop
-  S({ id: "over-folds-3bet", grp: "Preflop", rule: "F", imp: true, def: "Opened, faced a 3-bet: folded.",
-    ch: (F) => { const P = F.st.pre; if (!F.pfr && !(P.my[0] === "raise" || P.my[0] === "open")) return null;
-      const i = P.acts.findIndex((a) => a.actor === F.me && (a.act === "raise" || a.act === "open"));
-      if (i < 0 || !P.acts.slice(i + 1).some((a) => a.actor !== F.me && a.act === "3bet")) return null;
-      const after = P.acts.slice(i + 1).find((a) => a.actor === F.me); if (!after) return null;
-      return { ok: after.act === "fold", why: after.act === "fold" ? "folded to the 3-bet" : after.act + " vs 3-bet" }; } });
+  S({ id: "over-folds-3bet", grp: "Preflop", rule: "F", imp: true, def: "First response as opener to a live 3-bet. Excludes intervening 4-bets.",
+    ch: (F) => {
+      const P = F.st.pre;
+      if (!P.my.some(a => AGG.has(a))) return null;
+      const pre = preflopActionsWithLevels(P.acts, preflopEntryPosts(F.h).price);
+      const spot = foldToThreeBetSpot(pre, F.me);
+      if (!spot) return null;
+      const act = spot.response.act;
+      return { ok: act === "fold", why: act === "fold" ? "folded to the 3-bet" : act + " vs 3-bet" };
+    } });
   S({ id: "limp-caller", grp: "Preflop", rule: "F", imp: true, def: "Open-limped, then faced a raise: called (not folded, not re-raised).",
     ch: (F) => F.limpFacedRaise ? { ok: F.st.pre.my[1] === "call", why: "limp → " + F.st.pre.my[1] } : null });
   S({ id: "3bets-light", grp: "Preflop", rule: "CAN", def: "3-bets shown with a hand outside 88+/AQo+ (AQ, AK any suit).",

@@ -30,7 +30,7 @@ const SIZING_STEPS = [
   { id: "66",  label: "B66"  },
   { id: "75",  label: "B75"  },
   { id: "100", label: "B100" },
-  { id: "150", label: "B150" },
+  { id: "150", label: "B150–B250" },
   /* Not a rung: the top of the ladder is a shove. He is either all in or he is
      bigger than any size worth naming, and both answer the same question. */
   { id: "jam", label: "Jam" },
@@ -56,18 +56,15 @@ const SIZING_ROWS = [
   { id: "raise-b", label: "Bluff",  kind: "B", mode: "raise" },
 ];
 const SIZING_RAISE_STREETS = ["flop", "turn", "river"];
-/* 3-bets get a block of their own: two rows, out of position and in, priced the
-   same way a raise is. No Jam column — nothing on record is written as a
-   preflop all-in, and every 3-bet over 150% of the pot would land in one, so a
-   Jam column here would read as shoves that never happened. Over 150% goes to
-   B150 instead (Phil). Cards aren't needed for the count, only for the chart
-   behind it, so these rows see far more hands than the postflop grid. */
-const SIZING_3BET_STEPS = SIZING_STEPS.filter((x) => x.id !== "jam");
+/* Preflop 3-bets share the raise pricing and have their own column for sizes
+   over 250%. Cards are only needed for the chart behind each count. */
+const SIZING_3BET_OVER = { id: "250+", label: "> B250" };
+const SIZING_3BET_STEPS = [...SIZING_STEPS.filter((x) => x.id !== "jam"), SIZING_3BET_OVER];
 const SIZING_3BET_ROWS = [
   { id: "3bet-oop", label: "3bet OOP" },
   { id: "3bet-ip",  label: "3bet IP"  },
 ];
-const SIZING_STEP_BY_ID = Object.fromEntries(SIZING_STEPS.map((x) => [x.id, x]));
+const SIZING_STEP_BY_ID = Object.fromEntries([...SIZING_STEPS, SIZING_3BET_OVER].map((x) => [x.id, x]));
 const SIZING_ROW_BY_ID = Object.fromEntries(SIZING_ROWS.map((r) => [r.id, r]));
 const SIZING_3BET_ROW_BY_ID = Object.fromEntries(SIZING_3BET_ROWS.map((r) => [r.id, r]));
 

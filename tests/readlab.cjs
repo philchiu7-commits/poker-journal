@@ -516,3 +516,44 @@ assert.deepEqual(Array.from(mostImportant, r => [r.label, r.mode, !!r.manualPair
   ['Donks', 'manual', true], ['Frontload', 'manual', true],
 ]);
 console.log('PASS: Rivers and Bluff Type exclude turn check-calls and Most Important is available for manual reads.');
+
+const foldToThreeHand = (id, afterThree, three = act('pre','v1','3bet','$20')) => {
+  const hand = h(id, undefined, [], [act('pre','v0','raise','$6'), three, ...afterThree]);
+  hand.villains.push({opponentId:'other',pos:'SB'});
+  hand.villainIds.push('other');
+  return hand;
+};
+const foldPre = act('pre','v0','fold');
+const coldFour = act('pre','v2','4bet','$60');
+const calledThenBackraise = h('call-then-fold-to-backraise', undefined, [], [
+  act('pre','v0','raise','$6'), act('pre','v2','call'), act('pre','v1','3bet','$20'),
+  act('pre','v0','call'), coldFour, act('pre','v1','fold'), foldPre,
+]);
+calledThenBackraise.villains[0].pos = 'HJ';
+calledThenBackraise.villains.push({opponentId:'other',pos:'CO'});
+calledThenBackraise.villainIds.push('other');
+const foldToThreeHands = [
+  foldToThreeHand('direct-fold', [act('pre','v2','fold'), foldPre]),
+  foldToThreeHand('opener-four-bets', [act('pre','v0','4bet','$60')]),
+  foldToThreeHand('cold-four-fold', [coldFour, foldPre]),
+  foldToThreeHand('cold-four-call', [coldFour, act('pre','v0','call')]),
+  foldToThreeHand('cold-four-jam', [act('pre','v2','jam','$60'), foldPre]),
+  foldToThreeHand('cold-four-generic-raise', [act('pre','v2','raise','$60'), foldPre]),
+  foldToThreeHand('short-all-in-call', [act('pre','v2','jam','$18'), foldPre]),
+  foldToThreeHand('all-in-three', [foldPre], act('pre','v1','jam','$20')),
+  calledThenBackraise,
+];
+const foldToThreeExpected = [
+  ['direct-fold', true], ['opener-four-bets', false], ['short-all-in-call', true],
+  ['all-in-three', true], ['call-then-fold-to-backraise', false],
+];
+const labFoldToThree = find(results(foldToThreeHands), 'fold3-OOP');
+assert.deepEqual(Array.from(labFoldToThree.ev, e => [e.id, e.ok]), foldToThreeExpected);
+ctx.foldToThreeHands = foldToThreeHands;
+const hudFoldToThree = run("hudCount('p',foldToThreeHands)");
+assert.deepEqual(Array.from(hudFoldToThree.ev.f3b, e => [e.id, e.ok]), foldToThreeExpected);
+assert.equal(hudFoldToThree.f3b, 3);
+assert.equal(hudFoldToThree.oppF3b, 5);
+const estimateFoldToThree = run("readEstimates('p',foldToThreeHands)['over-folds-3bet']");
+assert.deepEqual(Array.from(estimateFoldToThree.ev, e => [e.h.id, e.ok]), foldToThreeExpected);
+console.log('PASS: Fold to 3-bet ignores intervening cold 4-bets and uses the opener’s first response in the HUD, estimates, and Read Lab.');

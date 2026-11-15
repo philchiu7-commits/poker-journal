@@ -55,13 +55,13 @@ function hudCount(oppId, hands) {
 
     // ---- preflop walk. Flags flip *after* an action so a player never counts
     // as having faced their own raise.
-    let sawRaise = false, sawThree = false, sawFour = false, opener = null, lastAgg = null;
+    let sawRaise = false, sawThree = false, sawFour = false, lastAgg = null;
     let limped = false, limpThenRaise = false, limpFaced = false, limpCall = false, limpAnswered = false;
     /* Preflop counts are per HAND, not per action. A villain who limps and then
        calls a raise took two voluntary actions in one seat — incrementing on
        each pushed VPIP over 100% and made the drill-down disagree with the
        number above it, so the walk sets flags and the counters move once. */
-    let vol = false, aggPre = false, opp3 = false, did3 = false, oppF3 = false, didF3 = false;
+    let vol = false, aggPre = false, opp3 = false, did3 = false;
     let opp4 = false, did4 = false, oppF4 = false, didF4 = false, oppCc = false, didCc = false, actedVol = false;
     let limpSeen = false, oppIso = false, didIso = false;
     /* Cold-calling is calling a raise with nothing of yours in the pot yet, so
@@ -71,7 +71,8 @@ function hudCount(oppId, hands) {
        the same reason. */
     const posted = straddlePosts(h);
     const cold = !HUD_BLIND_SEATS.has(myPos) && !posted.some((p) => p.pos === myPos);
-    const opened = openDecision(pre, me, myPos, preflopEntryPosts(h, posted));
+    const entry = preflopEntryPosts(h, posted);
+    const opened = openDecision(pre, me, myPos, entry);
     if (opened !== null) {
       c.openOpp++;
       pos(myPos).openOpp++;
@@ -102,7 +103,6 @@ function hudCount(oppId, hands) {
            are cold. Opener-only would leave most of his opponents under the
            sample this app trusts. */
         if (sawThree && !sawFour) { opp4 = true; if (a.act === "4bet") did4 = true; }
-        if (opener === me && sawThree) { oppF3 = true; if (a.act === "fold") didF3 = true; }
         /* Folding to a 4-bet is his answer to the first one he faced. A later
            5-bet is a second decision off a different price; letting it
            overwrite this would file a 4-bet he called as a 4-bet he folded. */
@@ -114,7 +114,7 @@ function hudCount(oppId, hands) {
         lastAgg = a.actor;
         if (a.act === "4bet" || a.act === "5bet") sawThree = sawFour = true;
         else if (a.act === "3bet") sawThree = true;
-        else if (!sawRaise) { sawRaise = true; opener = a.actor; }
+        else if (!sawRaise) sawRaise = true;
       }
     }
     if (vol) c.vpip++;
@@ -130,7 +130,13 @@ function hudCount(oppId, hands) {
        alone — folding to the 4-bet that came back is still a fold to a 4-bet. */
     if (opp3 && !limped) { c.opp3b++; pos(myPos).opp3++; if (did3) { c.n3b++; pos(myPos).three++; } }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
-    if (oppF3) { c.oppF3b++; if (didF3) c.f3b++; }
+    const vsThree = aggPre && foldToThreeBetSpot(preflopActionsWithLevels(pre, entry.price), me);
+    if (vsThree) {
+      const folded = vsThree.response.act === "fold";
+      c.oppF3b++;
+      if (folded) c.f3b++;
+      mark("f3b", folded, h.id);
+    }
     if (oppF4) { c.oppF4b++; if (didF4) c.f4b++; }
     mark("vpip", vol, h.id);
     mark("pfr", aggPre, h.id);
@@ -141,7 +147,6 @@ function hudCount(oppId, hands) {
     if (opp3 && !limped) mark("three", did3, h.id);
     if (opp3 && !limped) mark("three|" + myPos, did3, h.id);
     if (opp4) mark("four", did4, h.id);
-    if (oppF3) mark("f3b", didF3, h.id);
     if (oppF4) mark("f4b", didF4, h.id);
     mark("limp|" + myPos, limped, h.id);
     if (limped) mark("lrr|" + myPos, limpThenRaise, h.id);
@@ -419,7 +424,7 @@ function hudStats(c) {
     r("iso", "Iso", c.iso, c.oppIso, "Raised over a limp with the pot still unraised — over-limping, calling or folding behind is the same chance declined"),
     r("cc", "Cold call", c.cc, c.oppCc, "Called a raise with nothing of his in the pot yet — blind and straddle defends are not cold calls"),
     w("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
-    w("f3b", "Fold v 3B", c.f3b, c.oppF3b, "Opened, then folded to a 3-bet"),
+    w("f3b", "Fold v 3B", c.f3b, c.oppF3b, "First response as opener to a live 3-bet. Excludes intervening 4-bets."),
     w("four", "4-bet", c.n4b, c.opp4b, "4-bet when facing a 3-bet — cold 4-bets counted too"),
     w("f4b", "Fold v 4B", c.f4b, c.oppF4b, "3-bet, then folded to a 4-bet"),
     q("cbIp", "Cbet HU IP", c.cbIp, c.oppCbIp, "Bet the flop as preflop aggressor, heads-up in position"),
@@ -705,6 +710,34 @@ function openDecision(pre, actor, seat, { forced, price }) {
   return null;
 }
 
+function preflopActionsWithLevels(pre, price) {
+  const sizeLevel = { "3bet": 2, "4bet": 3, "5bet": 4 };
+  const raiseName = ["", "raise", "3bet", "4bet", "5bet"];
+  let level = 0;
+  return pre.map(action => {
+    const a = { ...action, src: action.src || action, levelBefore: level };
+    if (HUD_AGG.has(a.act)) {
+      const amount = sizeAmount(a.size) ?? sizeMult(a.size, price);
+      if (a.act === "jam" && amount != null && amount <= price)
+        return { ...a, act: "call", allInCall: true, levelAfter: level };
+      level = Math.max(level + 1, sizeLevel[a.act] || 0);
+      a.act = raiseName[Math.min(level, 4)];
+      if (amount != null) price = Math.max(price, amount);
+    }
+    return { ...a, levelAfter: level };
+  });
+}
+
+function foldToThreeBetSpot(pre, actor) {
+  const open = pre.find(a => a.levelBefore === 0 && a.levelAfter === 1);
+  if (open?.actor !== actor || open.src.act === "jam" || open.size === "Jam") return null;
+  const three = pre.find(a => a.actor !== actor && a.levelBefore === 1 && a.levelAfter === 2);
+  if (!three) return null;
+  const response = pre.slice(pre.indexOf(three) + 1).find(a => a.actor === actor);
+  // A later fold after calling the 3-bet belongs to the higher raise it faced.
+  return response?.levelBefore === 2 ? { three, response } : null;
+}
+
 function potWalk(h) {
   const b = h.blinds || {};
   if (b.bb === null || b.bb === undefined) return [];
@@ -824,21 +857,15 @@ function madeClass(hole, board) {
   const above = new Set(board.map((c) => RVAL[c[0]]).filter((v) => v > best)).size;
   return above === 0 ? "V" : above === 1 ? "V2" : "B";  // top pair, second pair, or under it
 }
-/* Phil's ladder is B33/B50/B66/B75/B100/B150. Bucket to the nearest rung so a
-   62% bet reads as the 66% he was going for, not as its own category. Cuts are
-   the midpoints between neighbouring rungs. */
-const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.71, "66"], [0.88, "75"], [1.25, "100"], [Infinity, "150"]];
-/* Over the top rung there is no honest fraction left — a bet that big is a
-   shove in everything but name — so it lands in Jam rather than piling onto
-   B150. An actual jam takes that column whatever it cost: a min-jam is a B33
-   by the arithmetic, but that he had nothing behind is the fact worth
-   counting, and it changes what every later street can hold. */
-const SZ_JAM_OVER = 1.5;
+/* Round the smaller sizes to their nearest rung. The overbet column starts
+   at 150% and includes 250%. The Jam column also holds larger postflop sizes. */
+const SZ_CUTS = [[0.42, "33"], [0.58, "50"], [0.71, "66"], [0.88, "75"], [1.5, "100"], [Infinity, "150"]];
+const SZ_JAM_OVER = 2.5;
 const sizeStepFor = (r, act) =>
   act === "jam" || r > SZ_JAM_OVER ? "jam"
     : (SZ_CUTS.find((c) => r < c[0]) || SZ_CUTS[SZ_CUTS.length - 1])[1];
-/* Which of Phil's own B33/B50/B66/B75/B100/B150 buttons each aggressive action
-   would have been, keyed by the action object so a bet is never matched to
+/* The sizing bucket for each aggressive action, keyed by the action object
+   so a bet is never matched to
    another bet of the same size on the same street. The arithmetic is the
    Sizings grid's, deliberately: a bet against the pot it went into, a raise
    against the pot with the call already in it — 89% of his raises land on a
@@ -905,8 +932,8 @@ function sizingAuto(oppId, hands) {
       if (e && !e.bad && e.over > 0 && e.potAfterCall > 0 && mine && theirs) {
         const ip = POSITIONS_POST.indexOf(mine) > POSITIONS_POST.indexOf(theirs);
         const rid = ip ? "3bet-ip" : "3bet-oop";
-        let step = sizeStepFor(e.over / e.potAfterCall, t3.act);
-        if (step === "jam") step = "150";       // no preflop Jam column — see vocab.js
+        const ratio = e.over / e.potAfterCall;
+        const step = ratio > SZ_JAM_OVER ? "250+" : sizeStepFor(ratio, t3.act);
         const hole = (tv.cards || []).filter(Boolean);
         bump(rows[rid] = rows[rid] || {}, step, h.id, hole.length === 2 ? hole : null);
         n3++;

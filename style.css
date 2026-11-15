@@ -1098,7 +1098,7 @@ img[data-photo] { -webkit-touch-callout: none; -webkit-user-select: none; user-s
 /* The ladder, printed once above the rows — same flex track as a chip so the
    labels sit over their own column. */
 .sizehdr { margin-bottom: 3px; }
-.sizecol { flex: 1; min-width: 0; padding: 0 2px; text-align: center; white-space: nowrap;
+.sizecol { flex: 1; min-width: 0; padding: 0 2px; text-align: center; overflow-wrap: anywhere;
   font-size: 10.5px; font-weight: 700; letter-spacing: .3px; color: var(--muted); }
 /* The heading is the hide control, so it needs to look pressable without
    turning the ladder into a row of buttons — a dotted underline, the same hint

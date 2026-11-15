@@ -4273,8 +4273,8 @@ function renderOppSizing(o) {
       On the raise rows the rung is what he puts in <i>on top of the call</i>, against the pot with
       that call in it — the same thing the B33/B50/B66 buttons compute, so a raise made with a button
       lands on its own rung. B100 is the pot-sized raise either way. Those two rows hold all three
-      streets; the label opens the split. Jam counts every all-in whatever it cost, and anything over
-      150% of the pot lands there too. Tap a count for the hands.
+      streets; the label opens the split. B150–B250 covers 150% through 250% of the pot.
+      Jam includes all-ins of any size and bets or raises over 250%. Tap a count for the hands.
       Tap a column heading to fold that rung out of the grid — every count and share
       above still takes in the hidden columns, so a row total can be larger than the
       cells left showing.
@@ -4901,7 +4901,7 @@ const stackStr = (n) => chipStr(n);
 function rungHTML(rg) {
   if (!rg) return "";
   const pct = rg.ratio === null || rg.ratio === undefined ? null : Math.round(rg.ratio * 100);
-  const lbl = (SIZING_STEP_BY_ID[rg.step] || {}).label || rg.step;
+  const lbl = rg.step === "150" && pct !== null ? "B" + pct : (SIZING_STEP_BY_ID[rg.step] || {}).label || rg.step;
   const tip = pct === null ? "All in"
     : `${pct}% of the pot${rg.raise ? " with the call in it" : ""}`;
   return ` <span class="rung${rg.raise ? " raise" : ""}" title="${esc(tip)}">${esc(lbl)}</span>`;

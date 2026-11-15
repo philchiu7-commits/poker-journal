@@ -21,26 +21,16 @@ const ReadLab = (() => {
     const { forced, price: entryPrice } = preflopEntryPosts(h);
     F.forced = forced;
     F.price = entryPrice;
-    const source=actsAsPlayed(h); let lv=0, price=F.price;
-    const A=source.map(a=>{
-      if(a.street!=='pre')return {...a,src:a.src||a};
-      const b={...a,src:a.src||a,levelBefore:lv};
-      if(AGG.has(a.act)) {
-        const amount=sizeAmount(a.size)??sizeMult(a.size,price);
-        if(a.act==='jam' && amount!=null && amount<=price)return {...b,act:'call',allInCall:true,levelAfter:lv};
-        lv=Math.max(lv+1,({'3bet':2,'4bet':3,'5bet':4})[a.act]||0);
-        b.act=lv===1?'raise':lv===2?'3bet':lv===3?'4bet':'5bet';
-        if(amount!=null)price=Math.max(price,amount);
-      }
-      b.levelAfter=lv; return b;
-    });
-    const pre=A.filter(a=>a.street==='pre'); F.pre=pre;F.preAgg=pre.filter(a=>AGG.has(a.act)).at(-1)?.actor;
-    F.pfr=F.preAgg===F.me;F.pfc=!F.pfr&&pre.some(a=>a.actor===F.me&&a.act==='call');F.limped=lv===0;
+    const source=actsAsPlayed(h);
+    const pre=preflopActionsWithLevels(source.filter(a=>a.street==='pre'),entryPrice);
+    F.pre=pre;F.preAgg=pre.filter(a=>AGG.has(a.act)).at(-1)?.actor;
+    F.pfr=F.preAgg===F.me;F.pfc=!F.pfr&&pre.some(a=>a.actor===F.me&&a.act==='call');F.limped=!pre.at(-1)?.levelAfter;
     F.opened = openDecision(pre, F.me, F.pos(F.me), { forced, price: entryPrice });
     F.first=pre.find(a=>a.actor===F.me);F.openLimp=F.first&&F.first.levelBefore===0&&['limp','call'].includes(F.first.act)&&(F.forced[F.pos(F.me)]||0)<F.price;
     const actors=[...new Set(pre.map(a=>a.actor))],folded=new Set(),allin=new Set();let prevAgg=F.preAgg,init=F.preAgg;
     for(const st of ST){
-      const acts=A.filter(a=>a.street===st),alive=actors.filter(x=>!folded.has(x)),my=acts.filter(a=>a.actor===F.me),first=my[0];
+      const acts=st==='pre'?pre:source.filter(a=>a.street===st).map(a=>({...a,src:a.src||a}));
+      const alive=actors.filter(x=>!folded.has(x)),my=acts.filter(a=>a.actor===F.me),first=my[0];
       const firstI=acts.findIndex(a=>a.actor===F.me),before=firstI<0?[]:acts.slice(0,firstI),bets=acts.filter(a=>AGG.has(a.act));
       const can=st!=='pre'&&first&&!allin.has(F.me)&&alive.some(x=>x!==F.me&&!allin.has(x))&&!before.some(a=>AGG.has(a.act))&&['check',...AGG].includes(first.act);
       const bet=can&&AGG.has(first.act), prior=prevAgg||init;
@@ -190,11 +180,10 @@ const ReadLab = (() => {
     if(F.openLimp)return null;const a=F.pre.find(a=>a.actor===F.me&&a.levelBefore===1);return a?eq(AGG.has(a.act)&&a.levelAfter===2,'Response: '+a.act):null;
   },8.5,14,{highInclusive:true,combined:true});
   for(const pos of ['IP','OOP']) add('fold3-'+pos,'Preflop','Fold to 3bet · '+pos,'First answer after an opening or isolation raise; intervening 4bets excluded. Strong Yes ≥65; Yes ≥58; No ≥50; Hard No <50.',F=>{
-    if(F.openLimp)return null;const open=F.pre.findIndex(a=>a.actor===F.me&&a.levelAfter===1&&AGG.has(a.act));if(open<0||F.pre[open].src?.act==='jam'||F.pre[open].size==='Jam')return null;
-    const i=F.pre.findIndex((a,j)=>j>open&&a.actor!==F.me&&AGG.has(a.act)&&a.levelAfter===2);if(i<0)return null;
-    const next=F.pre.slice(i+1),r=next.find(a=>a.actor===F.me);if(!r||next.slice(0,next.indexOf(r)).some(a=>AGG.has(a.act)))return null;
-    const ring=['SB','BB','STD','U9','U8','U7','U6','HJ','CO','BN'];const x=ring.indexOf(F.pos(F.me)),y=ring.indexOf(F.pos(F.pre[i].actor));if(x<0||y<0||(x>y?'IP':'OOP')!==pos)return null;
-    return eq(r.act==='fold','First answer to 3bet: '+r.act);
+    if(F.openLimp)return null;
+    const spot=foldToThreeBetSpot(F.pre,F.me);if(!spot)return null;
+    const ring=['SB','BB','STD','U9','U8','U7','U6','HJ','CO','BN'];const x=ring.indexOf(F.pos(F.me)),y=ring.indexOf(F.pos(spot.three.actor));if(x<0||y<0||(x>y?'IP':'OOP')!==pos)return null;
+    return eq(spot.response.act==='fold','First answer to 3bet: '+spot.response.act);
   },{mode:'fold3',threshold:58,strong:65,hard:50});
   cap('fourlight','Preflop','Can 4bet light','A genuine 4-bet with an unpaired holding below AJ; AJ/AQ/AK and all pocket pairs do not qualify. Combined squid.',F=>{
     const a = F.pre.find(a => a.actor === F.me && a.levelBefore === 2);
