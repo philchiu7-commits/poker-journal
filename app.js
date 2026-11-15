@@ -42,6 +42,7 @@ let showConvertedNotes = {};      // per-opponent toggle: show notes already con
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
+const OPP_SORT_LABELS = { group: "Group order", hands: "Most hands", "group-hands": "Most hands within groups" };
 let oppSort = "group";
 let pinnedGroup = null;           // opponents list: group name that always sorts first (null = auto by recency)
 let dupeDismissed = new Set();    // opponents list: duplicate pairs Phil has said are different people
@@ -3078,7 +3079,9 @@ function renderOpponents() {
   list.sort(sortByHands ? (a, b) => (stats[b.id]?.count || 0) - (stats[a.id]?.count || 0) || manualOrder(a, b)
     : manualOrder);
   $("opp-sort").disabled = oppEditMode;
-  $("opp-sort").value = oppSort;
+  $("opp-sort").setAttribute("aria-label", "Sort opponents · " + OPP_SORT_LABELS[oppSort]);
+  $("opp-sort").title = OPP_SORT_LABELS[oppSort];
+  $("opp-sort").classList.toggle("on", oppSort !== "group");
   // section by group — most-recently-touched group first (ungrouped ranks by its own recency)
   const groupRecency = {};
   for (const o of list) {
@@ -6609,6 +6612,17 @@ function openGroupSheet(g, active) {
 }
 
 function sheetClick(e) {
+  if (sheetGroup === "__oppsort__") {
+    const choice = e.target.closest("[data-opp-sort]");
+    if (choice) {
+      oppSort = choice.dataset.oppSort;
+      metaSet("oppSort", oppSort);
+      hideSheet();
+      renderOpponents();
+      $("opp-sort").focus();
+      return;
+    }
+  }
   if (sheetGroup === "__handimport__") {
     if (e.target.closest("[data-hisave]")) { commitHandImport(); return; }
   }
@@ -6972,10 +6986,13 @@ function bindStatic() {
 
   // opponents list
   $("opp-search").oninput = renderOpponents;
-  $("opp-sort").onchange = () => {
-    oppSort = $("opp-sort").value;
-    metaSet("oppSort", oppSort);
-    renderOpponents();
+  $("opp-sort").onclick = () => {
+    sheetGroup = "__oppsort__";
+    showSheet(`<div class="sheethead"><span class="t">Sort opponents</span><button data-sheetclose>Close</button></div>
+      <div class="mergelist">${Object.entries(OPP_SORT_LABELS).map(([key, label]) =>
+        `<button type="button" class="mergeitem" data-opp-sort="${key}" aria-pressed="${key === oppSort}">
+          <span class="mnm">${label}</span>${key === oppSort ? '<span aria-hidden="true">✓</span>' : ""}
+        </button>`).join("")}</div>`);
   };
   $("opp-edit").onclick = () => { oppEditMode = !oppEditMode; renderOpponents(); };
   $("opp-add").onclick = () => { $("opp-new").classList.toggle("hidden"); $("opp-new-name").focus(); };
@@ -7840,11 +7857,34 @@ function bindStatic() {
     e.target.value = "";
     if (!file) return;
     try {
-      const restored = await restoreMissingProfilePhotos(JSON.parse(await file.text()));
-      await refreshCache();
-      renderData();
-      toast(restored ? `Restored ${restored} profile photo${restored === 1 ? "" : "s"}.`
-        : "No missing photos matched this backup.");
+      const data = JSON.parse(await file.text());
+      const plan = profilePhotoRestorePlan(data, await dbAll("opponents"));
+      if (!plan.length) { toast("No missing photos matched this backup."); return; }
+      const approved = new Map(plan.map(entry => [entry.target.id, entry]));
+      sheetGroup = "__photorestore__";
+      showSheet(`<div class="sheethead"><span class="t">Restore profile photos</span><button data-sheetclose>Cancel</button></div>
+        <div class="sheetnote">Review the photos matched to your existing profiles.</div>
+        <div class="list rgcell-hands short">${plan.map(({ target, source }) =>
+          `<div class="lrow"><span class="t"><img class="oppavatar lg" src="${esc(profilePhoto(source))}" alt="">
+            ${esc(target.name)}${target.group ? " · " + esc(target.group) : ""}</span></div>`).join("")}</div>
+        <button id="photo-restore-apply" type="button" class="primary">Restore ${plan.length} photo${plan.length === 1 ? "" : "s"}</button>`);
+      $("photo-restore-apply").onclick = async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const restored = await restoreMissingProfilePhotos(data, approved);
+          if (button.isConnected && sheetGroup === "__photorestore__") hideSheet();
+          await refreshCache();
+          if (curView === "data") renderData();
+          else if (curView === "opponents") renderOpponents();
+          else if (curView === "opp") renderOppDetail(curOppId);
+          toast(restored ? `Restored ${restored} profile photo${restored === 1 ? "" : "s"}.`
+            : "No missing photos still matched the preview.");
+        } catch (err) {
+          button.disabled = false;
+          toast("Photo restore failed: " + err.message);
+        }
+      };
     } catch (err) { toast("Photo restore failed: " + err.message); }
   };
   $("data-import").onclick = () => $("data-importfile").click();

@@ -229,36 +229,69 @@ function mergeProfilePhotos(into, from) {
   }
 }
 
-function restoreMissingProfilePhotos(data) {
+function profilePhotoRestorePlan(data, opponents) {
   if (data?.app !== "poker-journal" || !Array.isArray(data.opponents))
     throw new Error("Choose a Poker Journal backup.");
-  const byId = new Map();
-  const ambiguous = new Set();
-  for (const o of data.opponents) {
-    if (typeof o?.id !== "string" || !profilePhoto(o)) continue;
-    if (byId.has(o.id)) ambiguous.add(o.id);
-    byId.set(o.id, o);
+  const sources = data.opponents.filter(o => typeof o?.id === "string" && o.id);
+  const uniqueBy = (rows, keyFor) => {
+    const map = new Map();
+    for (const row of rows) {
+      const key = keyFor(row);
+      if (key) map.set(key, map.has(key) ? null : row);
+    }
+    return map;
+  };
+  const groupedName = (o) => {
+    const group = typeof o.group === "string" ? normName(o.group) : "";
+    const name = typeof o.name === "string" ? normName(o.name) : "";
+    return group && name ? JSON.stringify([group, name]) : "";
+  };
+  const byId = uniqueBy(sources, o => o.id);
+  const byName = uniqueBy(sources, groupedName);
+  const targetsByName = uniqueBy(opponents, groupedName);
+  const targetIds = new Set(opponents.map(o => o.id));
+  const plan = [];
+  for (const target of opponents) {
+    if (target.archived || profilePhoto(target) || target.photoUpdatedAt) continue;
+    const key = groupedName(target);
+    let source = byId.get(target.id);
+    if (!byId.has(target.id) && key && targetsByName.get(key) === target) {
+      const sameName = byName.get(key);
+      if (sameName && byId.get(sameName.id) === sameName && !targetIds.has(sameName.id))
+        source = sameName;
+    }
+    if (source && profilePhoto(source)) plan.push({ target, source });
   }
+  return plan;
+}
+
+function restoreMissingProfilePhotos(data, approved) {
   return new Promise((resolve, reject) => {
     const tx = _db.transaction("opponents", "readwrite");
     const store = tx.objectStore("opponents");
     const request = store.getAll();
-    let restored = 0;
+    let restored = 0, error;
     request.onsuccess = () => {
-      for (const o of request.result) {
-        const source = byId.get(o.id);
-        if (!source || ambiguous.has(o.id) || profilePhoto(o) || o.photoUpdatedAt) continue;
-        copyProfilePhotos(o, source);
-        o.photoUpdatedAt = Date.now();
-        store.put(o);
-        restored++;
+      try {
+        for (const { target, source } of profilePhotoRestorePlan(data, request.result)) {
+          const prior = approved.get(target.id);
+          if (!prior || prior.source.id !== source.id || prior.target.name !== target.name ||
+              prior.target.group !== target.group) continue;
+          copyProfilePhotos(target, source);
+          target.photoUpdatedAt = Date.now();
+          store.put(target);
+          restored++;
+        }
+      } catch (err) {
+        error = err;
+        tx.abort();
       }
     };
     tx.oncomplete = () => {
       if (restored) scheduleAutoSnapshot();
       resolve(restored);
     };
-    tx.onabort = () => reject(tx.error);
+    tx.onabort = () => reject(error || tx.error);
   });
 }
 
