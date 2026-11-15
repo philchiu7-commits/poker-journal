@@ -1165,6 +1165,7 @@ function route() {
 /* Separate, derived trial reads. Rules and feedback are meta, never opponent.reads. */
 let readLabPlayer = null, readLabResults = [], readLabOverrides = {}, readLabFeedback = [], readLabReady = false;
 const readLabShut = new Set();
+let readLabEditing = false;
 
 function renderReadLab(id) {
   const o = oppById(id);
@@ -1172,6 +1173,7 @@ function renderReadLab(id) {
     $("rl-results").innerHTML = '<div class="panel">Player not found.</div>';
     return;
   }
+  if (readLabPlayer !== id) setReadLabEditing(false);
   readLabPlayer = id;
   curOppId = id;
   $("rl-name").textContent = o.name + " · Read Lab";
@@ -1198,7 +1200,8 @@ function readLabChip(r, label, state, flags, overridden) {
   if (r.mode === "manual") {
     const title = `${r.label}: ${state}. Tap to cycle Yes, No, and unset.`;
     return `<button type="button" class="${cls}" data-lab-manual="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
-      `${esc(label ? label + (state === "Unset" ? "" : " · " + state) : state === "Unset" ? "–" : state)}</button>`;
+      `${esc(label ? label + (state === "Unset" ? "" : " · " + state) : state === "Unset" ? "–" : state)}` +
+      (state === "Unset" ? "" : '<small class="rl-manual-badge">Manual</small>') + "</button>";
   }
   const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
   const title = `${r.label}: ${state}${overridden ? " (manual)" : ""} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
@@ -1277,16 +1280,38 @@ function renderReadLabGroups(o) {
       `<span class="rctitle">${esc(cat.title)}</span></div>${shut ? "" : roles}</section>`;
   }).join("") || '<div class="panel">No reads match this filter.</div>';
 }
+function readLabVerdictControls(r, o) {
+  const manualOnly = r.mode === "manual";
+  const manual = readLabManualVerdict(o, manualOnly ? r.id : r.sampleKey);
+  return [["yes", "Yes"], ["no", "No"], ["auto", manualOnly ? "Clear" : "Use automatic"]].map(([value, label]) => {
+    const selected = (manual || "auto") === value;
+    const cls = selected ? " on " + (STATE_CLASS[value] || "") : "";
+    return `<button type="button" class="chip${cls}" data-lab-set-verdict="${esc(r.id)}" data-lab-verdict="${value}"
+      aria-pressed="${selected}">${label}</button>`;
+  }).join("");
+}
+
+function setReadLabEditing(editing) {
+  readLabEditing = editing;
+  const button = $("rl-edit-verdicts");
+  button.textContent = editing ? "Done editing" : "Edit verdicts";
+  button.setAttribute("aria-pressed", String(editing));
+  $("rl-verdict-help").textContent = editing
+    ? "Tap any read to set Yes or No. Your overrides are marked Manual."
+    : "Tap an automatic read to see its evidence. Your overrides are marked Manual.";
+}
+
+function readLabVerdictEditor(r, o) {
+  sheetGroup = "__labVerdict__";
+  showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+    ${r.mode === "manual" ? "" : `<div class="rdsub">Automatic: ${esc(r.state)} · ${r.k}/${r.n} supporting</div>`}
+    <div class="rl-verdict"><div class="chiprow" role="group" aria-label="Set verdict">${readLabVerdictControls(r, o)}</div></div>`);
+  $("sheet").scrollTop = 0;
+}
+
 function readLabDetail(id, combo = null) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
-  const manual = readLabManualVerdict(o, r.sampleKey);
-  const verdictControls = [["yes", "Yes"], ["no", "No"], ["auto", "Use automatic"]].map(([value, label]) => {
-    const selected = (manual || "auto") === value;
-    const cls = selected ? " on " + (STATE_CLASS[value] || "") : "";
-    return `<button type="button" class="chip${cls}" data-lab-set-verdict="${esc(id)}" data-lab-verdict="${value}"
-      aria-pressed="${selected}">${label}</button>`;
-  }).join("");
   const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
   const sampleLabel = r.acceptedSample ? "Your accepted sample" : "Default sample minimum";
   const sampleControls = (r.canAcceptSample
@@ -1304,7 +1329,7 @@ function readLabDetail(id, combo = null) {
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     <div class="rl-verdict">
       <div class="muted sub2">Read Lab verdict</div>
-      <div class="chiprow" role="group" aria-label="Read Lab verdict">${verdictControls}</div>
+      <div class="chiprow" role="group" aria-label="Read Lab verdict">${readLabVerdictControls(r, o)}</div>
     </div>
     <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} supporting${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${chart}
@@ -1345,6 +1370,7 @@ function bindReadLab() {
   const journal = () => location.hash = '#opp/' + readLabPlayer;
   $("rl-journal").onclick = journal; $("rl-journal-tab").onclick = journal;
   $("rl-refresh").onclick = async () => { await refreshCache(); renderReadLab(readLabPlayer); };
+  $("rl-edit-verdicts").onclick = () => setReadLabEditing(!readLabEditing);
   $("rl-squid").onchange = $("rl-show").onchange = () => renderReadLab(readLabPlayer);
   $("rl-results").onclick = async e => {
     const fold = e.target.closest("[data-lab-fold]");
@@ -1358,6 +1384,12 @@ function bindReadLab() {
       return;
     }
     const manual = e.target.closest("[data-lab-manual]");
+    const rule = e.target.closest("[data-lab-rule]");
+    if (readLabEditing && (manual || rule)) {
+      const r = readLabResults.find(r => r.id === (manual?.dataset.labManual || rule?.dataset.labRule));
+      if (r) readLabVerdictEditor(r, o);
+      return;
+    }
     if (manual) {
       const id = manual.dataset.labManual;
       manual.disabled = true;
@@ -1375,7 +1407,6 @@ function bindReadLab() {
       }
       return;
     }
-    const rule = e.target.closest("[data-lab-rule]");
     if (rule) readLabDetail(rule.dataset.labRule);
   };
   $("sheet").addEventListener('click',async e => {
@@ -1384,16 +1415,19 @@ function bindReadLab() {
       const r = readLabResults.find(r => r.id === verdict.dataset.labSetVerdict);
       const o = oppById(readLabPlayer);
       const value = verdict.dataset.labVerdict;
-      if (!o || !r?.sampleKey || !["yes", "no", "auto"].includes(value) ||
+      if (!o || !r || !["yes", "no", "auto"].includes(value) ||
           verdict.parentElement.getAttribute("aria-busy") === "true") return;
       const controls = verdict.parentElement;
+      const compact = sheetGroup === "__labVerdict__";
+      const key = r.mode === "manual" ? r.id : r.sampleKey;
       controls.setAttribute("aria-busy", "true");
       try {
-        const fresh = await saveReadLabEntry(o, "readLabManual", r.sampleKey, () => value === "auto" ? null : value);
+        const fresh = await saveReadLabEntry(o, "readLabManual", key, () => value === "auto" ? null : value);
         if (fresh && curView === "readlab" && readLabPlayer === o.id) {
           renderReadLabGroups(fresh);
           if (verdict.isConnected && !$("sheet").classList.contains("hidden")) {
-            readLabDetail(r.id);
+            if (compact) readLabVerdictEditor(r, fresh);
+            else readLabDetail(r.id);
             $("sheet").querySelector(`[data-lab-verdict="${value}"]`)?.focus({ preventScroll: true });
           }
         }
