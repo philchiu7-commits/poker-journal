@@ -1411,7 +1411,7 @@ function readLabDetail(id, combo = null, showAll = false) {
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
   const rule = r.mode === "cap" ? `Yes after ${r.min === 1 ? "one qualifying hand" : `${r.min} distinct qualifying hands`}. ${r.positiveOnly
     ? "Fewer examples means Not established."
-    : "Below that count, No once the eligible sample is large enough."}` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
+    : "Below that count, No once the eligible sample is large enough."}` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
   const sampleLabel = r.acceptedSample ? "Your accepted sample" : "Default sample minimum";
   const sampleControls = (r.canAcceptSample
     ? `<button type="button" class="chip" data-lab-sample="${esc(id)}">Accept ${r.n} hands · ${esc(r.verdict)}</button>` : "") +
@@ -1465,7 +1465,7 @@ function readLabDetail(id, combo = null, showAll = false) {
   if (combo) $("rl-evidence-heading").focus();
   else $("sheet").scrollTop = 0;
 }
-const labEditKeys = r => r.mode === 'cap' ? ['min'] : ['bands','interval'].includes(r.mode) ? ['low','high'] : r.mode === 'fold3' ? ['threshold','strong','hard'] : ['threshold',...('minOpp' in r?['minOpp']:[]),...('minHits' in r?['minHits']:[])];
+const labEditKeys = r => r.mode === 'cap' ? ['min'] : r.mode === 'bands' ? ['low','high'] : r.mode === 'fold3' ? ['threshold','strong','hard'] : ['threshold',...('minOpp' in r?['minOpp']:[]),...('minHits' in r?['minHits']:[])];
 const labCountKey = key => ['min','minOpp','minHits'].includes(key);
 function editReadLab(context) {
   const r = context.rule;

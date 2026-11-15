@@ -116,18 +116,14 @@ const ReadLab = (() => {
     if (H.ignored) { F.skippedTexture = true; return null; }
     return H;
   }
-  const known = (F, street, gate, pred) => {
-    const H = gate && classifiableHolding(F, street);
-    return H ? eq(pred(H, F), H.why) : null;
-  };
   const frequency=(id,sec,label,def,test,threshold,more=true,extra={})=>add(id,sec,label,def,test,{mode:'freq',threshold,more,...extra});
   const cap=(id,sec,label,def,test,extra={})=>add(id,sec,label,def,test,extra);
   // A holding-specific rate uses decisions made with that holding as its sample.
   const holdingDefinition = 'Known holdings only; ignored textures do not enter the sample.';
   const holdingDecision = (F, street, decision, matches) => {
     if (!decision) return null;
-    const match = known(F, street, true, matches);
-    return match?.ok ? eq(decision.ok, match.why + ' · ' + decision.why) : null;
+    const H = classifiableHolding(F, street);
+    return H && matches(H, F) ? eq(decision.ok, H.why + ' · ' + decision.why) : null;
   };
   const holdingCap = (id, section, label, street, decision, matches, action, options = {}) =>
     cap(id, section, label, holdingDefinition,
@@ -270,9 +266,15 @@ const ReadLab = (() => {
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;
-    const share = F => known(F, s, bxtChance(F) && F.st[s].bet, H => H.bluff || H.kind === 'draw');
-    frequency('bxt-over-' + s, section, 'BXT · Overbluff', 'Bluffs+draws / all classifiable BXT bets ≥60%, at least3 supporting hands.', share, 60, true, { minHits: 3 });
-    add('bxt-normal-' + s, section, 'BXT · Normal', 'Bluffs+draws share ≥40% and <60% of classifiable BXT bets.', share, { mode: 'interval', low: 40, high: 60, minOpp: 3 });
+    const bluffShare = F => {
+      if (!bxtChance(F) || !F.st[s].bet) return null;
+      const H = classifiableHolding(F, s);
+      if (!H || H.strong) return null;
+      return eq(H.bluff || H.kind === 'draw', H.why);
+    };
+    frequency('bxt-over-' + s, section, 'BXT · Overbluff',
+      'Bluffs and draws as a share of bets when checked to with known holdings below Strong. Strong means top pair or better, subject to the four-flush and four-straight rules. Yes at 60% or higher with at least three supporting hands.',
+      bluffShare, 60, true, { minHits: 3 });
     holdingCap('bxt-merged-' + s, section, 'BXT · Merged', s,
       F => bxtChance(F) && betDecision(F, s), H => H.kind === 'pair', bet);
     holdingCap('bxt-air-' + s, section, 'BXT · Air', s,
@@ -494,8 +496,7 @@ const ReadLab = (() => {
         } else if (cfg.mode === 'activity') verdict = pct >= cfg.threshold ? 'Aggro' : 'Passive';
         else if (cfg.mode === 'fold3') {
           verdict = pct >= cfg.strong ? 'Strong Yes' : pct >= cfg.threshold ? 'Yes' : pct < cfg.hard ? 'Hard No' : 'No';
-        } else if (cfg.mode === 'interval') verdict = pct >= cfg.low && pct < cfg.high ? 'Yes' : 'No';
-        else {
+        } else {
           const passes = cfg.more
             ? (cfg.strict ? pct > cfg.threshold : pct >= cfg.threshold)
             : (cfg.strict ? pct < cfg.threshold : pct <= cfg.threshold);

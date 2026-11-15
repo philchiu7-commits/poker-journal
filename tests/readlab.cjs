@@ -381,3 +381,29 @@ const unpairedOvercards = results([
 assert.deepEqual(Array.from(find(unpairedOvercards, 'bluff-turn-over').ev, e => [e.id,e.ok]),
   [['unpaired-gs-bet', true], ['unpaired-air-check', false]]);
 console.log('PASS: overcard turn opportunities exclude paired hands even with draws, including both checks and bets.');
+
+function bxtHand(id, street, cards, action) {
+  const pre = [act('pre','v1','raise','$6'), act('pre','v0','call')];
+  const flop = street === 'turn' ? [act('flop','v1','check'), act('flop','v0','check')] : [];
+  return h(id, cards, ['Kc','9s','2s','3h',null], [...pre, ...flop,
+    act(street,'v1','check'), act(street,'v0',action,action === 'bet' ? '$10' : null)]);
+}
+for (const street of ['flop', 'turn']) {
+  const evidence = results([
+    bxtHand('air-bet',street,['Qh','7d'],'bet'),
+    bxtHand('draw-bet',street,['7s','5s'],'bet'),
+    bxtHand('merge-bet',street,['9d','Jc'],'bet'),
+    bxtHand('strong-bet',street,['Kd','Ac'],'bet'),
+    bxtHand('strong-plus-draw-bet',street,['Ks','As'],'bet'),
+    bxtHand('air-check',street,['Qh','7d'],'check'),
+    bxtHand('unknown-bet',street,null,'bet'),
+  ]);
+  const over = find(evidence, 'bxt-over-' + street);
+  assert.deepEqual(Array.from(over.ev, e => [e.id, e.ok]),
+    [['air-bet',true], ['draw-bet',true], ['merge-bet',false]]);
+  assert.equal(over.k, 2);
+  assert.equal(over.n, 3);
+  assert.equal(find(evidence, 'bxt-normal-' + street), undefined);
+  assert.equal(find(evidence, 'bxt-air-' + street).n, 2);
+}
+console.log('PASS: flop/turn BXT Overbluff excludes Strong and checks, includes weak bets, and removes Normal.');
