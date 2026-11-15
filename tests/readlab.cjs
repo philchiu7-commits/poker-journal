@@ -262,3 +262,38 @@ assert.deepEqual(Array.from(oopPairOnly.ev, e => [e.id, e.ok]),
 assert.equal(oopPairOnly.pct, 50);
 assert.equal(oopPairOnly.state, 'Yes');
 console.log('PASS: OOP Protective samples second pair or better as the preflop raiser, with checks and bets both counted.');
+
+const raiseHoldings = [
+  ['tp-best', ['9d','As'], ['9c','5d','2h'], true],
+  ['tp-second-kicker', ['9d','Ks'], ['9c','5d','2h'], true],
+  ['tp-third-kicker', ['9d','Qs'], ['9c','5d','2h'], false],
+  ['tp-second-on-ace-high', ['Ad','Qs'], ['Ac','5d','2h'], true],
+  ['overpair', ['Td','Ts'], ['9c','5d','2h'], true],
+  ['made-two-pair', ['9d','5s'], ['9c','5d','2h'], true],
+  ['top-plus-board-pair', ['9d','Ks'], ['9c','5d','5h'], false],
+  ['pocket-plus-board-pair', ['Td','Ts'], ['9c','5d','5h'], false],
+  ['trips', ['5c','As'], ['9c','5d','5h'], true],
+  ['full-house', ['9d','9s'], ['9c','5d','5h'], true],
+  ['weak-top-draw', ['9s','7s'], ['9c','5s','2s'], false],
+  ['strong-top-draw', ['9s','Ks'], ['9c','5s','2s'], true],
+];
+function holdingRaise(id, cards, board, mode) {
+  const hand = limpXR(id, cards, 'raise');
+  hand.board = [...board, null, null];
+  if (mode === 'limp-xr') return hand;
+  const pre = mode === 'pfr-xr'
+    ? [act('pre','v0','raise','$6'), act('pre','v1','call')]
+    : [act('pre','v1','raise','$6'), act('pre','v0','call')];
+  hand.actions = pre.concat(act('flop','v0','check'), act('flop','v1','bet','$8'), act('flop','v0','raise','$24'));
+  return hand;
+}
+for (const prefix of ['limp-xr', 'pfr-xr', 'pfc-xr']) {
+  const evals = results(raiseHoldings.map(([id, cards, board]) => holdingRaise(id, cards, board, prefix)));
+  const evidence = find(evals, prefix + '-Strong').ev;
+  assert.deepEqual(Array.from(evidence, e => e.id), raiseHoldings.filter(h => h[3]).map(h => h[0]));
+  const draw = find(evals, prefix + (prefix === 'pfc-xr' ? '-Equity' : '-Draw'));
+  assert.deepEqual(Array.from(draw.ev, e => e.id), ['weak-top-draw']);
+  assert.match(find(evals, prefix + '-Strong').definition, /two best kickers.*Two pair on a paired board/);
+}
+assert.ok(holding(['9d','Qs'], ['9c','5d','2h'], 'flop').strong); // the general top-pair+ definition
+console.log('PASS: raise-specific Strong in all three groups, paired-board two pair excluded, trips and full houses included, and draw fallback.');

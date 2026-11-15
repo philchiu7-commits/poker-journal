@@ -123,7 +123,19 @@ const ReadLab = (() => {
   const holdingCap = (id, section, label, street, decision, matches, action, options = {}) =>
     cap(id, section, label, holdingDefinition,
       F => holdingDecision(F, street, decision(F), matches), { ...options, action });
-  const xrCapability = { min: 3, positiveOnly: true };
+  const common = 'Holding is evaluated on this street. Strong = top pair+; Draw = FD/OESD/gutshot unless Strong; Merge = own-card second pair or worse without draw; Air = no own pair or draw. On four-flush/four-straight boards, one pair is not Strong; two pair/sets/trips are ignored. ';
+  const raiseCriteria = 'Strong = top pair with either of the two best kickers, or a better made hand. Two pair on a paired board does not qualify as Strong.';
+  const raiseHoldingDefinition = common.replace('Strong = top pair+;', raiseCriteria);
+  const xrCapability = { min: 3, positiveOnly: true, definition: raiseHoldingDefinition + holdingDefinition };
+  const raiseStrong = (H, F) => {
+    if (!H.strong) return false;
+    const boardRanks = new Set(F.st.flop.board.map(rank));
+    if (H.raw.cat === 2 && boardRanks.size < F.st.flop.board.length) return false;
+    if (!H.topPair) return true;
+    const kickers = Array.from({ length: 13 }, (_, i) => 14 - i).filter(r => !boardRanks.has(r));
+    return H.kicker >= kickers[1];
+  };
+  const raiseDraw = (H, F) => H.hasDraw && !raiseStrong(H, F);
   const betDecision = (F, street) => eq(F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const checkDecision = (F, street) => eq(!F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const responseDecision = (street, matches) => {
@@ -191,7 +203,7 @@ const ReadLab = (() => {
   for (const [label, pred] of comp)
     holdingCap('limp-oop-' + label, 'MWP Limp', 'Probe OOP F · ' + label, 'flop',
       F => oopLimp(F) && betDecision(F, 'flop'), pred, ['Probed', 'Checked']);
-  for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong], ['Bluff', H => H.bluff]])
+  for (const [label, pred] of [['Air', H => H.air], ['Draw', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong], ['Bluff', H => H.bluff]])
     holdingCap('limp-xr-' + label, 'MWP Limp', 'xR · ' + label, 'flop',
       F => limpMw(F) && F.st.flop.xrChance && raiseDecision(F.st.flop), pred, ['Check-raised', 'Did not raise'], xrCapability);
   for (const [label, pred] of [['Air', H => H.air], ['Merge', H => H.kind === 'pair'], ['Strong', H => H.strong]])
@@ -222,11 +234,11 @@ const ReadLab = (() => {
   holdingCap('oop-protect', 'Flop · PFR', 'OOP Protective', 'flop',
     F => F.pfr && position(F, 'flop') === 'OOP' && F.st.flop.can && checkDecision(F, 'flop'),
     H => H.strong || (H.pair && H.above === 1), checked);
-  for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
+  for (const [label, pred] of [['Air', H => H.air], ['Draw', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong]])
     holdingCap('pfr-xr-' + label, 'Flop · PFR', 'xR · ' + label, 'flop',
       F => F.pfr && post(F) && F.st.flop.xrChance && raiseDecision(F.st.flop),
       pred, ['Check-raised', 'Did not raise'], xrCapability);
-  for (const [label, pred] of [['Air', H => H.air], ['Equity', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
+  for (const [label, pred] of [['Air', H => H.air], ['Equity', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong]])
     holdingCap('pfc-xr-' + label, 'Flop · PFC', 'xR or R · ' + label, 'flop',
       F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised, xrCapability);
   for (const s of ['flop', 'turn']) {
@@ -375,8 +387,7 @@ const ReadLab = (() => {
   for (const [section, reads] of Object.entries(manual))
     for (const [id, label] of reads)
       add(id, section, label, 'Set this read manually.', null, { mode: 'manual' });
-  const common = 'Holding is evaluated on this street. Strong = top pair+; Draw = FD/OESD/gutshot unless Strong; Merge = own-card second pair or worse without draw; Air = no own pair or draw. On four-flush/four-straight boards, one pair is not Strong; two pair/sets/trips are ignored. ';
-  for(const r of rules) {
+  for (const r of rules) {
     if (r.definition === holdingDefinition) r.definition = common + holdingDefinition;
     if(r.id.startsWith('float-'))r.definition = 'Call a flop cbet as preflop caller with Air, neither hole card A or K. No own pair, FD, OESD or gutshot; backdoors allowed.';
     if(r.id.startsWith('lead-flush-'))r.definition = 'Lead with a flush newly completed by this street’s card; a previously made flush does not count. Previous aggressor must still be in and waiting to act.';
