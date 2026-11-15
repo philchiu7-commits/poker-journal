@@ -514,6 +514,56 @@ assert.ok(afterTurnCall.filter(r => r.id.startsWith('river-hand-')).every(r => r
 assert.equal(find(afterTurnCall, 'river-over').n, 2);
 console.log('PASS: FD and BDFD have distinct missed-draw samples; turn check-calls are excluded from Bluff hands.');
 
+const allRiverRoles = results([
+  h('raiser', a4Diamonds, [...fdBoard.slice(0, 4), 'Js'], [...pfrPre, ...xcxbFlop, ...checkedTurn, ...betRiver]),
+  h('caller', a4Diamonds, [...fdBoard.slice(0, 4), 'Js'], [...pfcPre, ...xcxbFlop, ...checkedTurn, ...checkedRiver]),
+  h('limper', a4Diamonds, [...fdBoard.slice(0, 4), 'Js'], [
+    act('pre','v1','limp','$2'), act('pre','v0','check'), ...xcxbFlop, ...checkedTurn, ...betRiver,
+  ]),
+]);
+for (const id of ['river-hand-FD', 'river-card-flush']) {
+  const stat = find(allRiverRoles, id);
+  assert.equal(stat.section, 'River · All roles');
+  assert.deepEqual(Array.from(stat.ev, e => [e.id, e.ok]), [['raiser', true], ['caller', false], ['limper', true]]);
+}
+assert.deepEqual(Array.from(find(allRiverRoles, 'river-type-true').ev, e => e.id), ['raiser']);
+assert.deepEqual(Array.from(find(allRiverRoles, 'river-over').ev, e => e.id), ['raiser']);
+console.log('PASS: Bluff hands and Rivers pool all preflop roles; PFR river frequency and Bluff Type keep their role.');
+
+const riverLeadPfr = h('river-lead-pfr', a4Diamonds, fdBoard,
+  [...pfrPre, ...xcxbFlop, ...checkCallTurn, ...betRiver]);
+const riverStabPfr = h('river-stab-pfr', a4Diamonds, fdBoard, [
+  ...pfrPre, ...checkedTurn.map(a => ({ ...a, street: 'flop' })),
+  act('turn','v1','bet','$12'), act('turn','v0','call'),
+  act('river','v1','check'), act('river','v0','bet','$10'), act('river','v1','fold'),
+]);
+riverStabPfr.villains[0].pos = 'BN';
+riverStabPfr.villains[1].pos = 'BB';
+const riverRaiseLimp = h('raise-limp', a4Diamonds, fdBoard, [
+  act('pre','v1','limp','$2'), act('pre','v0','check'), ...checkedTurn,
+  act('river','v0','check'), act('river','v1','bet','$1'), act('river','v0','raise','$5'), act('river','v1','fold'),
+]);
+const riverReraise = h('later-reraise', a4Diamonds, fdBoard, [
+  ...pfrPre, act('pre','v2','call'),
+  act('river','v1','bet','$5'), act('river','v0','call'), act('river','v2','raise','$20'),
+  act('river','v1','call'), act('river','v0','raise','$50'), act('river','v2','fold'), act('river','v1','fold'),
+]);
+riverReraise.villains.push({opponentId:'third',pos:'BN'});
+const generalRiver = results([riverLeadPfr, riverStabPfr, riverRaiseLimp, riverReraise]);
+for (const [id, evidence] of [
+  ['lead-have-river', ['river-lead-pfr']],
+  ['bsti', ['raise-limp']],
+  ['river-xt', ['river-stab-pfr']],
+  ['river-raise', ['raise-limp','later-reraise']],
+]) {
+  const r = find(generalRiver, id);
+  assert.equal(r.section, 'River · All roles');
+  assert.deepEqual(Array.from(r.ev.filter(e => e.ok), e => e.id), evidence);
+}
+assert.equal(find(generalRiver, 'r-can-raise-thin').section, 'River · All roles');
+assert.equal(find(generalRiver, 'river-raise').ev.filter(e => e.id === 'later-reraise').length, 1);
+console.log('PASS: river leads and bluffs span roles; river raises count a later reraise once per hand.');
+
 const riverReadCases = [
   ['Kc', betRiver, ['river-card-over', 'river-type-false']],
   ['Js', checkedRiver, ['river-card-flush', 'river-type-true']],

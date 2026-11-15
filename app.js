@@ -1240,9 +1240,11 @@ function readLabChip(r, label, state, flags, overridden) {
       (state === "Unset" ? "" : '<small class="rl-manual-badge">Manual</small>') + "</button>";
   }
   const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
-  const title = `${r.label}: ${state}${overridden ? " (manual)" : ""} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
+  const verdictLabel = state !== "Not established" ? state : !r.n ? "No eligible hands" :
+    r.positiveOnly ? `Needs ${r.min} examples` : `Small sample`;
+  const title = `${r.label}: ${verdictLabel}${overridden ? " (manual)" : ""} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
   return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}">` +
-    `<span>${esc(label ? label + " · " + state : state)}</span>` +
+    `<span>${esc(label ? label + " · " + verdictLabel : verdictLabel)}</span>` +
     (overridden ? '<small class="rl-manual-badge">Manual</small>' : "") +
     `<small class="rl-stats"> · ${percent} · ${r.k}/${r.n}</small>` +
     (flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : "") + "</button>";
@@ -1301,8 +1303,15 @@ function renderReadLabGroups(o) {
   };
 
   $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
-    const roles = cat.subs.map(sub => {
-      const street = cat.title.split(" ")[0];
+    const street = cat.title.split(" ")[0];
+    const allRoles = sections.get(street + " · All roles");
+    const allRoleRows = allRoles?.size ?
+      '<div class="roleblk"><div class="rolehead">All preflop roles</div><div class="readlines">' +
+      [...allRoles].map(([group, entries]) => {
+        const item = cat.subs.flatMap(sub => sub.rows.flatMap(row => row.ids)).find(item => item.label === group);
+        return line(group, entries, item);
+      }).join("") + "</div></div>" : "";
+    const roles = allRoleRows + cat.subs.map(sub => {
       const groups = sections.get(sub.label ? street + " · " + sub.label.slice(3) : cat.title);
       if (!groups?.size) return "";
       const rows = sub.rows.map(row => {

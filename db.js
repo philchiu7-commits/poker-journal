@@ -533,18 +533,18 @@ function correctedHand(current, correction) {
     return { status: "skipped" };
 
   const hand = copyRec(current);
-  const { betting, squid, squidPresence } = correction;
+  const { betting, board, squid, squidPresence } = correction;
   if (!Array.isArray(hand.villains) || !Array.isArray(hand.actions)) return { status: "skipped" };
   const players = new Map(hand.villains.map(v => [v.opponentId, v]));
   const matchesPlayers = (ids) => ids.length === players.size && ids.every(id => players.has(id));
   if (players.size !== hand.villains.length || !matchesPlayers(correction.players))
     return { status: "skipped" };
 
+  const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   let changed = false;
   if (betting) {
     const { before, after, streets } = betting;
     const seats = hand.villains.map(v => [v.opponentId, v.pos]);
-    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const actionKeys = (actions, blinds) => {
       const candidate = { imported: hand.imported, actions: copyRec(actions), villains: hand.villains.map(v => ({ pos: v.pos })),
         blinds: copyRec(blinds || {}) };
@@ -555,6 +555,7 @@ function correctedHand(current, correction) {
       (b?.straddles || []).map(p => [p.pos, p.amount])];
     const currentKeys = actionKeys(hand.actions, hand.blinds);
     const matches = state => equal(seats, state.seats) &&
+      (state.showdown == null || Boolean(hand.showdown) === state.showdown) &&
       (!state.blinds || equal(blindKeys(hand.blinds), blindKeys(state.blinds))) &&
       equal(currentKeys, actionKeys(state.actions, state.blinds || hand.blinds));
 
@@ -588,6 +589,7 @@ function correctedHand(current, correction) {
       hand.villains = after.seats.map(([id, pos]) => ({ ...players.get(id), pos }));
       hand.villainIds = hand.villains.map(v => v.opponentId);
       if (after.blinds) hand.blinds = { ...hand.blinds, ...after.blinds };
+      if (after.showdown != null) hand.showdown = after.showdown;
       if (!equal(before.seats, after.seats) && Array.isArray(hand.imported.rawSquidReadings)) {
         hand.imported.rawSquidReadings = hand.imported.rawSquidReadings.map(row => {
           const id = before.seats[Number(row.actor?.slice(1))]?.[0];
@@ -596,6 +598,18 @@ function correctedHand(current, correction) {
       }
       Object.assign(hand.imported, betting.evidence);
       normaliseHand(hand);
+      changed = true;
+    }
+  }
+
+  if (board) {
+    const current = Array.from({ length: 5 }, (_, i) => hand.board?.[i] || null);
+    if (!equal(current, board.after)) {
+      const seenCards = new Set(hand.villains.flatMap(v => v.cards || []));
+      if (!equal(current, board.before) || board.after.some(card => card && seenCards.has(card)))
+        return { status: "skipped" };
+      hand.board = board.after.slice();
+      hand.imported.sourceBoardReview = board.evidence;
       changed = true;
     }
   }
@@ -640,6 +654,15 @@ function correctedHand(current, correction) {
 }
 
 function importHandCorrections(corrections, src) {
+  const validBoard = board => {
+    const validCards = cards => Array.isArray(cards) && cards.length === 5 &&
+      cards.every(c => c === null || typeof c === "string" && /^[2-9TJQKA][cdhs]$/.test(c));
+    if (!validCards(board.before) || !validCards(board.after) || !Array.isArray(board.evidence) ||
+        !board.evidence.length) return false;
+    const cards = board.after.filter(Boolean);
+    return new Set(cards).size === cards.length &&
+      board.after.every((card, i) => i < cards.length ? card !== null : card === null);
+  };
   const validPresence = c => Array.isArray(c.squidPresence) && !c.squid &&
     c.squidPresence.length === c.players.length && c.squidPresence.some(v => v !== null) &&
     c.squidPresence.every(v => v === null || (typeof v?.present === "boolean" &&
@@ -647,7 +670,8 @@ function importHandCorrections(corrections, src) {
   if (!Array.isArray(corrections) || new Set(corrections.map(c => c?.id)).size !== corrections.length ||
       corrections.some(c => !c?.id || !c.tableId || !c.roundId || !Array.isArray(c.players) ||
         new Set(c.players).size !== c.players.length ||
-        (!c.betting && !c.squid && !c.squidPresence) || (c.squidPresence != null && !validPresence(c))))
+        (!c.betting && !c.board && !c.squid && !c.squidPresence) ||
+        (c.board != null && !validBoard(c.board)) || (c.squidPresence != null && !validPresence(c))))
     throw new Error("Invalid hand corrections file");
   const counts = { corrected: 0, skipped: 0, already: 0 };
   const receipt = {

@@ -35,8 +35,8 @@ const ReadLab = (() => {
       const firstI=acts.findIndex(a=>a.actor===F.me),before=firstI<0?[]:acts.slice(0,firstI),bets=acts.filter(a=>AGG.has(a.act));
       const can=st!=='pre'&&first&&!allin.has(F.me)&&alive.some(x=>x!==F.me&&!allin.has(x))&&!before.some(a=>AGG.has(a.act))&&['check',...AGG].includes(first.act);
       const bet=can&&AGG.has(first.act), prior=prevAgg||init;
-      const current={acts,my,first,alive,can:!!can,bet:!!bet,firstI,bets,prevAgg,init,board:(h.board||[]).slice(0,N[st]||0)};
       const active = alive.filter(actor => !allin.has(actor));
+      const current={acts,my,first,alive,active,can:!!can,bet:!!bet,firstI,bets,prevAgg,init,board:(h.board||[]).slice(0,N[st]||0)};
       current.through = acts.length > 0 && acts.every(a => a.act === 'check') &&
         active.every(actor => acts.some(a => a.actor === actor));
       current.checkBackChance = !!can && active.every(actor =>
@@ -142,6 +142,27 @@ const ReadLab = (() => {
   const raiseDecision = street => street.raiseChance &&
     !(street.response.act === 'call' && isAllInAction(street.response)) &&
     responseDecision(street, act => AGG.has(act));
+  function riverRaiseDecision(F) {
+    const river = F.st.river;
+    const active = new Set(river.active);
+    let facingWager = false, firstOpportunity = null;
+    for (const action of river.acts) {
+      const aggressive = AGG.has(action.act);
+      if (action.actor === F.me && facingWager) {
+        facingWager = false;
+        if (active.has(F.me) && active.size > 1 &&
+            (aggressive || !isAllInAction(action))) {
+          if (aggressive) return eq(true, 'Response: ' + action.act);
+          if (action.act === 'call' || action.act === 'fold')
+            firstOpportunity ??= eq(false, 'Response: ' + action.act);
+        }
+      } else if (action.actor !== F.me && aggressive) {
+        facingWager = true;
+      }
+      if (action.act === 'fold' || isAllInAction(action)) active.delete(action.actor);
+    }
+    return firstOpportunity;
+  }
   const flopRaiseDecision = (F, kind) => {
     const flop = F.st.flop;
     if (kind !== 'all' && !!flop.xrChance !== (kind === 'xr')) return null;
@@ -239,10 +260,17 @@ const ReadLab = (() => {
   holdingCap('oop-protect', 'Flop · PFR', 'OOP Protective', 'flop',
     F => F.pfr && position(F, 'flop') === 'OOP' && F.st.flop.can && checkDecision(F, 'flop'),
     H => H.strong || (H.pair && H.above === 1), checked);
-  for (const [label, pred] of [['Air', H => H.air], ['Draw', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong]])
+  const flopAllRoles = 'Flop · All roles';
+  const flopXrHoldings = [
+    ['Air', H => H.air], ['Draw', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong],
+  ];
+  for (const [label, pred] of flopXrHoldings) {
+    holdingCap('flop-xr-' + label, flopAllRoles, 'xR · ' + label, 'flop',
+      F => flopRaiseDecision(F, 'xr'), pred, ['Check-raised', 'Did not raise'], xrCapability);
     holdingCap('pfr-xr-' + label, 'Flop · PFR', 'xR · ' + label, 'flop',
       F => F.pfr && post(F) && F.st.flop.xrChance && raiseDecision(F.st.flop),
       pred, ['Check-raised', 'Did not raise'], xrCapability);
+  }
   for (const [label, pred] of [['Air', H => H.air], ['Equity', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong]])
     holdingCap('pfc-xr-' + label, 'Flop · PFC', 'xR or R · ' + label, 'flop',
       F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised, xrCapability);
@@ -252,7 +280,7 @@ const ReadLab = (() => {
     const definition = kind === 'xr' ? 'Flop check-raises out of chances to raise after checking.' :
       kind === 'r' ? 'Flop raises out of chances to raise without first checking.' :
       'Flop raises and check-raises out of all chances to raise.';
-    rate(id, section, label, definition, F => F[role] && post(F) && flopRaiseDecision(F, kind),
+    rate(id, section, label, definition, F => (!role || F[role] && post(F)) && flopRaiseDecision(F, kind),
       kind === 'xr' ? ['Check-raised', 'Did not raise'] : raised);
   }
   function flopRaiseMix(id, section, label, eligible, kind) {
@@ -265,10 +293,12 @@ const ReadLab = (() => {
       return { ok: bucket === 'value', bucket, why: H.why + (flop.xrChance ? ' · Check-raised' : ' · Raised without checking') };
     }, { mode: 'mix' });
   }
+  flopRaiseRate('flop-xr-rate', flopAllRoles, 'xR · xR', null, 'xr');
   flopRaiseRate('pfr-xr-rate', 'Flop · PFR', 'xR · xR', 'pfr', 'xr');
   flopRaiseRate('pfc-xrr-rate', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
   flopRaiseRate('pfc-xr-rate', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
   flopRaiseRate('pfc-r-rate', 'Flop · PFC', 'xR or R · R only', 'pfc', 'r');
+  flopRaiseMix('flop-xr-mix', flopAllRoles, 'xR · Mix', () => true, 'xr');
   flopRaiseMix('limp-xr-mix', 'MWP Limp', 'xR · Mix', limpMw, 'xr');
   flopRaiseMix('pfr-xr-mix', 'Flop · PFR', 'xR · Mix', F => F.pfr && post(F), 'xr');
   const raisedPotCaller = F => F.pfc && post(F);
@@ -297,10 +327,13 @@ const ReadLab = (() => {
   }
   const categories = [['Draw', H => H.kind === 'draw'], ['Merge', H => H.kind === 'pair'], ['Strong', H => H.strong], ['Bluff', H => H.bluff]];
   const led = ['Led', 'Checked'];
+  const riverAllRoles = 'River · All roles';
   for (const s of ['flop', 'turn', 'river']) {
-    const section = s[0].toUpperCase() + s.slice(1) + ' · PFC';
-    const lead = F => F.pfc && post(F) && F.st[s].leadChance && betDecision(F, s);
-    cap('lead-have-' + s, section, 'Lead · Have', 'One confirmed lead before previous aggressor acts. Cards not required; aggressor must still be in hand. Raised pots only.', lead);
+    const section = s === 'river' ? riverAllRoles : s[0].toUpperCase() + s.slice(1) + ' · PFC';
+    const lead = F => (s === 'river' || F.pfc && post(F)) && F.st[s].leadChance && betDecision(F, s);
+    cap('lead-have-' + s, section, 'Lead · Have',
+      'One confirmed lead before the previous aggressor acts. Cards optional. The aggressor must still be in the hand.' +
+      (s === 'river' ? '' : ' Raised pots only.'), lead);
     for (const [label, pred] of categories.filter(([l]) => s !== 'river' || !['Draw', 'Merge'].includes(l)))
       holdingCap('lead-' + label + '-' + s, section, 'Lead · ' + label, s, lead,
         s === 'river' && label === 'Bluff' ? H => H.riverBluff : pred, led);
@@ -366,7 +399,7 @@ const ReadLab = (() => {
   const cleanBet=(F,s)=>F.st[s].bet&&F.st[s].bets.length===1&&F.st[s].acts.some(a=>a.actor!==F.me&&a.act==='call');
   const riverBetDecision = F => riverChance(F) && betDecision(F, 'river');
   const checkCalled = S => S.first?.act === 'check' && S.response?.act === 'call';
-  const riverBluffChance = F => riverChance(F) && !checkCalled(F.st.turn);
+  const riverBluffChance = F => F.st.river.can && !checkCalled(F.st.turn);
   const riverBluffDecision = F => riverBluffChance(F) && betDecision(F, 'river');
   const xcxb = F => checkCalled(F.st.flop) && F.st.flop.bets.length === 1 && quiet(F, 'turn');
   const lines={BBB:F=>cleanBet(F,'flop')&&cleanBet(F,'turn'),BXB:F=>cleanBet(F,'flop')&&quiet(F,'turn'),XBB:F=>quiet(F,'flop')&&cleanBet(F,'turn'),XXB:F=>quiet(F,'flop')&&quiet(F,'turn'),xCXB:xcxb,MWP:F=>F.st.river.alive.length>=3};
@@ -394,10 +427,10 @@ const ReadLab = (() => {
     'A-High': (F, H) => F.cards.some(c => rank(c) === 14) && H.air,
   };
   for (const [name, pred] of Object.entries(hands))
-    holdingCap('river-hand-' + name, 'River · PFR', 'Bluff hands · ' + name, 'river',
+    holdingCap('river-hand-' + name, riverAllRoles, 'Bluff hands · ' + name, 'river',
       riverBluffDecision, (H, F) => H.riverBluff && pred(F, H), bet);
   for (const [name, key] of [['3Flush','flush'], ['4Flush','4flush'], ['4Str','4str'], ['Blanks','blank'], ['OverCards','over']])
-    holdingCap('river-card-' + key, 'River · PFR', 'Rivers · ' + name, 'river',
+    holdingCap('river-card-' + key, riverAllRoles, 'Rivers · ' + name, 'river',
       F => texture(F, 'river')[key] && riverBluffDecision(F), H => H.riverBluff, bet);
   for(const hit of [true,false]){
     const gate=F=>{const T=holding(F,'turn'),b=F.st.turn.board;if(!T||b.length!==4)return false;
@@ -407,28 +440,28 @@ const ReadLab = (() => {
       const tex=texture(F,'river'),complete=!!(tex.flush||tex['4flush']||tex.straight||tex['4str']);return possible&&complete===hit;
     };
     cap('river-type-'+hit,'River · PFR','Bluff Type · '+(hit?'DrawsHit':'DrawsMiss'),'River bluff on this board type. Stat: bets / genuine opportunities while holding a qualifying bluff. DrawsHit takes priority.',F=>{
-      if(!riverBluffChance(F)||!gate(F))return null;const H=holding(F,'river');if(!H||!H.riverBluff)return null;return eq(F.st.river.bet,H.why+'; '+F.st.river.first.act);
+      if(!F.pfr||!riverBluffChance(F)||!gate(F))return null;const H=holding(F,'river');if(!H||!H.riverBluff)return null;return eq(F.st.river.bet,H.why+'; '+F.st.river.first.act);
     });
   }
   frequency('force-nonsd','River · PFR','Force Bluff · NonSD','Bet / genuine river betting chances holding K-high or worse. >34% Yes.',F=>{const H=holding(F,'river');return riverChance(F)&&H&&H.air&&!F.cards.some(c=>rank(c)===14)?eq(F.st.river.bet,H.why):null;},34,true,{strict:true});
   holdingCap('trap', 'River · PFR', 'Can Trap', 'river',
     F => F.pfr && F.st.river.can && checkDecision(F, 'river'), H => H.two && H.strong, checked);
-  holdingCap('bsti', 'River · PFC', 'BSTI', 'river', F => {
+  holdingCap('bsti', riverAllRoles, 'BSTI', 'river', F => {
     const S = F.st.river;
-    if (!F.pfc || !post(F) || !S.raiseChance || !S.faced) return null;
+    if (!S.raiseChance || !S.faced) return null;
     const action = S.faced.src || S.faced;
     const rung = handRungs(F.h).get(action);
     const priced = betsVsPot(F.h).find(b => b.a === action);
     const ratio = rung?.ratio ?? (priced?.pot ? priced.bet / priced.pot : null);
     return ratio != null && ratio <= 1/3 && raiseDecision(S);
   }, H => H.riverBluff, raised);
-  frequency('river-xt','River · PFC','Bluff XT','Bet / checked-to river opportunities while holding a qualifying bluff. ≥35%.',F=>{
-    if(!F.pfc||F.limped||!F.st.river.can)return null;const S=F.st.river,prior=S.prevAgg||S.init;
+  frequency('river-xt',riverAllRoles,'Bluff XT','Bet when the previous aggressor checks to the player on the river, while holding a qualifying bluff. ≥35%.',F=>{
+    if(!F.st.river.can)return null;const S=F.st.river,prior=S.prevAgg||S.init;
     if(!prior||prior===F.me||!S.acts.slice(0,S.firstI).some(a=>a.actor===prior&&a.act==='check'))return null;
     const H=holding(F,'river');return H?.riverBluff?eq(S.bet,H.why):null;
   },35);
-  holdingCap('river-raise', 'River · PFC', 'Can Raise · Bluff', 'river',
-    F => F.pfc && post(F) && raiseDecision(F.st.river), H => H.riverBluff, raised);
+  holdingCap('river-raise', riverAllRoles, 'Can Raise · Bluff', 'river',
+    riverRaiseDecision, H => H.riverBluff, raised);
   for (const [label, pred] of [['2ndP', H => H.pair && H.above === 1], ['SD', H => H.oesd || H.gut], ['wFD', H => H.wfd], ['3rdP or worse', H => !H.strong && (!H.pair || H.above >= 2)]])
     holdingCap('turn-call-' + label, 'River · PFC', 'T call range · ' + label, 'turn',
       F => F.pfc && post(F) && callDecision(F.st.turn), pred, called);
@@ -466,9 +499,9 @@ const ReadLab = (() => {
       ['r-fold-bal-overfold', 'Frequency · Overfold'], ['r-fold-bal-underfold', 'Frequency · Underfold'],
       ['r-bc-drawshit', 'Bluffcatch · DrawsHit'], ['r-bc-drawsmiss', 'Bluffcatch · DrawsMiss'],
       ['r-to-sizing-elastic', 'Sizing · Elastic'], ['r-to-sizing-inelastic', 'Sizing · Inelastic'],
-      ['r-can-raise-thin', 'Can Raise · Thin'],
       ['r-call-range-wide', 'Call range · Wide'], ['r-call-range-tight', 'Call range · Tight'],
     ],
+    [riverAllRoles]: [['r-can-raise-thin', 'Can Raise · Thin']],
     'Physical Tells': [
       ['tell-long-strong', 'Timing Long · S'], ['tell-long-weak', 'Timing Long · W'],
       ['tell-fast-strong', 'Timing Fast · S'], ['tell-fast-weak', 'Timing Fast · W'],
@@ -484,7 +517,7 @@ const ReadLab = (() => {
     if(r.id.startsWith('lead-flush-'))r.definition = 'Lead with a flush newly completed by this street’s card; a previously made flush does not count. Previous aggressor must still be in and waiting to act.';
     if(r.id==='protect-flush')r.definition = 'As preflop aggressor, check a flush completed by the turn card, when able to bet.';
     if(r.id==='b3b')r.definition = 'As PFR, bet flop, face a raise, reraise with two pair or better.';
-    if(r.id==='bsti')r.definition = 'As PFC, raise a river bet up to one third pot while holding a qualifying bluff.';
+    if(r.id==='bsti')r.definition = 'Raise a river bet up to one third pot while holding a qualifying bluff.';
     if(r.id==='trap')r.definition = 'As PFR, check river with two pair+ when able to bet. Check-throughs count. Apply texture exclusions.';
     if(r.id==='lead-blankstrong')r.definition = 'Lead a blank river with two pair or better. Previous aggressor still in and waiting. Apply texture exclusions.';
     if (r.id === 'low-protect') r.definition = 'On flops with a highest card of 9 or lower, measure checks with top pair or better. Every top-pair kicker qualifies.';
@@ -495,6 +528,9 @@ const ReadLab = (() => {
     else if (r.id.startsWith('line-') || r.id.startsWith('river-hand-') || r.id.startsWith('river-card-') || r.id === 'river-raise')
       r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
     if (/^river-(hand|card|type)-/.test(r.id)) r.definition += ' Turn check-calls are excluded.';
+    if ([flopAllRoles, riverAllRoles].includes(r.section) && r.mode !== 'manual')
+      r.definition += ' Includes raisers, callers and limped pots.';
+    if (r.id === 'river-raise') r.definition += ' Includes check-raises and reraises. Each hand counts once.';
     if (r.id === 'river-hand-FD') r.definition += ' Flush draw on both flop and turn that missed on the river.';
     if (r.id === 'river-hand-BDFD') r.definition += ' Backdoor flush draw on the flop that became a flush draw on the turn and missed on the river.';
     if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip.';
