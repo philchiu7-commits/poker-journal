@@ -34,9 +34,9 @@
 <section id="view-readlab" class="hidden">
   <header class="vhead sticky"><button id="rl-journal" class="backbtn">‹</button><h1 id="rl-name">Read Lab</h1><button id="rl-refresh" class="iconbtn textbtn">Refresh</button></header>
   <nav class="rl-tabs" aria-label="Player tabs"><button id="rl-journal-tab">Journal</button><button class="on" aria-current="page">Read Lab</button></nav>
-  <div class="panel rl-intro"><b>Automatic trial reads</b><p>Your saved reads are kept separately. Results update from the current hands when you import or edit them.</p>
+  <div class="panel rl-intro"><p>Tap a manual chip to cycle Yes, No, and unset. Tap an automatic chip to see the hands behind it.</p>
     <div class="rl-controls"><label>Squid <select id="rl-squid"><option value="all">All</option><option value="have">Have squid</option><option value="none">No squid</option></select></label>
-    <label>Show <select id="rl-show"><option value="all">All reads</option><option value="auto">Automatic</option><option value="yes">Established</option><option value="manual">Manual</option><option value="flagged">Flagged for review</option></select></label></div>
+    <label>Show <select id="rl-show"><option value="all">All reads</option><option value="auto">Automatic</option><option value="established">Established</option><option value="unestablished">Not established</option><option value="manual">Manual</option><option value="flagged">Flagged for review</option></select></label></div>
     <div id="rl-status" class="muted sub2"></div>
   </div>
   <div id="rl-results"></div>

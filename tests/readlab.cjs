@@ -95,3 +95,24 @@ assert.equal(run("ReadLab.position(ReadLab.facts(groupHand,'q1'),'flop',true,tru
 assert.equal(find(results(Array.from({length:100},(_,i)=>limped4('range'+i,i>=95))),'range-x').state,'Yes');
 assert.equal(find(results(Array.from({length:100},(_,i)=>limped4('range'+i,i>=94))),'range-x').state,'No');
 console.log('PASS: original vs stricter OOP groups, exact 95% Range X boundary.');
+
+// Sample sufficiency and the verdict answer different questions.
+const knownNonFloats = Array.from({ length: 15 }, (_, i) =>
+  h('ace-high-' + i, ['As', '7d'], ['9c', '5d', '2h', null, null], floatActions));
+const smallSample = find(results(knownNonFloats.slice(0, 14)), 'float-OOP');
+assert.equal(smallSample.state, 'Not established');
+assert.equal(smallSample.established, false);
+assert.equal(smallSample.verdict, 'No');
+assert.equal(smallSample.canAcceptSample, true);
+const largeSample = find(results(knownNonFloats), 'float-OOP');
+assert.equal(largeSample.state, 'No');
+assert.equal(largeSample.established, true);
+const samples = { 'all:float-OOP': { value: 5, ts: 1 } };
+assert.equal(find(results(knownNonFloats.slice(0, 5), { samples }), 'float-OOP').state, 'No');
+assert.equal(find(results(knownNonFloats.slice(0, 4), { samples }), 'float-OOP').state, 'Not established');
+assert.equal(find(results(knownNonFloats.slice(0, 5), { samples, squid: 'none' }), 'float-OOP').state, 'Not established');
+assert.equal(find(results(floats.concat(knownNonFloats), { samples }), 'float-OOP').state, 'Yes');
+assert.equal(find(results(chanceHands(14, 1)), 'river-over').established, false);
+assert.equal(find(results(chanceHands(15, 1)), 'river-over').state, 'No');
+assert.equal(find(results([]), 'river-over').canAcceptSample, false);
+console.log('PASS: 15-hand threshold, established No, and live per-filter sample acceptance.');

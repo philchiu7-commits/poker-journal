@@ -48,6 +48,35 @@ const dbDel = async (store, id) => {
   return r;
 };
 
+/* Save one Lab answer against the latest player record. The transaction keeps
+   simultaneous edits to different reads from replacing one another. */
+function updateReadLabEntry(id, field, key, change) {
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction("opponents", "readwrite");
+    const store = tx.objectStore("opponents");
+    const request = store.get(id);
+    let result;
+    request.onsuccess = () => {
+      const record = request.result;
+      if (!record) return;
+      const entries = { ...record[field] };
+      const previous = entries[key];
+      const ts = Math.max(Date.now(), (previous?.ts || 0) + 1);
+      // A cleared value also carries a timestamp so an old backup cannot revive it.
+      entries[key] = { value: change(previous?.value), ts };
+      record[field] = entries;
+      record.updatedAt = Math.max(ts, record.updatedAt || 0);
+      store.put(record);
+      result = { entries, updatedAt: record.updatedAt };
+    };
+    tx.oncomplete = () => {
+      if (result) scheduleAutoSnapshot();
+      resolve(result);
+    };
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 /* Small-meta values (blinds default, lineup, seats, collapsed groups, last export)
    also mirror to localStorage as a survival copy — if iOS Safari nukes IDB,
    the app still boots with the user's live-game context intact. Big values
@@ -182,6 +211,15 @@ const recReads = (o) => o.reads && typeof o.reads === "object" ? o.reads
 function mergeOppRecords(into, from) {
   const ir = (into.reads = recReads(into)), fr = recReads(from);
   for (const [k, st] of Object.entries(fr)) if (!ir[k]) ir[k] = st;   // survivor wins conflicts
+  for (const field of ["readLabManual", "readLabSamples"]) {
+    if (!from[field] || typeof from[field] !== "object") continue;
+    const entries = new Map(Object.entries(into[field] || {}));
+    for (const [key, entry] of Object.entries(from[field])) {
+      if (!Number.isFinite(entry?.ts)) continue;
+      if (!entries.has(key) || entry.ts > entries.get(key)?.ts) entries.set(key, entry);
+    }
+    into[field] = Object.fromEntries(entries);
+  }
   into.notes = dedupeById([...(into.notes || []), ...(from.notes || [])]).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   into.exploits = dedupeById([...(into.exploits || []), ...(from.exploits || [])]).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   into.exploitDismissed = [...new Set([...(into.exploitDismissed || []), ...(from.exploitDismissed || [])])];

@@ -13,3 +13,25 @@ vm.runInContext(fs.readFileSync('db.js','utf8').replace(/const (dbGet|dbAll|dbPu
  assert.equal(meta.get('readLabRulesV1').test.min,3);assert.equal(meta.get('readLabFeedbackV1'),null);
  console.log('PASS: Read Lab rules/feedback backup, newer-rule import, and import undo.');
 })().catch(e=>{console.error(e);process.exit(1)});
+
+// Merging a stale backup preserves newer per-read edits and explicit clears.
+const merged = vm.runInContext(`(() => {
+  const into = {
+    reads: { 'tell-acting': 'yes' },
+    readLabManual: { 'tell-acting': { value: null, ts: 10 } },
+    readLabSamples: { 'all:river-over': { value: 5, ts: 10 } },
+  };
+  mergeOppRecords(into, {
+    reads: { 'tell-acting': 'no' },
+    readLabManual: {
+      'tell-acting': { value: 'yes', ts: 9 },
+      'talks-when-strong': { value: 'no', ts: 4 },
+    },
+    readLabSamples: { 'all:river-over': { value: 3, ts: 11 } },
+  });
+  return into;
+})()`, c);
+assert.equal(merged.reads['tell-acting'], 'yes');
+assert.equal(merged.readLabManual['tell-acting'].value, null);
+assert.equal(merged.readLabManual['talks-when-strong'].value, 'no');
+assert.equal(merged.readLabSamples['all:river-over'].value, 3);

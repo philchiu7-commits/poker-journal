@@ -1092,37 +1092,126 @@ function route() {
 
 /* Separate, derived trial reads. Rules and feedback are meta, never opponent.reads. */
 let readLabPlayer = null, readLabResults = [], readLabOverrides = {}, readLabFeedback = [], readLabReady = false;
+const readLabShut = new Set();
+
 function renderReadLab(id) {
   const o = oppById(id);
-  if (!o) { $("rl-results").innerHTML = '<div class="panel">Player not found.</div>'; return; }
-  readLabPlayer = id; curOppId = id;
+  if (!o) {
+    $("rl-results").innerHTML = '<div class="panel">Player not found.</div>';
+    return;
+  }
+  readLabPlayer = id;
+  curOppId = id;
   $("rl-name").textContent = o.name + " · Read Lab";
-  readLabResults = ReadLab.evaluate(id, HANDS, { squid: $("rl-squid").value, overrides: readLabOverrides });
+  readLabResults = ReadLab.evaluate(id, HANDS, {
+    squid: $("rl-squid").value, overrides: readLabOverrides, samples: o.readLabSamples || {},
+  });
+  const playerHands = HANDS.filter(h => (h.villainIds || []).includes(id));
+  const imported = playerHands.filter(h => h.imported).length;
+  $("rl-status").textContent = `${imported} imported · ${playerHands.length - imported} logged hands`;
+  renderReadLabGroups(o);
+}
+
+function readLabChip(r, label, state, flags) {
+  const positive = state === "Yes" || state === "Strong Yes";
+  const negative = state === "No" || state === "Hard No";
+  const strong = state === "Strong Yes" || state === "Hard No";
+  const color = positive ? " on sgreen" : negative ? " on sred" : r.established ? " on" : "";
+  const cls = `chip mini${color}${strong ? " sstrong" : ""}`;
+  if (r.mode === "manual") {
+    const title = `${r.label}: ${state}. Tap to cycle Yes, No, and unset.`;
+    return `<button type="button" class="${cls}" data-lab-manual="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
+      `${esc(label ? label + (state === "Unset" ? "" : " · " + state) : state === "Unset" ? "–" : state)}</button>`;
+  }
+  const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
+  const title = `${r.label}: ${state} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
+  return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}">` +
+    `<span>${esc(label ? label + " · " + state : state)}</span><small class="rl-stats"> · ${percent} · ${r.k}/${r.n}</small>` +
+    (flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : "") + "</button>";
+}
+
+function renderReadLabGroups(o) {
   const filter = $("rl-show").value;
-  const rows = readLabResults.filter(r => filter === "all" || filter === "auto" && r.mode !== "manual" || filter === "manual" && r.mode === "manual" || filter === "yes" && ["Yes", "Strong Yes", "Wide", "Normal", "Aggro", "Passive", "Tight"].includes(r.state) || filter === "flagged" && readLabFeedback.some(f => f.player === id && f.rule === r.id));
-  const groups = new Map();
-  for (const r of rows) { if (!groups.has(r.section)) groups.set(r.section, []); groups.get(r.section).push(r); }
-  const count = HANDS.filter(h => h.imported && (h.villainIds || []).includes(id)).length;
-  const logged=HANDS.filter(h=>!h.imported&&(h.villainIds||[]).includes(id)).length;
-  $("rl-status").textContent = count + " imported + " + logged + " logged hands · " + readLabResults.filter(r => r.mode !== "manual").length + " automatic checks · recalculated now. Frequencies use imported hands; capability checks also use logged hands. Combined-squid rules are labelled.";
-  const sectionOrder=["Squid","Preflop","MWP Limp","Flop · PFR","Flop · PFC","Turn · PFR","Turn · PFC","River · PFR","River · PFC","Physical Tells"];
-  $("rl-results").innerHTML = [...groups].sort((a,b)=>sectionOrder.indexOf(a[0])-sectionOrder.indexOf(b[0])).map(([section, rs]) => '<section class="panel rl-group"><h2>' + esc(section) + '</h2>' + rs.map(r => {
-    const flags = readLabFeedback.filter(f => f.player === id && f.rule === r.id).length;
-    const active = r.state === "Yes" || r.state === "Strong Yes";
-    const stats = r.mode === "manual" ? '' : `<small class="rl-stats"> · ${r.pct == null ? '—' : +r.pct.toFixed(1) + '%'} · ${r.k}/${r.n}</small>`;
-    return `<button class="rl-row${active ? ' rl-positive' : ''}" data-lab-rule="${esc(r.id)}"><span class="rl-row-label">${esc(r.label)}${r.combined ? '<small class="rl-combined">combined squid</small>' : ''}</span><span class="rl-value"><b>${esc(r.state)}</b>${stats}${flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : ''}</span></button>`;
-  }).join('') + '</section>').join('') || '<div class="panel">No reads match this filter.</div>';
+  const flagsByRule = new Map();
+  for (const f of readLabFeedback) {
+    if (f.player === o.id) flagsByRule.set(f.rule, (flagsByRule.get(f.rule) || 0) + 1);
+  }
+  const sections = new Map();
+  for (const r of readLabResults) {
+    const manual = r.mode === "manual";
+    const state = manual ? (STATE_WORD[o.readLabManual?.[r.id]?.value] || "Unset") : r.state;
+    const flags = flagsByRule.get(r.id);
+    if (filter === "auto" && manual || filter === "manual" && !manual ||
+        filter === "established" && (manual || !r.established) ||
+        filter === "unestablished" && (manual || r.established) ||
+        filter === "flagged" && !flags) continue;
+
+    let [group, label] = r.label.split(" · ");
+    if (group === "Cbet HU" || group === "Cbet MW") {
+      label = group.slice(5) + " " + label;
+      group = "Cbet";
+    }
+    if (!sections.has(r.section)) sections.set(r.section, new Map());
+    const groups = sections.get(r.section);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push({ r, label, state, flags });
+  }
+
+  const line = (group, entries, item) => {
+    const labels = item ? [item.chip, ...(item.also || []).map(([, label]) => label)] : [];
+    const order = label => label === "Have" ? -1 : labels.includes(label) ? labels.indexOf(label) : labels.length;
+    entries.sort((a, b) => order(a.label) - order(b.label));
+    const wide = entries.length >= 4 ? " rlwide" : "";
+    return `<span class="rllab${wide}">${esc(group)}</span><div class="rlctl${wide}">` +
+      entries.map(({ r, label, state, flags }) => readLabChip(r, label, state, flags)).join("") + "</div>";
+  };
+
+  $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
+    const roles = cat.subs.map(sub => {
+      const street = cat.title.split(" ")[0];
+      const groups = sections.get(sub.label ? street + " · " + sub.label.slice(3) : cat.title);
+      if (!groups?.size) return "";
+      const rows = sub.rows.map(row => {
+        const lines = row.ids.map(item => {
+          const names = item.label === "Open" ? ["Open wS", "Open nS"] : [item.label];
+          return names.map(name => {
+            const entries = groups.get(name);
+            if (!entries) return "";
+            groups.delete(name);
+            return line(name, entries, item);
+          }).join("");
+        }).join("");
+        return lines ? (row.label ? `<span class="rslabel">${esc(row.label)}</span>` : "") +
+          `<div class="readlines">${lines}</div>` : "";
+      }).join("");
+      const rest = [...groups].map(([name, entries]) => line(name, entries)).join("");
+      return `<div class="roleblk">${sub.label ? `<div class="rolehead">${esc(sub.label)}</div>` : ""}` +
+        rows + (rest ? `<div class="readlines">${rest}</div>` : "") + "</div>";
+    }).join("");
+    if (!roles) return "";
+    const shut = readLabShut.has(cat.title);
+    return `<section class="readcat${shut ? " shut" : ""}"><div class="rchead">` +
+      `<button type="button" class="rcfold" data-lab-fold="${esc(cat.title)}" aria-expanded="${!shut}" aria-label="${shut ? "Show" : "Hide"} ${esc(cat.title)}"></button>` +
+      `<span class="rctitle">${esc(cat.title)}</span></div>${shut ? "" : roles}</section>`;
+  }).join("") || '<div class="panel">No reads match this filter.</div>';
 }
 function readLabDetail(id) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
-  const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands; otherwise Not established.` : r.mode === "manual" ? 'You chose to fill this read manually.' : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
+  const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
+  const sampleLabel = r.acceptedSample ? "Your accepted sample" : "Default sample minimum";
+  const sampleControls = (r.canAcceptSample
+    ? `<button type="button" class="chip" data-lab-sample="${esc(id)}">Accept ${r.n} hands · ${esc(r.verdict)}</button>` : "") +
+    (r.acceptedSample ? `<button type="button" class="chip" data-lab-sample="${esc(id)}" data-lab-sample-reset>Restore default minimum</button>` : "");
+  const sampleScope = r.combined ? "Combined squid" : r.sampleKey.startsWith("have:") ? "Have squid" :
+    r.sampleKey.startsWith("none:") ? "No squid" : "All squid states";
   const rows = r.ev.slice().sort((a,b) => Number(b.ok)-Number(a.ok) || (b.h.ts||0)-(a.h.ts||0));
   sheetGroup = null;
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
-    ${r.mode === 'cap' ? '<p>The percentage is the share among classifiable cases; the verdict uses the distinct supporting-hand count.</p>' : ''}
+    <p><b>${esc(r.state)}</b> · ${sampleScope} · ${sampleLabel} ${r.sampleMin} hands</p>
     <p>${r.k} supporting / ${r.n} eligible cases${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}. Unknown holdings and ineligible situations do not count. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
+    ${sampleControls ? `<div class="chiprow rl-sample-controls">${sampleControls}</div>` : ""}
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
     ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
     ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
@@ -1139,14 +1228,73 @@ function flagReadLab(id,hand) {
   showSheet(`<div class="sheethead"><span class="t">Flag a classification</span><button data-lab-cancel="${esc(id)}">Back</button></div><div class="rl-detail"><label>What should count differently, and why?<textarea id="rl-issue" rows="5" placeholder="Describe the expected result or missing information"></textarea></label><button class="primary" data-lab-save-issue="${esc(id)}" data-lab-hand="${esc(hand||'')}">Save review note</button></div>`);
 }
 
+async function saveReadLabEntry(o, field, key, change) {
+  const update = await updateReadLabEntry(o.id, field, key, change);
+  const fresh = oppById(o.id);
+  if (!fresh || !update) return null;
+  fresh[field] = update.entries;
+  fresh.updatedAt = Math.max(fresh.updatedAt || 0, update.updatedAt);
+  return fresh;
+}
+
 function bindReadLab() {
   $("od-readlab").onclick = () => location.hash = '#readlab/' + curOppId;
   const journal = () => location.hash = '#opp/' + readLabPlayer;
   $("rl-journal").onclick = journal; $("rl-journal-tab").onclick = journal;
   $("rl-refresh").onclick = async () => { await refreshCache(); renderReadLab(readLabPlayer); };
   $("rl-squid").onchange = $("rl-show").onchange = () => renderReadLab(readLabPlayer);
-  $("rl-results").onclick = e => { const b=e.target.closest('[data-lab-rule]'); if(b) readLabDetail(b.dataset.labRule); };
+  $("rl-results").onclick = async e => {
+    const fold = e.target.closest("[data-lab-fold]");
+    const o = oppById(readLabPlayer);
+    if (!o) return;
+    if (fold) {
+      const title = fold.dataset.labFold;
+      if (!readLabShut.delete(title)) readLabShut.add(title);
+      renderReadLabGroups(o);
+      $("rl-results").querySelector(`[data-lab-fold="${CSS.escape(title)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    const manual = e.target.closest("[data-lab-manual]");
+    if (manual) {
+      const id = manual.dataset.labManual;
+      manual.disabled = true;
+      try {
+        const fresh = await saveReadLabEntry(o, "readLabManual", id,
+          value => value === "yes" ? "no" : value === "no" ? null : "yes");
+        if (!fresh) return;
+        if (curView === "readlab" && readLabPlayer === o.id) {
+          renderReadLabGroups(fresh);
+          $("rl-results").querySelector(`[data-lab-manual="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+        }
+      } catch {
+        manual.disabled = false;
+        toast("Could not save the manual read.");
+      }
+      return;
+    }
+    const rule = e.target.closest("[data-lab-rule]");
+    if (rule) readLabDetail(rule.dataset.labRule);
+  };
   $("sheet").addEventListener('click',async e => {
+    const sample = e.target.closest("[data-lab-sample]");
+    if (sample) {
+      const r = readLabResults.find(r => r.id === sample.dataset.labSample);
+      const o = oppById(readLabPlayer);
+      const reset = sample.hasAttribute("data-lab-sample-reset");
+      if (!o || !r || !(reset ? r.acceptedSample : r.canAcceptSample)) return;
+      sample.disabled = true;
+      try {
+        const fresh = await saveReadLabEntry(o, "readLabSamples", r.sampleKey, () => reset ? null : r.n);
+        if (fresh && curView === "readlab" && readLabPlayer === o.id) {
+          renderReadLab(o.id);
+          if (sample.isConnected) readLabDetail(r.id);
+        }
+      } catch {
+        sample.disabled = false;
+        toast("Could not save the sample minimum.");
+      }
+      return;
+    }
     const cancel=e.target.closest('[data-lab-cancel]');if(cancel){readLabDetail(cancel.dataset.labCancel);return;}
     const save=e.target.closest('[data-lab-save]');if(save){
       const id=save.dataset.labSave,r=readLabResults.find(r=>r.id===id);if(!r)return;

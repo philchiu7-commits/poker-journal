@@ -232,17 +232,47 @@ const ReadLab = (() => {
   },35);
   cat('river-raise','River · PFC','Can Raise · Bluff','river',F=>F.pfc&&post(F)&&F.st.river.raise,H=>H.riverBluff);
   for(const [label,pred] of [['2ndP',H=>H.pair&&H.above===1],['SD',H=>H.oesd||H.gut],['wFD',H=>H.wfd],['3rdP or worse',H=>!H.strong&&(!H.pair||H.above>=2)]])cat('turn-call-'+label,'River · PFC','T call range · '+label,'turn',F=>F.pfc&&post(F)&&F.st.turn.response?.act==='call',pred);
-  const manual={
-    'Preflop':['3bet · Linear','3bet · Polar'],
-    'Flop · PFR':['Adv Board · WeakCheck','Punching Bag'],
-    'Flop · PFC':['Bet Volume · High / Low','Attack · Adv. Brd. / Dis. Adv.'],
-    'Turn · PFR':['Barrel · SDV','Punching Bag'],
-    'Turn · PFC':['Bet Volume · High / Low','Let me Realize','Turn Call · AbsV / Playability / Wide','Probe Turn · Merge / Polar'],
-    'River · PFR':['Marginal hands · ThinV / TurnBluffcatcher','Turn hand to Bluff','Force Squid'],
-    'River · PFC':['Bet Vol · High / Low','Frequency · Overfold / Underfold','Bluffcatch · DrawsHit / DrawsMiss','Sizing · Elastic / Inelastic','Can Raise · Thin','Call range · Wide / Tight'],
-    'Physical Tells':['Timing Long · Strong / Weak','Timing Fast · Strong / Weak','Chatty = Strong','Acting']
+  const manual = {
+    'Preflop': [
+      ['3bet-linear', '3bet · Linear'], ['3bet-polar', '3bet · Polar'],
+    ],
+    'Flop · PFR': [
+      ['f-adv-weak-check', 'Adv Board · WeakCheck'], ['punchbag-f-pfc', 'Punching Bag'],
+    ],
+    'Flop · PFC': [
+      ['f-bet-vol-high', 'Bet Volume · High'], ['f-bet-vol-low', 'Bet Volume · Low'],
+      ['f-attack-adv', 'Attack · Adv. Brd.'], ['f-attack-disadv', 'Attack · Dis. Adv'],
+    ],
+    'Turn · PFR': [
+      ['t-barrel-sdv', 'Barrel · SDV'], ['punchbag-t-pfr', 'Punching Bag'],
+    ],
+    'Turn · PFC': [
+      ['t-bet-vol-high', 'Bet Volume · High'], ['t-bet-vol-low', 'Bet Volume · Low'],
+      ['let-realize-t', 'Let me Realize'], ['t-call-style-absv', 'Turn Call · AbsV'],
+      ['t-call-style-play', 'Turn Call · Playability'], ['t-call-style-wide', 'Turn Call · Wide'],
+      ['t-probe-merge', 'Probe Turn · Merge'], ['t-probe-polar', 'Probe Turn · Polar'],
+    ],
+    'River · PFR': [
+      ['r-thin', 'Marginal hands · ThinV'], ['r-marg-bluffcatcher', 'Marginal hands · TurnBluffcatcher'],
+      ['r-hand-to-bluff-pfr', 'Turn hand to Bluff'], ['force-squid', 'Force Squid'],
+    ],
+    'River · PFC': [
+      ['r-bet-vol-high', 'Bet Vol · High'], ['r-bet-vol-low', 'Bet Vol · Low'],
+      ['r-fold-bal-overfold', 'Frequency · Overfold'], ['r-fold-bal-underfold', 'Frequency · Underfold'],
+      ['r-bc-drawshit', 'Bluffcatch · DrawsHit'], ['r-bc-drawsmiss', 'Bluffcatch · DrawsMiss'],
+      ['r-to-sizing-elastic', 'Sizing · Elastic'], ['r-to-sizing-inelastic', 'Sizing · Inelastic'],
+      ['r-can-raise-thin', 'Can Raise · Thin'],
+      ['r-call-range-wide', 'Call range · Wide'], ['r-call-range-tight', 'Call range · Tight'],
+    ],
+    'Physical Tells': [
+      ['tell-long-strong', 'Timing Long · S'], ['tell-long-weak', 'Timing Long · W'],
+      ['tell-fast-strong', 'Timing Fast · S'], ['tell-fast-weak', 'Timing Fast · W'],
+      ['talks-when-strong', 'Chatty = Strong'], ['tell-acting', 'Acting'],
+    ],
   };
-  let i=0;for(const [section,labels] of Object.entries(manual))for(const label of labels)add('manual-'+(++i),section,label,'Manual only — never assigned automatically.',null,{mode:'manual'});
+  for (const [section, reads] of Object.entries(manual))
+    for (const [id, label] of reads)
+      add(id, section, label, 'Set this read manually.', null, { mode: 'manual' });
   const common = 'Holding is evaluated on this street. Strong = top pair+; Draw = FD/OESD/gutshot unless Strong; Merge = own-card second pair or worse without draw; Air = no own pair or draw. On four-flush/four-straight boards, one pair is not Strong; two pair/sets/trips are ignored. ';
   for(const r of rules) {
     if(r.definition.startsWith('3 distinct qualifying'))r.definition = common + '3 distinct supporting hands for this category.';
@@ -260,7 +290,10 @@ const ReadLab = (() => {
     if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed. 3 calls.';
     if(r.id==='turn-call-SD')r.definition = 'Call turn with an OESD or gutshot. 3 calls.';
   }
-  function evaluate(id,hands,{squid='all',overrides={}}={}){
+  const DEFAULT_SAMPLE_MIN = 15;
+  const sampleKey = (rule, squid) => `${rule.combined ? 'all' : rule.squid || squid}:${rule.id}`;
+
+  function evaluate(id,hands,{squid='all',overrides={},samples={}}={}){
     const distinct=[...new Map(hands.filter(h=>h&&h.id).map(h=>[h.id,h])).values()];
     const Fs=distinct.filter(h=>(h.villainIds||[]).includes(id)||(h.villains||[]).some(v=>v.opponentId===id)).map(h=>{try{return facts(h,id);}catch(e){return null;}}).filter(Boolean);
     return rules.map(base=>{
@@ -279,20 +312,38 @@ const ReadLab = (() => {
         if(r)ev.push({id:F.h.id,h:F.h,ok:r.ok,why:r.why});
         else if(F.skippedCards||F.skippedTexture)unclassified.push({id:F.h.id,h:F.h,why:F.skippedTexture?"Two pair/set/trips ignored on four-flush/four-straight board":"Missing, invalid or ambiguous cards"});
       }
-      const k=ev.filter(e=>e.ok).length,n=ev.length,pct=n?100*k/n:null;
-      let state='Not established';
-      if(n){
-        if(cfg.mode==='cap')state=k>=cfg.min?'Yes':'Not established';
-        else if(n>=(cfg.minOpp||0)){
-          if(cfg.mode==='bands')state=pct<cfg.low?'Tight':(cfg.highInclusive?pct>=cfg.high:pct>cfg.high)?'Wide':'Normal';
-          else if(cfg.mode==='activity')state=pct>=cfg.threshold?'Aggro':'Passive';
-          else if(cfg.mode==='fold3')state=pct>=cfg.strong?'Strong Yes':pct>=cfg.threshold?'Yes':pct<cfg.hard?'Hard No':'No';
-          else if(cfg.mode==='interval')state=pct>=cfg.low&&pct<cfg.high?'Yes':'No';
-          else {const yes=cfg.more?(cfg.strict?pct>cfg.threshold:pct>=cfg.threshold):(cfg.strict?pct<cfg.threshold:pct<=cfg.threshold);state=yes&&k<(cfg.minHits||0)?'Not established':cfg.wide?(yes?'Wide':'Tight'):(yes?'Yes':'No');}
+      const k = ev.filter(e => e.ok).length, n = ev.length, pct = n ? 100 * k / n : null;
+      const key = sampleKey(cfg, squid);
+      const savedMin = samples[key]?.value;
+      const acceptedSample = Number.isInteger(savedMin) && savedMin > 0 ? savedMin : null;
+      const ruleMin = cfg.minOpp || 1;
+      const sampleMin = Math.max(ruleMin, acceptedSample ?? DEFAULT_SAMPLE_MIN);
+      let verdict = null;
+      if (n >= ruleMin) {
+        if (cfg.mode === 'cap') verdict = k >= cfg.min ? 'Yes' : 'No';
+        else if (cfg.mode === 'bands') {
+          const wide = cfg.highInclusive ? pct >= cfg.high : pct > cfg.high;
+          verdict = pct < cfg.low ? 'Tight' : wide ? 'Wide' : 'Normal';
+        } else if (cfg.mode === 'activity') verdict = pct >= cfg.threshold ? 'Aggro' : 'Passive';
+        else if (cfg.mode === 'fold3') {
+          verdict = pct >= cfg.strong ? 'Strong Yes' : pct >= cfg.threshold ? 'Yes' : pct < cfg.hard ? 'Hard No' : 'No';
+        } else if (cfg.mode === 'interval') verdict = pct >= cfg.low && pct < cfg.high ? 'Yes' : 'No';
+        else {
+          const passes = cfg.more
+            ? (cfg.strict ? pct > cfg.threshold : pct >= cfg.threshold)
+            : (cfg.strict ? pct < cfg.threshold : pct <= cfg.threshold);
+          const yes = passes && k >= (cfg.minHits || 0);
+          verdict = cfg.wide ? (yes ? 'Wide' : 'Tight') : (yes ? 'Yes' : 'No');
         }
       }
-      if(ignored)state="Review data";
-      return {...cfg,state,k,n,pct,ev,ignored,unclassified};
+      const confirmedExample = cfg.mode === 'cap' && verdict === 'Yes';
+      const established = !ignored && verdict !== null && (confirmedExample || n >= sampleMin);
+      const state = ignored ? 'Review data' : established ? verdict : 'Not established';
+      return {
+        ...cfg, state, established, verdict, sampleKey: key, sampleMin, acceptedSample,
+        canAcceptSample: !ignored && !established && verdict !== null,
+        k, n, pct, ev, ignored, unclassified,
+      };
     });
   }
   return {rules,evaluate,facts,holding,position,texture};
