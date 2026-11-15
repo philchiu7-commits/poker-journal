@@ -141,11 +141,18 @@ const ReadLab = (() => {
   const raiseDecision = street => street.raiseChance &&
     !(street.response.act === 'call' && isAllInAction(street.response)) &&
     responseDecision(street, act => AGG.has(act));
+  const flopRaiseDecision = (F, kind) => {
+    const flop = F.st.flop;
+    if (kind !== 'all' && !!flop.xrChance !== (kind === 'xr')) return null;
+    return raiseDecision(flop);
+  };
   const callDecision = street => responseDecision(street, act => act === 'call');
   const raised = ['Raised', 'Did not raise'];
   const checked = ['Checked', 'Bet'];
   const bet = ['Bet', 'Checked'];
   const called = ['Called', 'Did not call'];
+  const rate = (id, section, label, definition, test, action) =>
+    add(id, section, label, definition + ' Includes imported hands with unknown hole cards.', test, { mode: 'rate', action });
   const validHole = cards => cards.length === 2 && cards[0] !== cards[1] &&
     cards.every(c => /^[2-9TJQKA][cdhs]$/.test(c));
   const quiet=(F,s)=>F.st[s].through;
@@ -196,6 +203,9 @@ const ReadLab = (() => {
   for (const [label, pred] of comp)
     holdingCap('limp-oop-' + label, 'MWP Limp', 'Probe OOP F · ' + label, 'flop',
       F => oopLimp(F) && betDecision(F, 'flop'), pred, ['Probed', 'Checked']);
+  rate('limp-xr-rate', 'MWP Limp', 'xR · xR',
+    'Flop check-raises out of chances to raise after checking in a multiway limped pot.',
+    F => limpMw(F) && flopRaiseDecision(F, 'xr'), ['Check-raised', 'Did not raise']);
   for (const [label, pred] of [['Air', H => H.air], ['Draw', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong], ['Bluff', H => H.bluff]])
     holdingCap('limp-xr-' + label, 'MWP Limp', 'xR · ' + label, 'flop',
       F => limpMw(F) && F.st.flop.xrChance && raiseDecision(F.st.flop), pred, ['Check-raised', 'Did not raise'], xrCapability);
@@ -236,17 +246,27 @@ const ReadLab = (() => {
       F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised, xrCapability);
   const raiseMixDefinition = raiseCriteria + ' The ratio uses recorded flop raises with known cards. ' +
     'Bluffs include draws below Strong and weaker-than-second-pair bluff holdings. Other holdings are listed separately.';
+  function flopRaiseRate(id, section, label, role, kind) {
+    const definition = kind === 'xr' ? 'Flop check-raises out of chances to raise after checking.' :
+      kind === 'r' ? 'Flop raises out of chances to raise without first checking.' :
+      'Flop raises and check-raises out of all chances to raise.';
+    rate(id, section, label, definition, F => F[role] && post(F) && flopRaiseDecision(F, kind),
+      kind === 'xr' ? ['Check-raised', 'Did not raise'] : raised);
+  }
   function flopRaiseMix(id, section, label, role, kind) {
     add(id, section, label, raiseMixDefinition, F => {
       const flop = F.st.flop;
-      if (!F[role] || !post(F) || !raiseDecision(flop)?.ok) return null;
-      if (kind !== 'all' && !!flop.xrChance !== (kind === 'xr')) return null;
+      if (!F[role] || !post(F) || !flopRaiseDecision(F, kind)?.ok) return null;
       const H = classifiableHolding(F, 'flop');
       if (!H) return null;
       const bucket = raiseStrong(H, F) ? 'value' : raiseDraw(H, F) ? 'draw' : H.bluff ? 'bluff' : 'other';
       return { ok: bucket === 'value', bucket, why: H.why + (flop.xrChance ? ' · Check-raised' : ' · Raised without checking') };
     }, { mode: 'mix' });
   }
+  flopRaiseRate('pfr-xr-rate', 'Flop · PFR', 'xR · xR', 'pfr', 'xr');
+  flopRaiseRate('pfc-xrr-rate', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
+  flopRaiseRate('pfc-xr-rate', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
+  flopRaiseRate('pfc-r-rate', 'Flop · PFC', 'xR or R · R only', 'pfc', 'r');
   flopRaiseMix('pfr-xr-mix', 'Flop · PFR', 'xR · Mix', 'pfr', 'xr');
   flopRaiseMix('pfc-xrr-mix', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
   flopRaiseMix('pfc-xr-mix', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
@@ -254,6 +274,9 @@ const ReadLab = (() => {
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;
+    rate('bxt-rate-' + s, section, 'BXT · Frequency',
+      'Bets out of opportunities after the prior aggressor checked on the ' + s + '.',
+      F => bxtChance(F) && betDecision(F, s), bet);
     const bluffShare = F => {
       if (!bxtChance(F) || !F.st[s].bet) return null;
       const H = classifiableHolding(F, s);
@@ -290,6 +313,8 @@ const ReadLab = (() => {
     F => delay(F) && betDecision(F, 'turn'), bluffOrDraw, ['Delayed c-bet', 'Checked']);
   const barrelDecision = F => barrel(F) && betDecision(F, 'turn');
   const barrelAction = ['Barrelled', 'Checked'];
+  rate('barrel-rate', 'Turn · PFR', 'Barrel · Frequency',
+    'Turn bets out of chances to bet after a flop c-bet was called without a raise.', barrelDecision, barrelAction);
   for (const [label, pred] of [['Air', H => H.air], ['Mergy', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('barrel-' + label, 'Turn · PFR', 'Barrel · ' + label, 'turn', barrelDecision, pred, barrelAction);
   const barrelDraws = [['GS', 'gutshot', H => H.gut], ['OESD', 'open-ended straight draw', H => H.oesd],
@@ -473,7 +498,7 @@ const ReadLab = (() => {
     if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed.';
     if(r.id==='turn-call-SD')r.definition = 'Call turn with an OESD or gutshot.';
     if (r.id === 'bluff-turn-over') r.definition += ' Only unpaired holdings qualify, even when the hand also has a draw. Turns that make a three-flush or four-flush count in those categories instead.';
-    if (r.action) r.definition += ' Sample: eligible decisions with this holding. The percentage is the share that took the named action.';
+    if (r.action && r.mode !== 'rate') r.definition += ' Sample: eligible decisions with this holding. The percentage is the share that took the named action.';
   }
   const DEFAULT_SAMPLE_MIN = 15;
   const sampleKey = (rule, squid) => `${rule.combined ? 'all' : rule.squid || squid}:${rule.id}`;
@@ -504,6 +529,7 @@ const ReadLab = (() => {
         for (const e of ev) mix[e.bucket]++;
         return { ...cfg, mix, n, ev, ignored, unclassified, sampleKey: key };
       }
+      if (cfg.mode === 'rate') return { ...cfg, k, n, pct, ev, ignored, unclassified, sampleKey: key };
       const savedMin = samples[key]?.value;
       const acceptedSample = !cfg.positiveOnly && Number.isInteger(savedMin) && savedMin > 0 ? savedMin : null;
       const ruleMin = cfg.minOpp || 1;

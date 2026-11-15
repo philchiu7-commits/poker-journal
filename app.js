@@ -1216,10 +1216,16 @@ function readLabChip(r, label, state, flags, overridden) {
     }).join("");
   }
   if (r.mix) {
-    const prefix = label === "Mix" ? "" : label + " · ";
+    const prefix = label === "Mix" ? "" : esc(label) + " · ";
     return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}">
-      ${esc(prefix)}Value:Bluff ${readLabMixRatio(r.mix)}
+      ${prefix}<b>${readLabMixRatio(r.mix)}</b>
       <small class="rl-stats"> · ${r.mix.draw} draw${r.mix.draw === 1 ? "" : "s"} · ${r.n} shown</small>
+      ${flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : ""}</button>`;
+  }
+  if (r.mode === "rate") {
+    const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
+    return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(r.definition)}">
+      ${label === "Frequency" ? "" : esc(label) + " · "}<b>${percent}</b><small class="rl-stats"> · ${r.k}/${r.n}</small>
       ${flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : ""}</button>`;
   }
   const positive = state === "Yes" || state === "Strong Yes";
@@ -1252,13 +1258,14 @@ function renderReadLabGroups(o) {
   for (const r of readLabResults) {
     if (readLabSquid !== "all" && r.squid && r.squid !== readLabSquid) continue;
     const manual = r.mode === "manual";
-    const verdict = r.mix ? null : readLabManualVerdict(o, r);
+    const stat = r.mix || r.mode === "rate";
+    const verdict = stat ? null : readLabManualVerdict(o, r);
     const overridden = !manual && !!verdict;
     const state = verdict ? STATE_WORD[verdict] : manual ? "Unset" : r.state;
     const flags = flagsByRule.get(r.id);
     if (filter === "auto" && manual || filter === "manual" && !manual ||
-        filter === "established" && (manual || r.mix || !r.established) ||
-        filter === "unestablished" && (manual || r.mix || r.established) ||
+        filter === "established" && (manual || stat || !r.established) ||
+        filter === "unestablished" && (manual || stat || r.established) ||
         filter === "overridden" && !overridden ||
         filter === "flagged" && !flags) continue;
 
@@ -1279,9 +1286,18 @@ function renderReadLabGroups(o) {
       item ? [item.chip, ...(item.also || []).map(([, label]) => label)] : [];
     const order = label => label === "Have" ? -1 : labels.includes(label) ? labels.indexOf(label) : labels.length;
     entries.sort((a, b) => order(a.label) - order(b.label));
+    const chips = list => list.map(({ r, label, state, flags, overridden }) => readLabChip(r, label, state, flags, overridden)).join("");
+    const rates = entries.filter(({ r }) => r.mode === "rate");
+    const mixes = entries.filter(({ r }) => r.mix);
+    if (rates.length || mixes.length) {
+      const reads = entries.filter(({ r }) => !r.mix && r.mode !== "rate");
+      const block = (label, list) => list.length ? `<div class="rl-stat-block"><div class="rl-stat-label">${label}</div><div class="rl-stat-chips">${chips(list)}</div></div>` : "";
+      return `<span class="rllab rlwide">${esc(group)}</span><div class="rlctl rlwide rl-stat-blocks">` +
+        block("Frequency", rates) + block(group === "BXT" ? "Reads" : "By holding", reads) +
+        block("Value-to-bluff ratio", mixes) + "</div>";
+    }
     const wide = entries.length >= 4 ? " rlwide" : "";
-    return `<span class="rllab${wide}">${esc(group)}</span><div class="rlctl${wide}">` +
-      entries.map(({ r, label, state, flags, overridden }) => readLabChip(r, label, state, flags, overridden)).join("") + "</div>";
+    return `<span class="rllab${wide}">${esc(group)}</span><div class="rlctl${wide}">${chips(entries)}</div>`;
   };
 
   $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
@@ -1419,6 +1435,7 @@ function readLabMixDetail(r, o, combo) {
 function readLabDetail(id, combo = null, showAll = false) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   if (r.mix) { readLabMixDetail(r, o, combo); return; }
+  const rate = r.mode === "rate";
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
   const rule = r.mode === "cap" ? `Yes after ${r.min === 1 ? "one qualifying hand" : `${r.min} distinct qualifying hands`}. ${r.positiveOnly
     ? "Fewer examples means Not established."
@@ -1462,17 +1479,18 @@ function readLabDetail(id, combo = null, showAll = false) {
       ? "No flop leads or probes in this sample." : "No eligible evidence on record."}</div>`}</div>`;
   sheetGroup = "__rdrill__";
   showReadLabSheet({ player: o.id, rule: r, squid: readLabSquid, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
-    ${readLabVerdictPicker(r, o)}
-    <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    ${rate ? "" : readLabVerdictPicker(r, o)}
+    <div class="rdsub"><b>${rate ? "Frequency" : "Automatic: " + esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
     ${rangeCheck ? evidenceList : ""}
     <div data-lab-all="${showAll}">${chart}</div>
-    <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
-    ${!r.positiveOnly || r.ignored ? `<p>${r.positiveOnly ? "" : `${sampleLabel} ${r.sampleMin} hands.`}
+    <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p>${rate ? "" : `<p><b>Active trial rule: ${esc(rule)}</b></p>`}${!rate && readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
+    ${!rate && !r.positiveOnly || r.ignored ? `<p>${rate || r.positiveOnly ? "" : `${sampleLabel} ${r.sampleMin} hands.`}
       ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>` : ""}
     ${sampleControls ? `<div class="chiprow rl-sample-controls">${sampleControls}</div>` : ""}
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
-    ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
+    ${!rate ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> ` : ''}
+    <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>
     ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
     ${rangeCheck ? "" : evidenceList}`);
   if (combo) $("rl-evidence-heading").focus();
@@ -1556,7 +1574,7 @@ function bindReadLab() {
     const choice = manual?.dataset.labChoice;
     if (readLabEditing && !choice && (manual || rule)) {
       const r = readLabResults.find(r => r.id === (manual?.dataset.labManual || rule?.dataset.labRule));
-      if (r?.mix) readLabDetail(r.id);
+      if (r?.mix || r?.mode === "rate") readLabDetail(r.id);
       else if (r) readLabVerdictEditor(r, o);
       return;
     }
