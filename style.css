@@ -1044,15 +1044,20 @@ img[data-photo] { -webkit-touch-callout: none; -webkit-user-select: none; user-s
 
 /* ===== Possible duplicates ===== */
 .dupebanner {
-  display: block; width: 100%; text-align: left; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-bottom: 10px;
   background: #2b220a; border: 1px solid #6b551f; border-radius: 10px;
   padding: 10px 12px; color: #e0a63a; font-size: 14px; font-weight: 600; cursor: pointer;
 }
+.dupepreview { display: flex; flex: none; gap: 4px; }
+.dupepreview .oppavatar { width: 34px; height: 34px; margin: 0; }
+.dupepreviewtext { min-width: 0; }
+.dupepreviewtext small { display: block; color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
 .dupelist { display: flex; flex-direction: column; gap: 10px; }
 .dupepair { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; }
 .dupepair .dwhy { font-size: 12px; color: var(--muted); margin-bottom: 7px; }
 .dupepair .dside { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.dupepair .oppavatar { width: 40px; height: 40px; }
+.dphoto { padding: 0; border: 0; background: none; border-radius: 12px; cursor: zoom-in; }
+.dupepair .oppavatar { display: block; width: 60px; height: 60px; margin: 0; border-radius: inherit; }
 .dupepair .dnm { font-weight: 600; font-size: 16px; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dupepair .dside .muted { font-size: 12px; flex: none; }

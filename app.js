@@ -784,6 +784,12 @@ async function openDupesSheet() {
     const r = Object.keys(o.reads || {}).length;
     return `${h} hand${h === 1 ? "" : "s"} · ${r} read${r === 1 ? "" : "s"}`;
   };
+  const side = (o, src) => `<div class="dside">
+    <button type="button" class="dphoto" data-dupe-photo="${esc(o.id)}" aria-label="Enlarge ${esc(o.name)}’s photo">
+      <img class="oppavatar" src="${esc(src)}" alt="">
+    </button>
+    <span class="dnm">${esc(o.name)}</span><span class="muted">${stat(o)}</span>
+  </div>`;
   sheetGroup = "__dupes__";
   showSheet(`<div class="sheethead"><span class="t">Possible duplicates</span>
       <button data-sheetclose>Close</button></div>
@@ -791,8 +797,8 @@ async function openDupesSheet() {
     <div class="dupelist">${pairs.map(({ a, b, why, aSrc, bSrc }) => `
       <div class="dupepair">
         <div class="dwhy">Similar profile pictures · ${esc(why)}</div>
-        <div class="dside"><img class="oppavatar" src="${esc(aSrc)}" alt=""><span class="dnm">${esc(a.name)}</span><span class="muted">${stat(a)}</span></div>
-        <div class="dside"><img class="oppavatar" src="${esc(bSrc)}" alt=""><span class="dnm">${esc(b.name)}</span><span class="muted">${stat(b)}</span></div>
+        ${side(a, aSrc)}
+        ${side(b, bSrc)}
         <div class="dacts">
           <button class="dkeep" data-dupemerge="${a.id}|${b.id}">Keep ${esc(a.name)}</button>
           <button class="dkeep" data-dupemerge="${b.id}|${a.id}">Keep ${esc(b.name)}</button>
@@ -3112,7 +3118,14 @@ function renderOpponents() {
     const banner = $("opp-list").querySelector("[data-dupes]");
     findDupes().then(pairs => {
       if (!banner.isConnected || !pairs.length) return;
-      banner.textContent = `${pairs.length} possible duplicate${pairs.length === 1 ? "" : "s"} — review`;
+      const { a, b, aSrc, bSrc } = pairs[0];
+      banner.innerHTML = `<span class="dupepreview" aria-hidden="true">
+        <img class="oppavatar" src="${esc(aSrc)}" alt="">
+        <img class="oppavatar" src="${esc(bSrc)}" alt="">
+      </span><span class="dupepreviewtext">
+        <span>${pairs.length} possible duplicate${pairs.length === 1 ? "" : "s"} — review</span>
+        <small>${esc(a.name)} · ${esc(b.name)}</small>
+      </span>`;
       banner.classList.remove("hidden");
     });
   }
@@ -4185,10 +4198,10 @@ const avatarHTML = (o, cls = "") => (o.photo ? `<img class="oppavatar${cls}" src
 let photoBox = null;
 function openPhotoBox(id) {
   const o = oppById(id);
-  if (!o || !o.photo || photoBox) return;
+  if (!o || !(o.photoFull || o.photo) || photoBox) return;
   const el = document.createElement("div");
   el.id = "photobox";
-  el.innerHTML = `<img src="${o.photoFull || o.photo}" alt="">
+  el.innerHTML = `<img src="${esc(o.photoFull || o.photo)}" alt="">
     <div class="pbname">${esc(o.name)}</div><button class="pbclose" aria-label="Close">✕</button>`;
   document.body.appendChild(el);
   const img = el.querySelector("img");
@@ -6588,6 +6601,8 @@ function sheetClick(e) {
     if (e.target.closest("[data-bulksave]")) { commitBulkImport(); return; }
   }
   if (sheetGroup === "__dupes__") {
+    const photo = e.target.closest("[data-dupe-photo]");
+    if (photo) { openPhotoBox(photo.dataset.dupePhoto); return; }
     const m = e.target.closest("[data-dupemerge]");
     if (m) {
       const [keepId, dropId] = m.dataset.dupemerge.split("|");
