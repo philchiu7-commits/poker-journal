@@ -4,7 +4,7 @@ const ReadLab = (() => {
   const ST = ['pre','flop','turn','river'], N = {flop:3,turn:4,river:5};
   const rank = c => '23456789TJQKA'.indexOf(c[0]) + 2;
   const rules = [];
-  const add = (id, section, label, definition, test, config = {}) => rules.push({id,section,label,definition,test,min:3,mode:'cap',...config});
+  const add = (id, section, label, definition, test, config = {}) => rules.push({id,section,label,definition,test,min:1,mode:'cap',...config});
   const countOop = (n, strict=false) => strict ? n<=4?1:2 : n===3?1:n<=5?2:3;
   const position = (F,s,strict=false,custom=false) => {
     const a=F.st[s].alive;
@@ -116,8 +116,9 @@ const ReadLab = (() => {
   const frequency=(id,sec,label,def,test,threshold,more=true,extra={})=>add(id,sec,label,def,test,{mode:'freq',threshold,more,...extra});
   const cap=(id,sec,label,def,test,extra={})=>add(id,sec,label,def,test,extra);
   // A holding-specific rate uses decisions made with that holding as its sample.
+  const holdingDefinition = 'Known holdings only; ignored textures do not enter the sample.';
   const holdingCap = (id, section, label, street, decision, matches, action, extra = {}) =>
-    cap(id, section, label, '3 distinct qualifying hands. Known holdings only; ignored textures do not enter the sample.', F => {
+    cap(id, section, label, holdingDefinition, F => {
       const result = decision(F);
       if (!result) return null;
       const holdingMatch = known(F, street, true, matches);
@@ -163,7 +164,7 @@ const ReadLab = (() => {
       return { value: x === y && x >= 9 || x === 14 && y >= 12,
         raised: AGG.has(a.act), why: F.cards.join(' ') + ' · Response: ' + a.act };
     };
-    for(const [name,v] of [['LrrV',true],['LrrB',false]])cap('lrr-'+name+'-'+sq,'Squid',lab+' · '+name,'AQ/AK and 99+ = value. Ignore AJ/AT and 66–88; other known holdings = bluff. 3 examples.',F=>{const a=lrr(F);return a?.value === v ? eq(a.raised, a.why) : null;},{squid:sq, action: raised});
+    for(const [name,v] of [['LrrV',true],['LrrB',false]])cap('lrr-'+name+'-'+sq,'Squid',lab+' · '+name,'AQ/AK and 99+ = value. Ignore AJ/AT and 66–88; other known holdings = bluff.',F=>{const a=lrr(F);return a?.value === v ? eq(a.raised, a.why) : null;},{squid:sq, action: raised});
     const chance=F=>F.first&&F.first.levelBefore===0&&(F.forced[F.pos(F.me)]||0)<F.price;
     bands('limp-'+sq,'Preflop','Limps '+lab,'Limp or overlimp / genuine unraised-pot entry opportunities. Free checks excluded.',F=>chance(F)?eq(['limp','call'].includes(F.first.act),'First response: '+F.first.act):null,sq==='have'?35:40,sq==='have'?45:55,{squid:sq});
     bands('open-'+sq,'Preflop','Open '+lab,'Open + isolation raises / genuine unraised-pot entry opportunities.',F=>F.opened===null?null:eq(F.opened,'First response: '+F.first.act),sq==='have'?19:17,sq==='have'?24:23,{squid:sq});
@@ -178,7 +179,7 @@ const ReadLab = (() => {
     const ring=['SB','BB','STD','U9','U8','U7','U6','HJ','CO','BN'];const x=ring.indexOf(F.pos(F.me)),y=ring.indexOf(F.pos(F.pre[i].actor));if(x<0||y<0||(x>y?'IP':'OOP')!==pos)return null;
     return eq(r.act==='fold','First answer to 3bet: '+r.act);
   },{mode:'fold3',threshold:58,strong:65,hard:50});
-  cap('fourlight','Preflop','Can 4bet light','3 genuine 4bets with unpaired holdings below AJ; AJ/AQ/AK and all pocket pairs do not support. Combined squid.',F=>{
+  cap('fourlight','Preflop','Can 4bet light','A genuine 4-bet with an unpaired holding below AJ; AJ/AQ/AK and all pocket pairs do not qualify. Combined squid.',F=>{
     const a = F.pre.find(a => a.actor === F.me && a.levelBefore === 2);
     if (!a || !validHole(F.cards)) return null;
     const [x, y] = F.cards.map(rank).sort((a,b) => b-a);
@@ -192,7 +193,7 @@ const ReadLab = (() => {
       F => oopLimp(F) && betDecision(F, 'flop'), pred, ['Probed', 'Checked']);
   for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong], ['Bluff', H => H.bluff]])
     holdingCap('limp-xr-' + label, 'MWP Limp', 'xR · ' + label, 'flop',
-      F => limpMw(F) && F.st.flop.xrChance && raiseDecision(F.st.flop), pred, ['Check-raised', 'Did not raise'], { min: 1 });
+      F => limpMw(F) && F.st.flop.xrChance && raiseDecision(F.st.flop), pred, ['Check-raised', 'Did not raise']);
   for (const [label, pred] of [['Air', H => H.air], ['Merge', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('limp-ip-' + label, 'MWP Limp', 'IP Stab · ' + label, 'flop',
       F => ipLimp(F) && betDecision(F, 'flop'), pred, ['Stabbed', 'Checked']);
@@ -220,10 +221,10 @@ const ReadLab = (() => {
   for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('pfr-xr-' + label, 'Flop · PFR', 'xR · ' + label, 'flop',
       F => F.pfr && post(F) && F.st.flop.xrChance && raiseDecision(F.st.flop),
-      pred, ['Check-raised', 'Did not raise'], { min: 1 });
+      pred, ['Check-raised', 'Did not raise']);
   for (const [label, pred] of [['Air', H => H.air], ['Equity', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('pfc-xr-' + label, 'Flop · PFC', 'xR or R · ' + label, 'flop',
-      F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised, { min: 1 });
+      F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised);
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;
@@ -240,7 +241,7 @@ const ReadLab = (() => {
   for (const s of ['flop', 'turn', 'river']) {
     const section = s[0].toUpperCase() + s.slice(1) + ' · PFC';
     const lead = F => F.pfc && post(F) && F.st[s].leadChance && betDecision(F, s);
-    cap('lead-have-' + s, section, 'Lead · Have', 'One confirmed lead before previous aggressor acts. Cards not required; aggressor must still be in hand. Raised pots only.', lead, { min: 1 });
+    cap('lead-have-' + s, section, 'Lead · Have', 'One confirmed lead before previous aggressor acts. Cards not required; aggressor must still be in hand. Raised pots only.', lead);
     for (const [label, pred] of categories.filter(([l]) => s !== 'river' || !['Draw', 'Merge'].includes(l)))
       holdingCap('lead-' + label + '-' + s, section, 'Lead · ' + label, s, lead,
         s === 'river' && label === 'Bluff' ? H => H.riverBluff : pred, led);
@@ -269,7 +270,7 @@ const ReadLab = (() => {
     F => F.pfr && F.st.turn.can && checkDecision(F, 'turn'), (H, F) => {
       const prev = holding(F, 'flop');
       return prev && !prev.flush && H.flush;
-    }, checked, { min: 1 });
+    }, checked);
   for (const p of ['OOP', 'IP'])
     holdingCap('float-' + p, 'Turn · PFC', 'Float/Wide F · ' + p, 'flop',
       F => F.pfc && post(F) && position(F, 'flop') === p && F.st.flop.faced?.actor === F.preAgg && callDecision(F.st.flop),
@@ -303,7 +304,7 @@ const ReadLab = (() => {
       const possible=Object.values(counts).some(n=>n>=2)||straight;
       const tex=texture(F,'river'),complete=!!(tex.flush||tex['4flush']||tex.straight||tex['4str']);return possible&&complete===hit;
     };
-    cap('river-type-'+hit,'River · PFR','Bluff Type · '+(hit?'DrawsHit':'DrawsMiss'),'3 qualifying river bluffs on this board type. Stat: bets / genuine opportunities while holding a qualifying bluff. DrawsHit takes priority.',F=>{
+    cap('river-type-'+hit,'River · PFR','Bluff Type · '+(hit?'DrawsHit':'DrawsMiss'),'River bluff on this board type. Stat: bets / genuine opportunities while holding a qualifying bluff. DrawsHit takes priority.',F=>{
       if(!riverChance(F)||!gate(F))return null;const H=holding(F,'river');if(!H||!H.riverBluff)return null;return eq(F.st.river.bet,H.why+'; '+F.st.river.first.act);
     });
   }
@@ -372,22 +373,21 @@ const ReadLab = (() => {
       add(id, section, label, 'Set this read manually.', null, { mode: 'manual' });
   const common = 'Holding is evaluated on this street. Strong = top pair+; Draw = FD/OESD/gutshot unless Strong; Merge = own-card second pair or worse without draw; Air = no own pair or draw. On four-flush/four-straight boards, one pair is not Strong; two pair/sets/trips are ignored. ';
   for(const r of rules) {
-    if (r.definition.startsWith('3 distinct qualifying'))
-      r.definition = common + (r.min === 1 ? 'One confirmed action establishes Yes.' : 'Three confirmed actions establish Yes.');
-    if(r.id.startsWith('float-'))r.definition = 'Call a flop cbet as preflop caller with Air, neither hole card A or K. No own pair, FD, OESD or gutshot; backdoors allowed. 3 calls in this position.';
-    if(r.id.startsWith('lead-flush-'))r.definition = 'Lead with a flush newly completed by this street’s card; a previously made flush does not count. Previous aggressor must still be in and waiting to act. 3 examples.';
-    if(r.id==='protect-flush')r.definition = 'As preflop aggressor, check a flush completed by the turn card, when able to bet. One example establishes Yes.';
-    if(r.id==='b3b')r.definition = 'As PFR, bet flop, face a raise, reraise with two pair or better. 3 examples; weaker examples do not cancel Yes.';
-    if(r.id==='bsti')r.definition = 'As PFC, raise a river bet up to one third pot while holding a qualifying bluff. Three raises establish Yes.';
-    if(r.id==='trap')r.definition = 'As PFR, check river with two pair+ when able to bet. Check-throughs count. Apply texture exclusions; 3 examples.';
-    if(r.id==='lead-blankstrong')r.definition = 'Lead a blank river with two pair or better. Previous aggressor still in and waiting. Apply texture exclusions; 3 examples.';
-    if(r.id==='low-protect'||r.id==='oop-protect')r.definition = 'Check with top pair/second-best kicker or better, including stronger hands. 3 examples.' + (r.id==='low-protect'?' Flop high card 9 or lower.':' OOP, all flop textures.');
-    if(r.id.includes('WKtp'))r.definition = 'OOP first flop bet in a limped multiway pot: top pair with kicker 9 or lower, without FD/OESD/gutshot. Original OOP grouping. 3 examples.';
+    if (r.definition === holdingDefinition) r.definition = common + holdingDefinition;
+    if(r.id.startsWith('float-'))r.definition = 'Call a flop cbet as preflop caller with Air, neither hole card A or K. No own pair, FD, OESD or gutshot; backdoors allowed.';
+    if(r.id.startsWith('lead-flush-'))r.definition = 'Lead with a flush newly completed by this street’s card; a previously made flush does not count. Previous aggressor must still be in and waiting to act.';
+    if(r.id==='protect-flush')r.definition = 'As preflop aggressor, check a flush completed by the turn card, when able to bet.';
+    if(r.id==='b3b')r.definition = 'As PFR, bet flop, face a raise, reraise with two pair or better.';
+    if(r.id==='bsti')r.definition = 'As PFC, raise a river bet up to one third pot while holding a qualifying bluff.';
+    if(r.id==='trap')r.definition = 'As PFR, check river with two pair+ when able to bet. Check-throughs count. Apply texture exclusions.';
+    if(r.id==='lead-blankstrong')r.definition = 'Lead a blank river with two pair or better. Previous aggressor still in and waiting. Apply texture exclusions.';
+    if(r.id==='low-protect'||r.id==='oop-protect')r.definition = 'Check with top pair/second-best kicker or better, including stronger hands.' + (r.id==='low-protect'?' Flop high card 9 or lower.':' OOP, all flop textures.');
+    if(r.id.includes('WKtp'))r.definition = 'OOP first flop bet in a limped multiway pot: top pair with kicker 9 or lower, without FD/OESD/gutshot. Original OOP grouping.';
     if(r.id.startsWith('line-')||r.id.startsWith('river-hand-')||r.id.startsWith('river-card-')||r.id==='river-raise')r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
-    if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip. 3 calls.';
-    if(r.id==='turn-call-3rdP or worse')r.definition = 'Call turn with third pair or worse, including unpaired holdings. Ignore ambiguous/texture-excluded hands. 3 calls.';
-    if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed. 3 calls.';
-    if(r.id==='turn-call-SD')r.definition = 'Call turn with an OESD or gutshot. 3 calls.';
+    if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip.';
+    if(r.id==='turn-call-3rdP or worse')r.definition = 'Call turn with third pair or worse, including unpaired holdings. Ignore ambiguous/texture-excluded hands.';
+    if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed.';
+    if(r.id==='turn-call-SD')r.definition = 'Call turn with an OESD or gutshot.';
     if (r.action) r.definition += ' Sample: eligible decisions with this holding. The percentage is the share that took the named action.';
   }
   const DEFAULT_SAMPLE_MIN = 15;

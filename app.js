@@ -1312,7 +1312,7 @@ function readLabVerdictEditor(r, o) {
 function readLabDetail(id, combo = null, showAll = false) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
-  const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
+  const rule = r.mode === "cap" ? `Yes after ${r.min === 1 ? "one qualifying hand" : `${r.min} distinct qualifying hands`}. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
   const sampleLabel = r.acceptedSample ? "Your accepted sample" : "Default sample minimum";
   const sampleControls = (r.canAcceptSample
     ? `<button type="button" class="chip" data-lab-sample="${esc(id)}">Accept ${r.n} hands · ${esc(r.verdict)}</button>` : "") +

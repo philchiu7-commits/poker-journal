@@ -27,11 +27,11 @@ const riverActions=[act('pre','v1','raise','$6'),act('pre','v0','call'),act('flo
 const floatActions=[act('pre','v1','raise','$6'),act('pre','v0','call'),act('flop','v0','check'),act('flop','v1','bet','$10'),act('flop','v0','call')];
 const floats=[1,2,3].map(n=>h('float'+n,['Qs','7d'],['9c','5d','2h',null,null],floatActions));
 let rs=results(floats);assert.equal(find(rs,'float-OOP').state,'Yes');assert.equal(find(rs,'float-OOP').k,3);
-assert.equal(find(results(floats.slice(0,2)),'float-OOP').state,'Not established');
+assert.equal(find(results(floats.slice(0,1)),'float-OOP').state,'Yes');
 assert.equal(find(results([h('ak',['As','7d'],['9c','5d','2h',null,null],floatActions)]),'float-OOP').k,0);
 const trusted={reads:{'f-float-oop':'no'},name:'Trusted'};const before=JSON.stringify(floats);results(floats);assert.equal(JSON.stringify(floats),before);assert.equal(trusted.reads['f-float-oop'],'no');
 // No sampling-state cache: newly imported hand immediately changes the verdict.
-const live=floats.slice(0,2);assert.equal(find(results(live),'float-OOP').state,'Not established');live.push(floats[2]);assert.equal(find(results(live),'float-OOP').state,'Yes');
+const live=[];assert.equal(find(results(live),'float-OOP').state,'Not established');live.push(floats[0]);assert.equal(find(results(live),'float-OOP').state,'Yes');
 assert.equal(find(results(floats,{squid:'have'}),'float-OOP').n,0);
 assert.equal(find(results(floats,{overrides:{'float-OOP':{min:4}}}),'float-OOP').state,'Not established');
 assert.ok(rs.filter(r=>r.mode==='manual').every(r=>r.state==='Manual'&&r.n===0));
@@ -54,7 +54,10 @@ if(process.argv.includes('--dataset')){
  console.log({players:ids.length,hands:data.hands.length,ruleCases:total,malformedCases:errors});assert.equal(errors,0);
 }
 // The same imported ID must never satisfy a distinct-hand requirement twice.
-assert.equal(find(results([floats[0],floats[0],floats[0]]),'float-OOP').state,'Not established');
+const repeated = find(results([floats[0],floats[0],floats[0]]),'float-OOP');
+assert.equal(repeated.k, 1);
+assert.equal(repeated.n, 1);
+assert.equal(find(results([floats[0],floats[0]], {overrides:{'float-OOP':{min:2}}}),'float-OOP').state,'Not established');
 const protectActions=[act('pre','v0','raise','$6'),act('pre','v1','call'),act('flop','v0','check'),act('flop','v1','check'),act('turn','v0','check'),act('turn','v1','check')];
 assert.equal(find(results([h('protect',['Ah','Kh'],['2h','7h','9c','Jh',null],protectActions)]),'protect-flush').state,'Yes');
 // Exact frequency boundaries retain the agreed inclusive/strict distinction.
@@ -179,3 +182,22 @@ const turnCalls = results([
 assert.deepEqual(Array.from(find(turnCalls, 'turn-call-2ndP').ev, e => [e.id, e.ok]),
   [['pair-call-turn', true], ['pair-fold-turn', false]]);
 console.log('PASS: conditional probe, xR and turn-call denominators, one-example xR, and no raise chance against a lone all-in.');
+
+const leadDecision = action => [
+  act('pre', 'v1', 'raise', '$6'), act('pre', 'v0', 'call'),
+  act('flop', 'v0', action, action === 'bet' ? '$8' : null), act('flop', 'v1', action === 'bet' ? 'fold' : 'check'),
+];
+const leadSample = [
+  h('lead-pair', ['5c', 'Jd'], ['9c','5d','2h',null,null], leadDecision('bet')),
+  h('check-pair', ['5c', 'Jd'], ['9c','5d','2h',null,null], leadDecision('check')),
+  h('lead-strong', ['9d', 'As'], ['9c','5d','2h',null,null], leadDecision('bet')),
+];
+const leadMerge = find(results(leadSample), 'lead-Merge-flop');
+assert.equal(leadMerge.state, 'Yes');
+assert.equal(leadMerge.pct, 50);
+assert.equal(leadMerge.k, 1);
+assert.equal(leadMerge.n, 2);
+assert.equal(find(results(leadSample.slice(1,2)), 'lead-Merge-flop').state, 'Not established');
+assert.ok(run('ReadLab.rules.filter(r => r.mode === "cap").every(r => r.min === 1)'));
+assert.equal(find(results(leadSample, {overrides:{'lead-Merge-flop':{min:2}}}), 'lead-Merge-flop').state, 'Not established');
+console.log('PASS: Lead and other capability reads establish Yes from one hand while retaining their rates and editable minimums.');
