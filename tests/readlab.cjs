@@ -201,3 +201,33 @@ assert.equal(find(results(leadSample.slice(1,2)), 'lead-Merge-flop').state, 'Not
 assert.ok(run('ReadLab.rules.filter(r => r.mode === "cap").every(r => r.min === 1)'));
 assert.equal(find(results(leadSample, {overrides:{'lead-Merge-flop':{min:2}}}), 'lead-Merge-flop').state, 'Not established');
 console.log('PASS: Lead and other capability reads establish Yes from one hand while retaining their rates and editable minimums.');
+
+function lowFlop(id, cards, action, board = ['9c', '5d', '2h', null, null]) {
+  return h(id, cards, board, [
+    act('pre', 'v0', 'raise', '$6'), act('pre', 'v1', 'call'),
+    act('flop', 'v0', action, action === 'bet' ? '$8' : null),
+    act('flop', 'v1', action === 'bet' ? 'fold' : 'check'),
+  ]);
+}
+const lowCases = [
+  lowFlop('air-bet', ['Qc', '7s'], 'bet'),
+  lowFlop('pair-check', ['5c', 'Jd'], 'check'),
+  lowFlop('draw-bet', ['Ac', '4c'], 'bet', ['9c', '5c', '2h', null, null]),
+  lowFlop('weak-top-check', ['9d', '3s'], 'check'),
+  lowFlop('overpair-bet', ['Tc', 'Td'], 'bet'),
+  lowFlop('unknown-check', null, 'check'),
+  lowFlop('high-board-check', ['Jd', '3c'], 'check', ['Jc', '5d', '2h', null, null]),
+];
+const lowReads = results(lowCases);
+assert.deepEqual(Array.from(find(lowReads, 'low-wide').ev, e => [e.id, e.ok]),
+  [['air-bet', true], ['pair-check', false], ['draw-bet', true]]);
+const lowProtect = find(lowReads, 'low-protect');
+assert.deepEqual(Array.from(lowProtect.ev, e => [e.id, e.ok]), [['weak-top-check', true], ['overpair-bet', false]]);
+assert.equal(lowProtect.state, 'Yes');
+assert.equal(lowProtect.pct, 50);
+assert.equal(find(lowReads, 'oop-protect').k, 0); // the separate kicker-specific read
+const lowRate = bets => results(Array.from({ length: 16 }, (_, i) =>
+  lowFlop('low-rate-' + i, ['Qc', '7s'], i < bets ? 'bet' : 'check')));
+assert.equal(find(lowRate(8), 'low-wide').state, 'No');
+assert.equal(find(lowRate(9), 'low-wide').state, 'Yes');
+console.log('PASS: low-board betting with below-top-pair holdings, checks with all top pairs or better, and strict 50% Too wide cutoff.');

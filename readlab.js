@@ -117,13 +117,14 @@ const ReadLab = (() => {
   const cap=(id,sec,label,def,test,extra={})=>add(id,sec,label,def,test,extra);
   // A holding-specific rate uses decisions made with that holding as its sample.
   const holdingDefinition = 'Known holdings only; ignored textures do not enter the sample.';
-  const holdingCap = (id, section, label, street, decision, matches, action, extra = {}) =>
-    cap(id, section, label, holdingDefinition, F => {
-      const result = decision(F);
-      if (!result) return null;
-      const holdingMatch = known(F, street, true, matches);
-      return holdingMatch?.ok ? eq(result.ok, holdingMatch.why + ' · ' + result.why) : null;
-    }, { ...extra, action });
+  const holdingDecision = (F, street, decision, matches) => {
+    if (!decision) return null;
+    const match = known(F, street, true, matches);
+    return match?.ok ? eq(decision.ok, match.why + ' · ' + decision.why) : null;
+  };
+  const holdingCap = (id, section, label, street, decision, matches, action) =>
+    cap(id, section, label, holdingDefinition,
+      F => holdingDecision(F, street, decision(F), matches), { action });
   const betDecision = (F, street) => eq(F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const checkDecision = (F, street) => eq(!F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const responseDecision = (street, matches) => {
@@ -207,14 +208,18 @@ const ReadLab = (() => {
   frequency('flop-fxr','Flop · PFR','Fold to xR','Cbet, then face a raise; first response. >60% folds Yes.',F=>{const r=F.pfr?afterRaise(F,'flop'):null;return r?eq(r.act==='fold','Response: '+r.act):null;},60,true,{strict:true});
   holdingCap('b3b', 'Flop · PFR', 'B3b Nut', 'flop',
     F => F.pfr && F.st.flop.bet && raiseDecision(F.st.flop), H => H.two, raised);
-  frequency('low-wide','Flop · PFR','Low Board · Too wide','Highest flop card ≤9. >50% cbets / opportunities.',F=>low(F)&&pfrCbet(F)?eq(F.st.flop.bet,'First action: '+F.st.flop.first.act):null,50,true,{strict:true});
+  const lowCbetChance = F => low(F) && pfrCbet(F);
+  frequency('low-wide', 'Flop · PFR', 'Low Board · Too wide',
+    'On flops with a highest card of 9 or lower, measure c-bets with holdings below top pair. Draws below top pair qualify. More than 50% is Yes.',
+    F => holdingDecision(F, 'flop', lowCbetChance(F) && betDecision(F, 'flop'), H => !H.strong),
+    50, true, { strict: true, action: bet });
   frequency('low-abc','Flop · PFR','Low Board · ABC','Known bad hands below top pair without FD/OESD or gutshot+2overs: check-fold ≥80% of responses to a bet, ≥3 opportunities.',F=>{
     if(!F.pfr||!low(F)||!F.st.flop.can)return null;const H=holding(F,'flop'),S=F.st.flop;if(!H||H.strong||H.fd||H.oesd||H.gut&&F.cards.every(c=>rank(c)>Math.max(...S.board.map(rank))))return null;
     if(!S.first||AGG.has(S.first.act))return eq(false,H.why+'; bet instead of check-fold');
     if(!S.response)return null;return eq(S.first.act==='check'&&S.response.act==='fold',H.why+'; '+S.response.act);
   },80,true,{minOpp:3});
   holdingCap('low-protect', 'Flop · PFR', 'Low Board · Protective', 'flop',
-    F => F.pfr && low(F) && F.st.flop.can && checkDecision(F, 'flop'), H => H.protective, checked);
+    F => lowCbetChance(F) && checkDecision(F, 'flop'), H => H.strong, checked);
   holdingCap('oop-protect', 'Flop · PFR', 'OOP Protective', 'flop',
     F => F.pfr && position(F, 'flop') === 'OOP' && F.st.flop.can && checkDecision(F, 'flop'),
     H => H.protective, checked);
@@ -381,7 +386,8 @@ const ReadLab = (() => {
     if(r.id==='bsti')r.definition = 'As PFC, raise a river bet up to one third pot while holding a qualifying bluff.';
     if(r.id==='trap')r.definition = 'As PFR, check river with two pair+ when able to bet. Check-throughs count. Apply texture exclusions.';
     if(r.id==='lead-blankstrong')r.definition = 'Lead a blank river with two pair or better. Previous aggressor still in and waiting. Apply texture exclusions.';
-    if(r.id==='low-protect'||r.id==='oop-protect')r.definition = 'Check with top pair/second-best kicker or better, including stronger hands.' + (r.id==='low-protect'?' Flop high card 9 or lower.':' OOP, all flop textures.');
+    if (r.id === 'low-protect') r.definition = 'On flops with a highest card of 9 or lower, measure checks with top pair or better. Every top-pair kicker qualifies.';
+    if (r.id === 'oop-protect') r.definition = 'Check OOP with top pair and second-best kicker or better, including stronger hands, on all flop textures.';
     if(r.id.includes('WKtp'))r.definition = 'OOP first flop bet in a limped multiway pot: top pair with kicker 9 or lower, without FD/OESD/gutshot. Original OOP grouping.';
     if(r.id.startsWith('line-')||r.id.startsWith('river-hand-')||r.id.startsWith('river-card-')||r.id==='river-raise')r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
     if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip.';
