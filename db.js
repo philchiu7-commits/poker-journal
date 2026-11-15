@@ -533,7 +533,7 @@ function correctedHand(current, correction) {
     return { status: "skipped" };
 
   const hand = copyRec(current);
-  const { betting, squid } = correction;
+  const { betting, squid, squidPresence } = correction;
   if (!Array.isArray(hand.villains) || !Array.isArray(hand.actions)) return { status: "skipped" };
   const players = new Map(hand.villains.map(v => [v.opponentId, v]));
   const matchesPlayers = (ids) => ids.length === players.size && ids.every(id => players.has(id));
@@ -602,13 +602,34 @@ function correctedHand(current, correction) {
 
   if (squid) {
     const counts = new Map(correction.players.map((id, i) => [id, squid.counts[i]]));
+    // A revised source reading may replace an earlier import of the same proof.
+    const replacesEarlierProof = hand.imported.squidCountsVerified === true &&
+      squid.replaces?.some(previous =>
+        JSON.stringify(previous.evidence) === JSON.stringify(hand.imported.squidStartEvidence) &&
+        correction.players.every((id, i) => players.get(id).squid === previous.counts[i]));
+    const hasDifferentCount = hand.villains.some(v => v.squid != null && Number(v.squid) !== counts.get(v.opponentId));
     if (squid.counts.length !== players.size || squid.counts.some(c => !Number.isInteger(c) || c < 0) ||
-        hand.villains.some(v => v.squid != null && Number(v.squid) !== counts.get(v.opponentId)))
+        (hasDifferentCount && !replacesEarlierProof))
       return { status: "skipped" };
-    if (hand.villains.some(v => v.squid == null) || !hand.imported.squidCountsVerified) {
-      for (const v of hand.villains) v.squid = counts.get(v.opponentId);
+    if (hasDifferentCount || hand.villains.some(v => v.squid == null) || !hand.imported.squidCountsVerified) {
+      for (const v of hand.villains) {
+        v.squid = counts.get(v.opponentId);
+        delete v.squidPresence;
+        delete v.squidPresenceEvidence;
+      }
       hand.squid = { ...hand.squid, ...squid.summary };
       Object.assign(hand.imported, squid.evidence, { squidCountsVerified: true });
+      changed = true;
+    }
+  }
+
+  if (squidPresence) {
+    const observations = new Map(correction.players.map((id, i) => [id, squidPresence[i]]));
+    for (const player of hand.villains) {
+      const observation = observations.get(player.opponentId);
+      if (!observation || player.squid != null || typeof player.squidPresence === "boolean") continue;
+      player.squidPresence = observation.present;
+      player.squidPresenceEvidence = observation.evidence;
       changed = true;
     }
   }
@@ -619,9 +640,14 @@ function correctedHand(current, correction) {
 }
 
 function importHandCorrections(corrections, src) {
+  const validPresence = c => Array.isArray(c.squidPresence) && !c.squid &&
+    c.squidPresence.length === c.players.length && c.squidPresence.some(v => v !== null) &&
+    c.squidPresence.every(v => v === null || (typeof v?.present === "boolean" &&
+      Array.isArray(v.evidence) && v.evidence.length > 0));
   if (!Array.isArray(corrections) || new Set(corrections.map(c => c?.id)).size !== corrections.length ||
       corrections.some(c => !c?.id || !c.tableId || !c.roundId || !Array.isArray(c.players) ||
-        new Set(c.players).size !== c.players.length || (!c.betting && !c.squid)))
+        new Set(c.players).size !== c.players.length ||
+        (!c.betting && !c.squid && !c.squidPresence) || (c.squidPresence != null && !validPresence(c))))
     throw new Error("Invalid hand corrections file");
   const counts = { corrected: 0, skipped: 0, already: 0 };
   const receipt = {

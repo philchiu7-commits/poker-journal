@@ -16,8 +16,9 @@ const HUD_BLIND_SEATS = new Set(["SB", "BB", "STD"]);
 /* Below this many opportunities a percentage is noise, shown greyed. */
 const HUD_MIN = 15;
 
-function playerSquidState(count) {
-  if (count == null || count === "" || !Number.isFinite(Number(count)) || Number(count) < 0) return null;
+function playerSquidState(count, presence) {
+  if (count == null || count === "" || !Number.isFinite(Number(count)) || Number(count) < 0)
+    return typeof presence === "boolean" ? (presence ? "have" : "none") : null;
   return Number(count) > 0 ? "have" : "none";
 }
 
@@ -80,7 +81,7 @@ function hudCount(oppId, hands) {
     const statPos = hudSeatFor(h, seat[me].pos, posted);
     const bySeat = statPos ? pos(statPos) : null;
     c.seats++;
-    if (playerSquidState(seat[me].squid) === null) c.squidUnknown++;
+    if (playerSquidState(seat[me].squid, seat[me].squidPresence) === null) c.squidUnknown++;
     if (bySeat) bySeat.seats++;
     else c.seatExcluded++;
 
@@ -570,7 +571,7 @@ function handsForSquid(oppId, hands, mode = "all") {
   if (mode === "all") return hands;
   return hands.filter((h) => {
     const v = (h.villains || []).find((v) => v.opponentId === oppId);
-    return playerSquidState(v?.squid) === mode;
+    return playerSquidState(v?.squid, v?.squidPresence) === mode;
   });
 }
 function hudFor(oppId, hands, squid = "all") {

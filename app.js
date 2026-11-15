@@ -2612,7 +2612,7 @@ function openUnknownSquidHands(o, page = 0) {
   const hands = HANDS.filter(h => {
     if (!h.imported || !h.villainIds?.includes(o.id)) return false;
     const v = h.villains?.find(v => v.opponentId === o.id);
-    return v && playerSquidState(v.squid) === null;
+    return v && playerSquidState(v.squid, v.squidPresence) === null;
   }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const pageSize = 30;
   const last = Math.max(0, Math.ceil(hands.length / pageSize) - 1);
@@ -4413,7 +4413,7 @@ function renderOppHud(o) {
   const unknown = (hudSquid === "all" ? c : hudFor(o.id, HANDS)).squidUnknown;
   $("od-hud-squid-note").innerHTML = unknown
     ? `<button type="button" class="secondary" data-unknown-squid>${unknown.toLocaleString()} with unknown squid</button> · Included in All`
-    : "Uses this player's squid count.";
+    : "Uses this player's recorded squid status.";
   for (const button of $("od-hud-squid").querySelectorAll("[data-hud-squid]"))
     button.setAttribute("aria-pressed", String(button.dataset.hudSquid === hudSquid));
   const nEl = $("od-hud-n"), box = $("od-hud");
@@ -7212,7 +7212,9 @@ async function saveHand() {
     heroCards: hIn && d.heroCards.some(Boolean) ? d.heroCards : null,
     villains: d.villains.map((v) => ({ opponentId: v.opponentId, pos: v.pos || null,
       cards: (v.cards || []).some(Boolean) ? v.cards : null,
-      squid: v.squid == null ? null : Number(v.squid) })),
+      squid: v.squid == null ? null : Number(v.squid),
+      ...(v.squid == null && typeof v.squidPresence === "boolean"
+        ? { squidPresence: v.squidPresence, squidPresenceEvidence: v.squidPresenceEvidence } : {}) })),
     villainIds: d.villains.map((v) => v.opponentId).filter(Boolean),
     board: d.board, actions: d.actions,
     ...(d.board2 && d.board2.some(Boolean) ? { board2: d.board2 } : {}),
@@ -7300,7 +7302,9 @@ function loadHandIntoDraft(h) {
     id: h.id, ts: h.ts,
     villains: (h.villains || []).map((v) => ({ opponentId: v.opponentId, pos: v.pos,
       cards: v.cards ? [...v.cards] : [null, null],
-      squid: v.squid == null ? null : Number(v.squid) })),
+      squid: v.squid == null ? null : Number(v.squid),
+      ...(typeof v.squidPresence === "boolean"
+        ? { squidPresence: v.squidPresence, squidPresenceEvidence: v.squidPresenceEvidence } : {}) })),
     heroPos: h.heroPos || null,
     heroCards: h.heroCards ? [...h.heroCards] : [null, null],
     heroIn: h.hero !== undefined ? h.hero : true,

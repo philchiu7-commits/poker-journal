@@ -19,6 +19,18 @@ for(const [mode,ids] of [['have',['yes','two']],['none',['no']]]) {
 assert.equal(run("hudFor('other',hands,'have').seats"),1); // opponent's squid, not the hand or someone else's
 console.log('Passed: every HUD counter and evidence list uses the selected opponent’s squid count; zero, one, multiple and unknown counts; cache switching.');
 
+const presence = make('presence-only', null);
+const absence = make('absence-only', null);
+presence.villains[0].squidPresence = true;
+absence.villains[0].squidPresence = false;
+c.partialHands = [presence, absence, ...c.hands];
+assert.equal(run("hudFor('p',partialHands,'all').squidUnknown"), 2);
+assert.equal(run("hudFor('p',partialHands,'have').seats"), 3);
+assert.equal(run("hudFor('p',partialHands,'none').seats"), 2);
+assert.equal(run("playerSquidState(0, true)"), "none");
+assert.equal(run("playerSquidState(2, false)"), "have");
+console.log('Passed: verified presence participates in HUD filters with no invented count. Exact counts take precedence.');
+
 const openHand = (id, squid, seat, pre, blinds = { sb: 1, bb: 2 }) => ({
   id, ts: 2, imported: {}, villainIds: ['p', 'other'],
   villains: [{ opponentId: 'p', pos: seat, squid }, { opponentId: 'other', pos: 'HJ' }],

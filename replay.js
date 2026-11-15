@@ -30,7 +30,7 @@ function rpSeats(h) {
     out.push({ actor: "v" + i, pos: v.pos, id: v.opponentId,
       name: oppById(v.opponentId)?.name || v.name || "V" + (i + 1),
       cards: (v.cards || []).filter(Boolean), chips: v.chips || null,
-      squid: v.squid == null ? null : Number(v.squid) });
+      squid: v.squid == null ? null : Number(v.squid), squidPresence: v.squidPresence });
   });
   if (RP_RING.includes(h.heroPos))
     out.push({ actor: "hero", pos: h.heroPos, id: null, name: "Hero",
@@ -344,8 +344,11 @@ function rpDraw() {
       </div>
       <div class="rpfront">
         ${s.pos === "BN" ? `<span class="rpdealer" title="Dealer">D</span>` : ""}
-        ${/* His own squid count, as logged on the hand (v.squid); unlogged shows nothing rather than a guess. */
-          s.squid !== null && s.squid >= 0 ? `<span class="rpsquid${s.squid ? "" : " none"}" title="${s.squid ? `Has ${s.squid} squid${s.squid > 1 ? "s" : ""}` : "No squid"}">🦑${s.squid}</span>` : ""}
+        ${s.squid !== null && s.squid >= 0
+          ? `<span class="rpsquid${s.squid ? "" : " none"}" title="${s.squid ? `Has ${s.squid} squid${s.squid > 1 ? "s" : ""}` : "No squid"}">🦑${s.squid}</span>`
+          : typeof s.squidPresence === "boolean"
+            ? `<span class="rpsquid${s.squidPresence ? "" : " none"}" title="${s.squidPresence ? "Has squid, count unknown" : "No squid"}">🦑${s.squidPresence ? "" : "0"}</span>`
+            : ""}
         ${inFront ? `<span class="rpchip c-${f.how[s.actor] || "blind"}${fresh ? " fresh" : ""}">${rpBB(inFront, r.blinds.BB)}</span>` : ""}
       </div>
     </div>`;

@@ -16,7 +16,8 @@ const ReadLab = (() => {
   const isAllInAction = a => a.act === 'jam' || a.src?.act === 'jam' || a.size === 'Jam' || a.allInCall;
   function facts(h,id) {
     const idx=(h.villains||[]).findIndex(v=>v.opponentId===id); if(idx<0)return null;
-    const F={h,idx,me:'v'+idx,st:{},squid:h.villains[idx].squid};
+    const player=h.villains[idx];
+    const F={h,idx,me:'v'+idx,st:{},squid:playerSquidState(player.squid,player.squidPresence)};
     F.pos=a=>a==='hero'?h.heroPos:h.villains?.[Number(a.slice(1))]?.pos;
     const { forced, price: entryPrice } = preflopEntryPosts(h);
     F.forced = forced;
@@ -519,7 +520,7 @@ const ReadLab = (() => {
       if(base.mode==='manual')return {...base,state:'Manual',k:0,n:0,ev:[]};
       for(const F of Fs){
         if(base.mode!=="cap"&&!F.h.imported)continue;
-        const sq=playerSquidState(F.squid);if(base.squid&&sq!==base.squid||!base.combined&&squid!=='all'&&sq!==squid)continue;
+        const sq=F.squid;if(base.squid&&sq!==base.squid||!base.combined&&squid!=='all'&&sq!==squid)continue;
         F.skippedCards=false;F.skippedTexture=false;
         let r;try{r=base.test(F);}catch(e){ignored++;continue;}
         if(r)ev.push({id:F.h.id,h:F.h,...r});
