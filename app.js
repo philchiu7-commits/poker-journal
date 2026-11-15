@@ -42,6 +42,7 @@ let showConvertedNotes = {};      // per-opponent toggle: show notes already con
 let oppEditMode = false;          // opponents list: reorder / regroup mode
 let vSearch = "";                 // hand-entry villain search query
 let collapsedGroups = new Set();  // opponents list: which group sections are collapsed
+let oppSort = "group";
 let pinnedGroup = null;           // opponents list: group name that always sorts first (null = auto by recency)
 let dupeDismissed = new Set();    // opponents list: duplicate pairs Phil has said are different people
 let tableLineup = [];             // today's seat ring, ordered: ("hero" | oppId)[] — anchors positions
@@ -700,11 +701,6 @@ function dupeWhy(an, bn) {
 const dupePhotoCache = new WeakMap();
 const DUPE_PHOTO_SIZE = 16;
 
-function dupePhotoSource(o) {
-  return [o.photo, o.photoFull].find(src =>
-    typeof src === "string" && /^data:image\/(?:jpeg|png|webp|gif|avif);base64,/i.test(src)) || "";
-}
-
 function dupePhotoPixels(o, source) {
   const cached = dupePhotoCache.get(o);
   if (cached?.source === source) return cached.pixels;
@@ -756,7 +752,7 @@ function dupePhotosLookAlike(a, b) {
 
 async function findDupes() {
   const list = OPP.filter(o => !o.archived && dupeNorm(o.name))
-    .map(o => ({ o, source: dupePhotoSource(o) })).filter(entry => entry.source);
+    .map(o => ({ o, source: profilePhoto(o) })).filter(entry => entry.source);
   const checks = [];
   for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
     const { o: a, source: aSrc } = list[i];
@@ -766,7 +762,7 @@ async function findDupes() {
     const why = dupeWhy(a.name, b.name);
     if (!why) continue;
     checks.push(Promise.all([dupePhotoPixels(a, aSrc), dupePhotoPixels(b, bSrc)]).then(([ap, bp]) =>
-      !dupeDismissed.has(key) && aSrc === dupePhotoSource(a) && bSrc === dupePhotoSource(b) &&
+      !dupeDismissed.has(key) && aSrc === profilePhoto(a) && bSrc === profilePhoto(b) &&
       dupePhotosLookAlike(ap, bp) ? { a, b, why, aSrc, bSrc } : null));
   }
   return (await Promise.all(checks)).filter(Boolean);
@@ -778,7 +774,13 @@ async function openDupesSheet() {
   const route = location.hash;
   const pairs = await findDupes();
   if (route !== location.hash) return;
-  if (!pairs.length) { hideSheet(); renderOpponents(); toast("No possible duplicates left."); return; }
+  if (!pairs.length) {
+    sheetGroup = "__dupes__";
+    showSheet(`<div class="sheethead"><span class="t">Possible duplicates</span>
+      <button data-sheetclose>Close</button></div>
+      <div class="empty">No pairs have both a similar name and a similar profile picture.</div>`);
+    return;
+  }
   const stat = (o) => {
     const h = HANDS.filter((x) => (x.villainIds || []).includes(o.id)).length;
     const r = Object.keys(o.reads || {}).length;
@@ -3070,7 +3072,13 @@ function renderOpponents() {
   const stats = oppStats();
   let list = OPP.filter((o) => !o.archived);
   if (nq) list = list.filter((o) => oppMatches(o, nq));
-  list.sort(oppOrderCmp(stats));
+  const manualOrder = oppOrderCmp(stats);
+  const sortByHands = !oppEditMode && oppSort !== "group";
+  const flat = sortByHands && oppSort === "hands";
+  list.sort(sortByHands ? (a, b) => (stats[b.id]?.count || 0) - (stats[a.id]?.count || 0) || manualOrder(a, b)
+    : manualOrder);
+  $("opp-sort").disabled = oppEditMode;
+  $("opp-sort").value = oppSort;
   // section by group — most-recently-touched group first (ungrouped ranks by its own recency)
   const groupRecency = {};
   for (const o of list) {
@@ -3087,14 +3095,16 @@ function renderOpponents() {
       }
       return (groupRecency[b] || 0) - (groupRecency[a] || 0);
     });
-  // Duplicate review only while the list is showing everything as-is — a search
-  // or a reorder is a different job and the banner would just be in the way.
-  const showDupes = !oppEditMode && !nq;
-  const dupeBanner = showDupes ? '<button class="dupebanner hidden" data-dupes></button>' : "";
+  const showDupes = !oppEditMode && OPP.length > 1;
+  const dupeBanner = showDupes
+    ? '<div class="dupereview"><button type="button" class="secondary" data-dupes>Review duplicates</button></div>'
+    : "";
   $("opp-edit").classList.toggle("on", oppEditMode);
   $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
   $("opp-list").classList.toggle("editing", oppEditMode);
-  $("opp-list").innerHTML = dupeBanner + (list.length ? groups.map((g) => {
+  $("opp-list").innerHTML = dupeBanner + (list.length ? (flat
+    ? list.map(o => oppRowHTML(o, stats[o.id])).join("")
+    : groups.map((g) => {
     const members = list.filter((o) => (o.group || "") === g);
     const collapsed = collapsedGroups.has(g);
     const rows = members.map((o) => oppRowHTML(o, stats[o.id])).join("");
@@ -3113,7 +3123,7 @@ function renderOpponents() {
            </button>${pinBtn}${add}
          </div>` : "";
     return `${head}<div class="groupsec${collapsed ? " hidden" : ""}" data-group="${esc(g)}">${rows}</div>`;
-  }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`);
+  }).join("")) : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`);
   if (showDupes) {
     const banner = $("opp-list").querySelector("[data-dupes]");
     findDupes().then(pairs => {
@@ -3126,7 +3136,7 @@ function renderOpponents() {
         <span>${pairs.length} possible duplicate${pairs.length === 1 ? "" : "s"} — review</span>
         <small>${esc(a.name)} · ${esc(b.name)}</small>
       </span>`;
-      banner.classList.remove("hidden");
+      banner.className = "dupebanner";
     });
   }
   updateGroupsDatalist();
@@ -4190,7 +4200,10 @@ function shrinkPhoto(file, max = 192) {
     img.src = url;
   });
 }
-const avatarHTML = (o, cls = "") => (o.photo ? `<img class="oppavatar${cls}" src="${o.photo}" alt="" data-photo="${o.id}">` : "");
+function avatarHTML(o, cls = "") {
+  const src = profilePhoto(o);
+  return src ? `<img class="oppavatar${cls}" src="${esc(src)}" alt="" data-photo="${esc(o.id)}">` : "";
+}
 
 /* Magnified photo. The viewport is pinned at scale 1 (maximum-scale=1), so
    pinch, pan and double-tap zoom are done here on the image itself. Back
@@ -4198,10 +4211,12 @@ const avatarHTML = (o, cls = "") => (o.photo ? `<img class="oppavatar${cls}" src
 let photoBox = null;
 function openPhotoBox(id) {
   const o = oppById(id);
-  if (!o || !(o.photoFull || o.photo) || photoBox) return;
+  if (!o || photoBox) return;
+  const src = isProfilePhoto(o.photoFull) ? o.photoFull : profilePhoto(o);
+  if (!src) return;
   const el = document.createElement("div");
   el.id = "photobox";
-  el.innerHTML = `<img src="${esc(o.photoFull || o.photo)}" alt="">
+  el.innerHTML = `<img src="${esc(src)}" alt="">
     <div class="pbname">${esc(o.name)}</div><button class="pbclose" aria-label="Close">✕</button>`;
   document.body.appendChild(el);
   const img = el.querySelector("img");
@@ -4316,7 +4331,7 @@ function renderOppDetail(id) {
   $("od-e-name").value = o.name;
   $("od-e-group").value = o.group || "";
   $("od-e-physical").value = o.physical || "";
-  $("od-e-photo-del").classList.toggle("hidden", !o.photo);
+  $("od-e-photo-del").classList.toggle("hidden", !profilePhoto(o));
 
 
   {
@@ -6957,6 +6972,11 @@ function bindStatic() {
 
   // opponents list
   $("opp-search").oninput = renderOpponents;
+  $("opp-sort").onchange = () => {
+    oppSort = $("opp-sort").value;
+    metaSet("oppSort", oppSort);
+    renderOpponents();
+  };
   $("opp-edit").onclick = () => { oppEditMode = !oppEditMode; renderOpponents(); };
   $("opp-add").onclick = () => { $("opp-new").classList.toggle("hidden"); $("opp-new-name").focus(); };
   $("opp-new-save").onclick = async () => {
@@ -7235,14 +7255,14 @@ function bindStatic() {
     // the thumbnail draws every row; the larger copy is only for magnifying
     try { [o.photo, o.photoFull] = await Promise.all([shrinkPhoto(f), shrinkPhoto(f, 1600)]); }
     catch (err) { toast("Photo: " + err.message); return; }
-    o.updatedAt = Date.now();
+    o.photoUpdatedAt = o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId); renderOpponents();
     $("od-editform").classList.remove("hidden");
   };
   $("od-e-photo-del").onclick = async () => {
     const o = oppById(curOppId); if (!o) return;
-    delete o.photo; delete o.photoFull; o.updatedAt = Date.now();
+    delete o.photo; delete o.photoFull; o.photoUpdatedAt = o.updatedAt = Date.now();
     await dbPut("opponents", o);
     renderOppDetail(curOppId); renderOpponents();
     $("od-editform").classList.remove("hidden");
@@ -7814,6 +7834,19 @@ function bindStatic() {
     const f = e.target.closest("[data-forgetimp]");
     if (f) forgetImport(f.dataset.forgetimp).then(() => { toast("Receipt cleared — data untouched"); renderData(); });
   };
+  $("data-photos").onclick = () => $("data-photofile").click();
+  $("data-photofile").onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const restored = await restoreMissingProfilePhotos(JSON.parse(await file.text()));
+      await refreshCache();
+      renderData();
+      toast(restored ? `Restored ${restored} profile photo${restored === 1 ? "" : "s"}.`
+        : "No missing photos matched this backup.");
+    } catch (err) { toast("Photo restore failed: " + err.message); }
+  };
   $("data-import").onclick = () => $("data-importfile").click();
   $("data-importfile").onchange = async (e) => {
     const f = e.target.files[0];
@@ -7915,6 +7948,8 @@ async function boot() {
   posHidden = new Set((await metaGet("hudHiddenSeats")) || []);
   const savedHudSquid = await metaGet("hudSquid");
   hudSquid = ["all", "have", "none"].includes(savedHudSquid) ? savedHudSquid : "all";
+  const savedOppSort = await metaGet("oppSort");
+  oppSort = ["hands", "group-hands"].includes(savedOppSort) ? savedOppSort : "group";
   pinnedGroup = (await metaGet("pinnedGroup")) ?? null;
   dupeDismissed = new Set((await metaGet("dupeDismissed")) || []);
   tableLineup = (await metaGet("tableLineup")) || [];

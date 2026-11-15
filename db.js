@@ -207,8 +207,64 @@ const dedupeById = (arr) => { const seen = new Set(); return arr.filter((x) => {
 const recReads = (o) => o.reads && typeof o.reads === "object" ? o.reads
   : (Array.isArray(o.tags) ? Object.fromEntries(o.tags.map((id) => [id, "yes"])) : {});
 
+const isProfilePhoto = (value) => typeof value === "string" &&
+  /^data:image\/(?:jpeg|png|webp|gif|avif);base64,/i.test(value);
+const profilePhoto = (o) => [o.photo, o.photoFull].find(isProfilePhoto) || "";
+
+function copyProfilePhotos(into, from) {
+  for (const key of ["photo", "photoFull"]) {
+    if (isProfilePhoto(from[key])) into[key] = from[key];
+    else delete into[key];
+  }
+}
+
+function mergeProfilePhotos(into, from) {
+  // For the same ID, an explicit photo edit or removal travels with backups.
+  if (into.id === from.id && (from.photoUpdatedAt || 0) > (into.photoUpdatedAt || 0)) {
+    copyProfilePhotos(into, from);
+    into.photoUpdatedAt = from.photoUpdatedAt;
+  } else if (!profilePhoto(into) && !into.photoUpdatedAt && profilePhoto(from)) {
+    // Some backups and hand exports have no photo fields at all.
+    copyProfilePhotos(into, from);
+  }
+}
+
+function restoreMissingProfilePhotos(data) {
+  if (data?.app !== "poker-journal" || !Array.isArray(data.opponents))
+    throw new Error("Choose a Poker Journal backup.");
+  const byId = new Map();
+  const ambiguous = new Set();
+  for (const o of data.opponents) {
+    if (typeof o?.id !== "string" || !profilePhoto(o)) continue;
+    if (byId.has(o.id)) ambiguous.add(o.id);
+    byId.set(o.id, o);
+  }
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction("opponents", "readwrite");
+    const store = tx.objectStore("opponents");
+    const request = store.getAll();
+    let restored = 0;
+    request.onsuccess = () => {
+      for (const o of request.result) {
+        const source = byId.get(o.id);
+        if (!source || ambiguous.has(o.id) || profilePhoto(o) || o.photoUpdatedAt) continue;
+        copyProfilePhotos(o, source);
+        o.photoUpdatedAt = Date.now();
+        store.put(o);
+        restored++;
+      }
+    };
+    tx.oncomplete = () => {
+      if (restored) scheduleAutoSnapshot();
+      resolve(restored);
+    };
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 /* Fold incoming opponent `from` into existing `into` (union; survivor keeps identity). */
 function mergeOppRecords(into, from) {
+  mergeProfilePhotos(into, from);
   const ir = (into.reads = recReads(into)), fr = recReads(from);
   for (const [k, st] of Object.entries(fr)) if (!ir[k]) ir[k] = st;   // survivor wins conflicts
   for (const field of ["readLabManual", "readLabSamples"]) {

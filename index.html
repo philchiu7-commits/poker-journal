@@ -23,6 +23,13 @@
     <button id="opp-add" class="iconbtn" title="New opponent">＋</button>
   </header>
   <input id="opp-search" type="search" placeholder="Search name, look…" autocomplete="off">
+  <label class="hand-sort">Sort
+    <select id="opp-sort">
+      <option value="group">Group order</option>
+      <option value="hands">Most hands</option>
+      <option value="group-hands">Most hands within groups</option>
+    </select>
+  </label>
   <div id="opp-new" class="panel hidden">
     <input id="opp-new-name" placeholder="Name / nickname" autocomplete="off">
     <input id="opp-new-group" placeholder="Group (e.g. Friday game)" list="groups" autocomplete="off">
@@ -313,6 +320,8 @@
       <button id="data-export" class="secondary">Export JSON</button>
       <button id="data-import" class="secondary">Import JSON</button>
     </div>
+    <button id="data-photos" class="secondary">Restore missing profile photos</button>
+    <input id="data-photofile" type="file" accept=".json,application/json" class="hidden">
     <input id="data-importfile" type="file" accept=".json,application/json" class="hidden">
   </div>
   <div class="panel" id="data-imports-panel">

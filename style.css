@@ -1043,8 +1043,9 @@ img[data-photo] { -webkit-touch-callout: none; -webkit-user-select: none; user-s
 .opprow[style*="--player-color"] .hudline.thin { color: #dfe3ea; opacity: .72; }
 
 /* ===== Possible duplicates ===== */
+.dupereview { margin-bottom: 8px; }
 .dupebanner {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   background: #2b220a; border: 1px solid #6b551f; border-radius: 10px;
   padding: 10px 12px; color: #e0a63a; font-size: 14px; font-weight: 600; cursor: pointer;
 }
