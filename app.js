@@ -5164,7 +5164,10 @@ function renderImportLog() {
     box.innerHTML = `<div class="muted sub2">Receipts stay until you clear them. Remove takes an import back out — what it added goes, what it wrote over comes back. Anything you've edited since is left alone. Clear drops the receipt and leaves the data.</div>` + log.map((e) => {
       const n = (c, w) => (c ? `${c} ${w}${c === 1 ? "" : "s"}` : null);
       const bits = [n(e.counts.opponents, "new opp"), n(e.counts.merged, "merged opp"),
-        n(e.counts.hands, "hand"), n(e.counts.stacks, "stack fill"), n(e.counts.sessions, "session"), n(e.counts.ranges, "range")]
+        n(e.counts.hands, "hand"), n(e.counts.corrected, "corrected hand"), n(e.counts.stacks, "stack fill"),
+        e.counts.already ? `${e.counts.already} already corrected` : null,
+        e.counts.skipped ? `${e.counts.skipped} unmatched or conflicting` : null,
+        n(e.counts.sessions, "session"), n(e.counts.ranges, "range")]
         .filter(Boolean).join(" · ") || "nothing new";
       const mins = Math.floor((Date.now() - e.ts) / 60000);
       const ago = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago`
@@ -5251,8 +5254,13 @@ async function confirmImport(data) {
     return false;
   }
   const n = (a, w) => { const c = Array.isArray(a) ? a.length : 0; return `${c} ${w}${c === 1 ? "" : "s"}`; };
-  const bits = [n(data.opponents, "opponent"), n(data.hands, "hand"), n(data.sessions, "session")].join(" · ");
-  if (!confirm(`Import ${bits}?\n\nMerged into what you already have by id — newer wins. This can't be undone from inside the app.`)) return false;
+  const isCorrection = Array.isArray(data.handCorrections);
+  const bits = isCorrection ? n(data.handCorrections, "hand correction") :
+    [n(data.opponents, "opponent"), n(data.hands, "hand"), n(data.sessions, "session")].join(" · ");
+  const description = isCorrection
+    ? "Applies to matching hands already in this journal. You can undo the changes under Recent imports."
+    : "Adds and updates saved data by ID. You can review the receipt under Recent imports.";
+  if (!confirm(`Import ${bits}?\n\n${description}`)) return false;
   const snap = await metaGet("autoSnapshot");
   if (snap?.data) await metaSet("preImportSnapshot", snap);
   return true;
@@ -8210,7 +8218,11 @@ function bindStatic() {
       await refreshCache();
       await normaliseHandTokens();
       await stampImport(counts.logId);
-      toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.stacks ? ` · ${counts.stacks} stacks filled` : "") + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
+      if (counts.corrected != null) {
+        toast(`Corrected ${counts.corrected} hands · ${counts.already} already corrected · ${counts.skipped} skipped`);
+      } else {
+        toast(`Imported ${counts.opponents} opp` + (counts.merged ? ` · ${counts.merged} merged` : "") + ` · ${counts.hands} hands` + (counts.stacks ? ` · ${counts.stacks} stacks filled` : "") + (counts.ranges ? ` · ${counts.ranges} ranges` : ""));
+      }
       renderData();
     } catch (err) { toast("Import failed: " + err.message); }
     e.target.value = "";

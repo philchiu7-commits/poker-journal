@@ -254,10 +254,10 @@ const ReadLab = (() => {
     rate(id, section, label, definition, F => F[role] && post(F) && flopRaiseDecision(F, kind),
       kind === 'xr' ? ['Check-raised', 'Did not raise'] : raised);
   }
-  function flopRaiseMix(id, section, label, role, kind) {
+  function flopRaiseMix(id, section, label, eligible, kind) {
     add(id, section, label, raiseMixDefinition, F => {
       const flop = F.st.flop;
-      if (!F[role] || !post(F) || !flopRaiseDecision(F, kind)?.ok) return null;
+      if (!eligible(F) || !flopRaiseDecision(F, kind)?.ok) return null;
       const H = classifiableHolding(F, 'flop');
       if (!H) return null;
       const bucket = raiseStrong(H, F) ? 'value' : raiseDraw(H, F) ? 'draw' : H.bluff ? 'bluff' : 'other';
@@ -268,10 +268,12 @@ const ReadLab = (() => {
   flopRaiseRate('pfc-xrr-rate', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
   flopRaiseRate('pfc-xr-rate', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
   flopRaiseRate('pfc-r-rate', 'Flop · PFC', 'xR or R · R only', 'pfc', 'r');
-  flopRaiseMix('pfr-xr-mix', 'Flop · PFR', 'xR · Mix', 'pfr', 'xr');
-  flopRaiseMix('pfc-xrr-mix', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
-  flopRaiseMix('pfc-xr-mix', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
-  flopRaiseMix('pfc-r-mix', 'Flop · PFC', 'xR or R · R only', 'pfc', 'r');
+  flopRaiseMix('limp-xr-mix', 'MWP Limp', 'xR · Mix', limpMw, 'xr');
+  flopRaiseMix('pfr-xr-mix', 'Flop · PFR', 'xR · Mix', F => F.pfr && post(F), 'xr');
+  const raisedPotCaller = F => F.pfc && post(F);
+  flopRaiseMix('pfc-xrr-mix', 'Flop · PFC', 'xR or R · Combined', raisedPotCaller, 'all');
+  flopRaiseMix('pfc-xr-mix', 'Flop · PFC', 'xR or R · xR only', raisedPotCaller, 'xr');
+  flopRaiseMix('pfc-r-mix', 'Flop · PFC', 'xR or R · R only', raisedPotCaller, 'r');
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;

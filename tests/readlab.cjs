@@ -335,6 +335,13 @@ for (const [id, k, n] of [['pfr-xr-rate', 1, 1], ['pfc-xrr-rate', 6, 8], ['pfc-x
 assert.ok(find(rates, 'pfc-xr-rate').ev.some(e => e.id === 'caller-xr-unknown' && e.ok));
 assert.equal(find(results([...raiseMixSample, callerFold], {squid:'have'}), 'pfc-xr-rate').n, 0);
 assert.equal(find(results([holdingRaise('limp', null, ['9c','5d','2h'], 'limp-xr')]), 'limp-xr-rate').k, 1);
+const limpedRaiseMix = results(raiseMixSample.concat([
+  holdingRaise('limper-value', ['9d','Ks'], ['9c','5d','2h'], 'limp-xr'),
+  holdingRaise('limper-draw', ['9s','7s'], ['9c','5s','2s'], 'limp-xr'),
+  holdingRaise('limper-air', ['Qs','7d'], ['9c','5d','2h'], 'limp-xr'),
+]));
+assert.deepEqual(plain(find(limpedRaiseMix, 'limp-xr-mix').mix), {value:1, bluff:1, draw:1, other:0});
+assert.equal(find(limpedRaiseMix, 'pfc-xrr-mix').n, combinedRaiseMix.n);
 console.log('PASS: overall flop raise frequencies by role and type, with calls, folds, unknown cards and squid filtering.');
 
 function turnBarrel(id, cards, action, board = ['9c', '6d', '2s', '3s', null]) {

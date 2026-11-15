@@ -527,6 +527,142 @@ const roundKey = (h) => {
   return /^DX/.test(im.roundId) ? im.roundId : `${im.tableId || ""}|${im.roundId}`;
 };
 
+function correctedHand(current, correction) {
+  if (!current || current.imported?.tableId !== correction.tableId ||
+      current.imported?.roundId !== correction.roundId || current.hero)
+    return { status: "skipped" };
+
+  const hand = copyRec(current);
+  const { betting, squid } = correction;
+  if (!Array.isArray(hand.villains) || !Array.isArray(hand.actions)) return { status: "skipped" };
+  const players = new Map(hand.villains.map(v => [v.opponentId, v]));
+  const matchesPlayers = (ids) => ids.length === players.size && ids.every(id => players.has(id));
+  if (players.size !== hand.villains.length || !matchesPlayers(correction.players))
+    return { status: "skipped" };
+
+  let changed = false;
+  if (betting) {
+    const { before, after, streets } = betting;
+    const seats = hand.villains.map(v => [v.opponentId, v.pos]);
+    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const actionKeys = (actions, blinds) => {
+      const candidate = { imported: hand.imported, actions: copyRec(actions), villains: hand.villains.map(v => ({ pos: v.pos })),
+        blinds: copyRec(blinds || {}) };
+      normaliseHand(candidate);
+      return candidate.actions.filter(a => streets.includes(a.street)).map(a => [a.street, a.actor, a.act, a.size ?? null]);
+    };
+    const blindKeys = b => [b?.sb ?? null, b?.bb ?? null, b?.std ?? null, b?.ante ?? null,
+      (b?.straddles || []).map(p => [p.pos, p.amount])];
+    const currentKeys = actionKeys(hand.actions, hand.blinds);
+    const matches = state => equal(seats, state.seats) &&
+      (!state.blinds || equal(blindKeys(hand.blinds), blindKeys(state.blinds))) &&
+      equal(currentKeys, actionKeys(state.actions, state.blinds || hand.blinds));
+
+    if (!matches(after)) {
+      if (!matches(before) || !matchesPlayers(after.seats.map(([id]) => id)) ||
+          (!equal(before.seats, after.seats) && hand.actions.some(a => !streets.includes(a.street))))
+        return { status: "skipped" };
+      const replacement = new Map(streets.map(street => [street, after.actions.filter(a => a.street === street)]));
+      const priorExtras = new Map();
+      for (const a of hand.actions.filter(a => replacement.has(a.street))) {
+        const { street, actor, act, size, ...extra } = a;
+        if (!Object.keys(extra).length) continue;
+        const index = Number(actor.slice(1));
+        const afterIndex = after.seats.findIndex(([id]) => id === hand.villains[index]?.opponentId);
+        const key = JSON.stringify([street, `v${afterIndex}`, act, size ?? null]);
+        if (priorExtras.has(key)) return { status: "skipped" };
+        priorExtras.set(key, extra);
+      }
+      const actions = ["pre", "flop", "turn", "river"].flatMap(street => {
+        if (!replacement.has(street)) return hand.actions.filter(a => a.street === street);
+        return replacement.get(street).map(a => {
+          const key = JSON.stringify([a.street, a.actor, a.act, a.size ?? null]);
+          const extra = priorExtras.get(key);
+          priorExtras.delete(key);
+          return { ...a, ...extra };
+        });
+      });
+      if (priorExtras.size || hand.actions.some(a => !["pre", "flop", "turn", "river"].includes(a.street)))
+        return { status: "skipped" };
+      hand.actions = actions;
+      hand.villains = after.seats.map(([id, pos]) => ({ ...players.get(id), pos }));
+      hand.villainIds = hand.villains.map(v => v.opponentId);
+      if (after.blinds) hand.blinds = { ...hand.blinds, ...after.blinds };
+      if (!equal(before.seats, after.seats) && Array.isArray(hand.imported.rawSquidReadings)) {
+        hand.imported.rawSquidReadings = hand.imported.rawSquidReadings.map(row => {
+          const id = before.seats[Number(row.actor?.slice(1))]?.[0];
+          return id ? { ...row, actor: "v" + hand.villainIds.indexOf(id) } : row;
+        });
+      }
+      Object.assign(hand.imported, betting.evidence);
+      normaliseHand(hand);
+      changed = true;
+    }
+  }
+
+  if (squid) {
+    const counts = new Map(correction.players.map((id, i) => [id, squid.counts[i]]));
+    if (squid.counts.length !== players.size || squid.counts.some(c => !Number.isInteger(c) || c < 0) ||
+        hand.villains.some(v => v.squid != null && Number(v.squid) !== counts.get(v.opponentId)))
+      return { status: "skipped" };
+    if (hand.villains.some(v => v.squid == null) || !hand.imported.squidCountsVerified) {
+      for (const v of hand.villains) v.squid = counts.get(v.opponentId);
+      hand.squid = { ...hand.squid, ...squid.summary };
+      Object.assign(hand.imported, squid.evidence, { squidCountsVerified: true });
+      changed = true;
+    }
+  }
+
+  if (!changed) return { status: "already" };
+  hand.updatedAt = Math.max(Date.now(), markOf(current) + 1);
+  return { status: "corrected", hand };
+}
+
+function importHandCorrections(corrections, src) {
+  if (!Array.isArray(corrections) || new Set(corrections.map(c => c?.id)).size !== corrections.length ||
+      corrections.some(c => !c?.id || !c.tableId || !c.roundId || !Array.isArray(c.players) ||
+        new Set(c.players).size !== c.players.length || (!c.betting && !c.squid)))
+    throw new Error("Invalid hand corrections file");
+  const counts = { corrected: 0, skipped: 0, already: 0 };
+  const receipt = {
+    id: "imp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), src: src || "",
+    counts, added: { opponents: [], hands: [], sessions: [] }, prev: { opponents: [], hands: [], sessions: [] },
+    ranges: [], marks: { hands: {} }
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction(["hands", "meta"], "readwrite");
+    const hands = tx.objectStore("hands");
+    const meta = tx.objectStore("meta");
+    let error;
+    for (const correction of corrections) {
+      const request = hands.get(correction.id);
+      request.onsuccess = () => {
+        try {
+          const result = correctedHand(request.result, correction);
+          counts[result.status]++;
+          if (!result.hand) return;
+          receipt.prev.hands.push({ id: correction.id, rec: request.result });
+          receipt.marks.hands[correction.id] = markOf(result.hand);
+          hands.put(result.hand);
+        } catch (err) {
+          error = err;
+          tx.abort();
+        }
+      };
+    }
+    const log = meta.get("importLog");
+    log.onsuccess = () => {
+      meta.put({ key: "importLog", value: [receipt, ...(log.result?.value || [])].slice(0, IMPORT_LOG_KEEP) });
+    };
+    tx.oncomplete = () => {
+      if (counts.corrected) scheduleAutoSnapshot();
+      resolve({ ...counts, logId: receipt.id });
+    };
+    tx.onabort = () => reject(error || tx.error);
+  });
+}
+
 /* Merge by id (newer wins); when an incoming opponent's id is new but its NAME
    uniquely matches an existing profile — or a name Phil merged away, kept as an
    alias — fold it in and remap its hands' villain refs, so re-logging hands for
@@ -539,6 +675,7 @@ async function importJSON(data, src) {
   if (sd) throw new Error(`Short-deck hands — ${sd}. They belong in the short-deck journal.`);
   if (!data || data.app !== "poker-journal" || !Array.isArray(data.opponents))
     throw new Error("Not a poker-journal export file");
+  if (data.handCorrections != null) return importHandCorrections(data.handCorrections, src);
   const counts = { opponents: 0, merged: 0, hands: 0, sessions: 0, ranges: 0 };
   const rc = { id: "imp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     ts: Date.now(), src: src || "", counts,
