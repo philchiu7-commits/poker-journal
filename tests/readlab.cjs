@@ -444,3 +444,52 @@ const xxbSamples = find(results([
 ]), 'line-XXB');
 assert.deepEqual(Array.from(xxbSamples.ev, e => [e.id,e.ok]), [['air-check',false], ['air-bet',true]]);
 console.log('PASS: BBB requires third pair or worse on the turn and XXB excludes paired river holdings.');
+
+const xcxbFlop = floatActions.slice(2);
+const checkedTurn = riverActions.slice(4, 6);
+const checkedRiver = riverActions.slice(6);
+const betRiver = [act('river','v0','bet','$10'), act('river','v1','fold')];
+const pfrPre = [act('pre','v0','raise','$6'), act('pre','v1','call')];
+const pfcPre = floatActions.slice(0, 2);
+const xcxbPfr = h('xcxb-pfr', undefined, undefined, [...pfrPre, ...xcxbFlop, ...checkedTurn, ...betRiver]);
+const xcxbPfc = h('xcxb-pfc', undefined, undefined, [...pfcPre, ...xcxbFlop, ...checkedTurn, ...betRiver]);
+const xcxbLimp = h('xcxb-limp', undefined, undefined, [
+  act('pre','v1','limp'), act('pre','v0','limp'), ...xcxbFlop, ...checkedTurn, ...checkedRiver,
+]);
+xcxbLimp.villains[0].pos = 'SB';
+const xcxbFreeBlind = h('xcxb-free-blind', undefined, undefined, [
+  act('pre','v1','limp'), act('pre','v0','check'), ...xcxbFlop, ...checkedTurn, ...betRiver,
+]);
+const xcxbRaisedFlop = h('xcxb-raised-flop', undefined, undefined, [
+  act('pre','v1','raise','$6'), act('pre','v2','call'), act('pre','v0','call'),
+  ...xcxbFlop, act('flop','v2','raise','$30'), act('flop','v1','fold'), act('flop','v0','call'),
+  act('turn','v0','check'), act('turn','v2','check'), act('river','v0','bet','$10'), act('river','v2','fold'),
+]);
+xcxbRaisedFlop.villains[1].pos = 'HJ';
+xcxbRaisedFlop.villains.push({opponentId:'r',pos:'BN'});
+xcxbRaisedFlop.villainIds.push('r');
+const xcxbResults = results([xcxbPfr, xcxbPfc, xcxbLimp, xcxbFreeBlind, xcxbRaisedFlop]);
+assert.deepEqual(Array.from(find(xcxbResults, 'line-xCXB').ev, e => [e.id, e.ok]), [['xcxb-pfr', true]]);
+assert.deepEqual(Array.from(find(xcxbResults, 'line-xCXB-pfc-limp').ev, e => [e.id, e.ok]),
+  [['xcxb-pfc', true], ['xcxb-limp', false]]);
+console.log('PASS: xCXB keeps PFR separate from the combined PFC and voluntary limp sample.');
+
+const a4Diamonds = ['Ad','4d'];
+const fdBoard = ['Qd','3d','8s','Qs','Jh'];
+const bdfdBoard = ['Qd','3c','8s','5d','Jh'];
+const checkCallTurn = [act('turn','v0','check'), act('turn','v1','bet','$12'), act('turn','v0','call')];
+const bluffHandsResults = results([
+  h('flop-fd', a4Diamonds, fdBoard, [...pfrPre, ...xcxbFlop, ...checkedTurn, ...betRiver]),
+  h('flop-bdfd', a4Diamonds, bdfdBoard, [...pfrPre, ...xcxbFlop, ...checkedTurn, ...checkedRiver]),
+  h('bdfd-died-turn', a4Diamonds, ['Qd','3c','8s','5h','Jh'], [...pfrPre, ...xcxbFlop, ...checkedTurn, ...betRiver]),
+  h('fd-made-river', a4Diamonds, ['Qd','3d','8s','Qs','Jd'], [...pfrPre, ...xcxbFlop, ...checkedTurn, ...betRiver]),
+]);
+assert.deepEqual(Array.from(find(bluffHandsResults, 'river-hand-FD').ev, e => [e.id, e.ok]), [['flop-fd', true]]);
+assert.deepEqual(Array.from(find(bluffHandsResults, 'river-hand-BDFD').ev, e => [e.id, e.ok]), [['flop-bdfd', false]]);
+const afterTurnCall = results([
+  h('turn-xc-river-check', a4Diamonds, fdBoard, [...pfrPre, ...xcxbFlop, ...checkCallTurn, ...checkedRiver]),
+  h('turn-xc-river-bet', a4Diamonds, bdfdBoard, [...pfrPre, ...xcxbFlop, ...checkCallTurn, ...betRiver]),
+]);
+assert.ok(afterTurnCall.filter(r => r.id.startsWith('river-hand-')).every(r => r.n === 0));
+assert.equal(find(afterTurnCall, 'river-over').n, 2);
+console.log('PASS: FD and BDFD have distinct missed-draw samples; turn check-calls are excluded from Bluff hands.');

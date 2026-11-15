@@ -1265,6 +1265,7 @@ function renderReadLabGroups(o) {
 
   const line = (group, entries, item) => {
     const labels = group === "Barrel" ? ["Air", "GS", "OESD", "FD", "Mergy", "SDV", "Strong"] :
+      group === "Bluff hands" ? ["FD", "BDFD", "SD", "HL", "SPEW", "A-High"] :
       item ? [item.chip, ...(item.also || []).map(([, label]) => label)] : [];
     const order = label => label === "Have" ? -1 : labels.includes(label) ? labels.indexOf(label) : labels.length;
     entries.sort((a, b) => order(a.label) - order(b.label));
