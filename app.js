@@ -1195,7 +1195,7 @@ function renderReadLabGroups(o) {
       `<span class="rctitle">${esc(cat.title)}</span></div>${shut ? "" : roles}</section>`;
   }).join("") || '<div class="panel">No reads match this filter.</div>';
 }
-function readLabDetail(id) {
+function readLabDetail(id, combo = null) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
   const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
@@ -1205,17 +1205,27 @@ function readLabDetail(id) {
     (r.acceptedSample ? `<button type="button" class="chip" data-lab-sample="${esc(id)}" data-lab-sample-reset>Restore default minimum</button>` : "");
   const sampleScope = r.combined ? "Combined squid" : r.sampleKey.startsWith("have:") ? "Have squid" :
     r.sampleKey.startsWith("none:") ? "No squid" : "All squid states";
-  const rows = r.ev.slice().sort((a,b) => Number(b.ok)-Number(a.ok) || (b.h.ts||0)-(a.h.ts||0));
-  sheetGroup = null;
+  const rows = (combo ? r.ev.filter(e => {
+    const v = (e.h.villains || []).find(v => v.opponentId === o.id);
+    return evidenceHandClass(v?.cards) === combo;
+  }) : r.ev.slice())
+    .sort((a,b) => Number(b.ok)-Number(a.ok) || (b.h.ts||0)-(a.h.ts||0));
+  const chart = evidenceChartHTML(o, null, r.ev, "Supports", "Other outcome", r.label, { labRule: id, combo });
+  sheetGroup = "__rdrill__";
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+    <div class="rdsub"><b>${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} supporting${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    ${chart}
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
-    <p><b>${esc(r.state)}</b> · ${sampleScope} · ${sampleLabel} ${r.sampleMin} hands</p>
-    <p>${r.k} supporting / ${r.n} eligible cases${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}. Unknown holdings and ineligible situations do not count. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
+    <p>${sampleLabel} ${r.sampleMin} hands. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
     ${sampleControls ? `<div class="chiprow rl-sample-controls">${sampleControls}</div>` : ""}
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
     ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
     ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
+    <div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${combo ? esc(combo) + " · " + rows.length + " hands" : "Eligible hands"}</b>
+      <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${esc(id)}">Show all hands</button>` : ""}</div>
     <div class="list rgcell-hands">${rows.map(e => `<div class="rl-evidence"><b class="${e.ok?'rl-hit':'muted'}">${e.ok?'Supports':'Other outcome'}</b><div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}<button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`).join('') || '<div class="empty">No eligible evidence on record.</div>'}</div>`);
+  if (combo) $("rl-evidence-heading").focus();
+  else $("sheet").scrollTop = 0;
 }
 const labEditKeys = r => r.mode === 'cap' ? ['min'] : ['bands','interval'].includes(r.mode) ? ['low','high'] : r.mode === 'fold3' ? ['threshold','strong','hard'] : ['threshold',...('minOpp' in r?['minOpp']:[]),...('minHits' in r?['minHits']:[])];
 const labCountKey = key => ['min','minOpp','minHits'].includes(key);
@@ -1276,6 +1286,12 @@ function bindReadLab() {
     if (rule) readLabDetail(rule.dataset.labRule);
   };
   $("sheet").addEventListener('click',async e => {
+    const chart = e.target.closest("[data-lab-chart-rule]");
+    if (chart) {
+      readLabDetail(chart.dataset.labChartRule, chart.dataset.labCombo || null);
+      if (!chart.dataset.labCombo) $("sheet").querySelector("[data-lab-combo]")?.focus({ preventScroll: true });
+      return;
+    }
     const sample = e.target.closest("[data-lab-sample]");
     if (sample) {
       const r = readLabResults.find(r => r.id === sample.dataset.labSample);
@@ -2097,12 +2113,18 @@ const tintHex = (hex, t, base = [26, 29, 35]) => {
   const v = parseInt(m[1], 16), c = [(v >> 16) & 255, (v >> 8) & 255, v & 255];
   return "#" + c.map((x, i) => Math.round(base[i] + (x - base[i]) * t).toString(16).padStart(2, "0")).join("");
 };
-function hudChartHTML(o, stat, hands, yes, no, label) {
+function evidenceHandClass(cards) {
+  if (!Array.isArray(cards) || cards.length !== 2 ||
+      !cards.every(c => EVALUABLE_CARD.test(c)) || cards[0] === cards[1]) return null;
+  return handClass(cards);
+}
+
+function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = {}) {
   const cells = {};
   let shown = 0;
   for (const x of hands) {
     const v = (x.h.villains || []).find((z) => z.opponentId === o.id);
-    const hc = handClass((v || {}).cards);
+    const hc = labRule ? evidenceHandClass(v?.cards) : handClass(v?.cards);
     if (!hc) continue;                          // never shown, or squid cards
     shown++;
     const e = cells[hc] = cells[hc] || { did: 0, miss: 0, ids: [] };
@@ -2134,6 +2156,9 @@ function hudChartHTML(o, stat, hands, yes, no, label) {
       ? `linear-gradient(90deg,${hue} 0 50%,${mhue} 50% 100%)`
       : e.did ? hue : e.miss && mhue ? mhue : null;
     const style = fill ? ` style="--fill:${fill}"` : inm ? ` style="--mdl:${tint}"` : "";
+    if (labRule && e) {
+      return `<button type="button" class="${cls}"${style} data-lab-chart-rule="${esc(labRule)}" data-lab-combo="${hc}" aria-pressed="${combo === hc}" title="${esc(tip)}" aria-label="${esc(tip)}">${hc}</button>`;
+    }
     return `<div class="${cls}"${style}${e ? ` data-hcell="${hc}" data-hands="${esc(e.ids.join(","))}"` : ""
       } title="${esc(tip)}">${hc}</div>`;
   }).join("");
@@ -2147,7 +2172,7 @@ function hudChartHTML(o, stat, hands, yes, no, label) {
       <span class="rglegitem"><span class="rgswatch${mhue ? "" : " hudoppsw"}"${
         mhue ? ` style="background:${mhue}"` : ""}></span>${esc(no)}</span>
       ${mleg}
-      <span class="rglegnote">${foot}${model
+      <span class="rglegnote">${foot}${labRule ? " · Tap a square for its hands" : ""}${model
         ? ` · the wash is what a ${model.pct.toFixed(0)}% range looks like, not what he holds` : ""}</span></div>`;
 }
 /* One square off a chart: the hands behind it. A single hand opens straight
@@ -2205,7 +2230,7 @@ function openHudDrill(o, key) {
      is the question the number raises. Postflop ones are about a street, not a
      starting hand, so they stay a list. */
   openDrillSheet(o, d.label, d.hands, d.yes, d.no,
-    d.stat in HUD_CHART_ACT ? hudChartHTML(o, d.stat, d.hands, d.yes, d.no, d.label) : "");
+    d.stat in HUD_CHART_ACT ? evidenceChartHTML(o, d.stat, d.hands, d.yes, d.no, d.label) : "");
 }
 /* Hovering a HUD number shows the same chart the tap opens, without the sheet
    (Phil). Postflop numbers have no chart to show, so they peek as their hands. */
@@ -2216,7 +2241,7 @@ function showHudPeek(btn) {
   if (!d) return;
   const head = `<div class="rpkhead">${esc(d.label)} · ${d.hands.filter((x) => x.ok).length} of ${d.hands.length}</div>`;
   if (d.stat in HUD_CHART_ACT) {
-    openPeek(btn, head + hudChartHTML(o, d.stat, d.hands, d.yes, d.no, d.label)
+    openPeek(btn, head + evidenceChartHTML(o, d.stat, d.hands, d.yes, d.no, d.label)
       + `<div class="rpkfoot"><span>Tap a square for its hands</span></div>`, "hudpk");
     return;
   }
