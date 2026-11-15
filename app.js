@@ -665,8 +665,8 @@ async function mergeOpponents(fromId, intoId) {
    "ge". Plain edit distance is no use on short names either, because Chinese
    handles share particles: 哥 ("bro") puts 财哥/兵哥 one edit apart and 小
    ("little") does the same to 小白/小虎, and those are different people. So
-   edit distance only applies from four characters up. Nothing is ever merged
-   automatically — this surfaces the pair and Phil picks the survivor. */
+   edit distance only applies from four characters up. A matching name is
+   screened against both profile pictures before a pair appears for review. */
 const dupeNorm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 // a trailing latin/digit tail is a handle suffix far more often than a different player
 const dupeCore = (s) => dupeNorm(s).replace(/[0-9a-z]+$/, "") || dupeNorm(s);
@@ -697,22 +697,87 @@ function dupeWhy(an, bn) {
   return null;
 }
 
-function findDupes() {
-  const list = OPP.filter((o) => !o.archived && dupeNorm(o.name));
-  const out = [];
-  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
-    const a = list[i], b = list[j];
-    if (dupeDismissed.has(dupeKey(a.id, b.id))) continue;
-    const why = dupeWhy(a.name, b.name);
-    if (why) out.push({ a, b, why });
+const dupePhotoCache = new WeakMap();
+const DUPE_PHOTO_SIZE = 16;
+
+function dupePhotoSource(o) {
+  return [o.photo, o.photoFull].find(src =>
+    typeof src === "string" && /^data:image\/(?:jpeg|png|webp|gif|avif);base64,/i.test(src)) || "";
+}
+
+function dupePhotoPixels(o, source) {
+  const cached = dupePhotoCache.get(o);
+  if (cached?.source === source) return cached.pixels;
+  const pixels = (async () => {
+    try {
+      const img = new Image();
+      img.src = source;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = DUPE_PHOTO_SIZE;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // Ignore blank and mostly transparent images, which provide little evidence.
+      let count = 0, sum = 0, sumSq = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 240) continue;
+        const light = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        count++;
+        sum += light;
+        sumSq += light * light;
+      }
+      return count >= DUPE_PHOTO_SIZE ** 2 * .9 && sumSq / count - (sum / count) ** 2 >= 144
+        ? data : null;
+    } catch {
+      return null;
+    }
+  })();
+  dupePhotoCache.set(o, { source, pixels });
+  return pixels;
+}
+
+function dupePhotosLookAlike(a, b) {
+  if (!a || !b) return false;
+  // Compare the whole thumbnail so a shared border or palette is insufficient.
+  // Resizing and mild JPEG differences are expected.
+  let error = 0, mismatched = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    const delta = Math.max(
+      Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]),
+      Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])
+    );
+    error += delta;
+    if (delta > 40) mismatched++;
   }
-  return out;
+  const count = a.length / 4;
+  return error / count <= 16 && mismatched / count <= .12;
+}
+
+async function findDupes() {
+  const list = OPP.filter(o => !o.archived && dupeNorm(o.name))
+    .map(o => ({ o, source: dupePhotoSource(o) })).filter(entry => entry.source);
+  const checks = [];
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const { o: a, source: aSrc } = list[i];
+    const { o: b, source: bSrc } = list[j];
+    const key = dupeKey(a.id, b.id);
+    if (dupeDismissed.has(key)) continue;
+    const why = dupeWhy(a.name, b.name);
+    if (!why) continue;
+    checks.push(Promise.all([dupePhotoPixels(a, aSrc), dupePhotoPixels(b, bSrc)]).then(([ap, bp]) =>
+      !dupeDismissed.has(key) && aSrc === dupePhotoSource(a) && bSrc === dupePhotoSource(b) &&
+      dupePhotosLookAlike(ap, bp) ? { a, b, why, aSrc, bSrc } : null));
+  }
+  return (await Promise.all(checks)).filter(Boolean);
 }
 
 /* Both merge directions are offered because the bigger half isn't always the
    one to keep — here the hands sit on one profile and the reads on the other. */
-function openDupesSheet() {
-  const pairs = findDupes();
+async function openDupesSheet() {
+  const route = location.hash;
+  const pairs = await findDupes();
+  if (route !== location.hash) return;
   if (!pairs.length) { hideSheet(); renderOpponents(); toast("No possible duplicates left."); return; }
   const stat = (o) => {
     const h = HANDS.filter((x) => (x.villainIds || []).includes(o.id)).length;
@@ -722,14 +787,12 @@ function openDupesSheet() {
   sheetGroup = "__dupes__";
   showSheet(`<div class="sheethead"><span class="t">Possible duplicates</span>
       <button data-sheetclose>Close</button></div>
-    <div class="sheetnote">Names close enough to be one player entered twice. Nothing merges until you pick
-      which name to keep — the other one's hands, reads, notes and exploits move across and its name is kept
-      as an alias, so search and imports still find it.</div>
-    <div class="dupelist">${pairs.map(({ a, b, why }) => `
+    <div class="sheetnote">Review each pair’s name and profile picture before choosing which profile to keep.</div>
+    <div class="dupelist">${pairs.map(({ a, b, why, aSrc, bSrc }) => `
       <div class="dupepair">
-        <div class="dwhy">${esc(why)}</div>
-        <div class="dside"><span class="dnm">${esc(a.name)}</span><span class="muted">${stat(a)}</span></div>
-        <div class="dside"><span class="dnm">${esc(b.name)}</span><span class="muted">${stat(b)}</span></div>
+        <div class="dwhy">Similar profile pictures · ${esc(why)}</div>
+        <div class="dside"><img class="oppavatar" src="${esc(aSrc)}" alt=""><span class="dnm">${esc(a.name)}</span><span class="muted">${stat(a)}</span></div>
+        <div class="dside"><img class="oppavatar" src="${esc(bSrc)}" alt=""><span class="dnm">${esc(b.name)}</span><span class="muted">${stat(b)}</span></div>
         <div class="dacts">
           <button class="dkeep" data-dupemerge="${a.id}|${b.id}">Keep ${esc(a.name)}</button>
           <button class="dkeep" data-dupemerge="${b.id}|${a.id}">Keep ${esc(b.name)}</button>
@@ -3020,10 +3083,8 @@ function renderOpponents() {
     });
   // Duplicate review only while the list is showing everything as-is — a search
   // or a reorder is a different job and the banner would just be in the way.
-  const dupes = !oppEditMode && !nq ? findDupes() : [];
-  const dupeBanner = dupes.length
-    ? `<button class="dupebanner" data-dupes>${dupes.length} possible duplicate${dupes.length === 1 ? "" : "s"} — review</button>`
-    : "";
+  const showDupes = !oppEditMode && !nq;
+  const dupeBanner = showDupes ? '<button class="dupebanner hidden" data-dupes></button>' : "";
   $("opp-edit").classList.toggle("on", oppEditMode);
   $("opp-edit").textContent = oppEditMode ? "Done" : "Edit";
   $("opp-list").classList.toggle("editing", oppEditMode);
@@ -3047,6 +3108,14 @@ function renderOpponents() {
          </div>` : "";
     return `${head}<div class="groupsec${collapsed ? " hidden" : ""}" data-group="${esc(g)}">${rows}</div>`;
   }).join("") : `<div class="empty">No opponents yet — tap ＋ to add your first villain.</div>`);
+  if (showDupes) {
+    const banner = $("opp-list").querySelector("[data-dupes]");
+    findDupes().then(pairs => {
+      if (!banner.isConnected || !pairs.length) return;
+      banner.textContent = `${pairs.length} possible duplicate${pairs.length === 1 ? "" : "s"} — review`;
+      banner.classList.remove("hidden");
+    });
+  }
   updateGroupsDatalist();
   /* No dragging while a search is filtering the list: the section then holds
      only the survivors, so committing their order would renumber them 0..n-1
