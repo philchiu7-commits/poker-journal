@@ -1193,7 +1193,19 @@ function readLabManualVerdict(o, key) {
   return value === "yes" || value === "no" ? value : null;
 }
 
+function readLabMixRatio(mix) {
+  const bluff = mix.bluff + mix.draw;
+  return mix.value + bluff ? `${mix.value}:${bluff}` : "—";
+}
+
 function readLabChip(r, label, state, flags, overridden) {
+  if (r.mix) {
+    const prefix = label === "Mix" ? "" : label + " · ";
+    return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}">
+      ${esc(prefix)}Value:Bluff ${readLabMixRatio(r.mix)}
+      <small class="rl-stats"> · ${r.mix.draw} draw${r.mix.draw === 1 ? "" : "s"} · ${r.n} shown</small>
+      ${flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : ""}</button>`;
+  }
   const positive = state === "Yes" || state === "Strong Yes";
   const negative = state === "No" || state === "Hard No";
   const strong = state === "Strong Yes" || state === "Hard No";
@@ -1223,13 +1235,13 @@ function renderReadLabGroups(o) {
   const sections = new Map();
   for (const r of readLabResults) {
     const manual = r.mode === "manual";
-    const verdict = readLabManualVerdict(o, manual ? r.id : r.sampleKey);
+    const verdict = r.mix ? null : readLabManualVerdict(o, manual ? r.id : r.sampleKey);
     const overridden = !manual && !!verdict;
     const state = verdict ? STATE_WORD[verdict] : manual ? "Unset" : r.state;
     const flags = flagsByRule.get(r.id);
     if (filter === "auto" && manual || filter === "manual" && !manual ||
-        filter === "established" && (manual || !r.established) ||
-        filter === "unestablished" && (manual || r.established) ||
+        filter === "established" && (manual || r.mix || !r.established) ||
+        filter === "unestablished" && (manual || r.mix || r.established) ||
         filter === "overridden" && !overridden ||
         filter === "flagged" && !flags) continue;
 
@@ -1313,7 +1325,7 @@ function setReadLabEditing(editing) {
   button.textContent = editing ? "Done editing" : "Edit verdicts";
   button.setAttribute("aria-pressed", String(editing));
   $("rl-verdict-help").textContent = editing
-    ? "Tap any read to set Yes or No. Your overrides are marked Manual."
+    ? "Tap a verdict chip to set Yes or No. Your overrides are marked Manual."
     : "Tap an automatic read to see its evidence. Your overrides are marked Manual.";
 }
 
@@ -1352,8 +1364,42 @@ function readLabVerdictEditor(r, o) {
   $("sheet").scrollTop = 0;
 }
 
+function readLabMixDetail(r, o, combo) {
+  const id = r.id;
+  const { value, bluff, draw, other } = r.mix;
+  const cards = e => evidenceHandClass(e.h.villains?.find(v => v.opponentId === o.id)?.cards);
+  const buckets = { value: "Value", bluff: "Bluff", draw: "Draw · counts as bluff", other: "Other holding" };
+  const rows = r.ev.filter(e => !combo || cards(e) === combo).sort((a, b) => (b.h.ts || 0) - (a.h.ts || 0));
+  const plotted = r.ev.filter(e => e.bucket !== "other");
+  const chart = plotted.length
+    ? evidenceChartHTML(o, null, plotted, "Value", "Bluff or draw", r.label, { labRule: id, combo }) : "";
+  const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
+  sheetGroup = "__rdrill__";
+  showReadLabSheet({ player: o.id, rule: r, squid: $("rl-squid").value, combo }, `
+    <div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+    <div class="rdsub"><b>Value:Bluff ${readLabMixRatio(r.mix)}</b> · Value ${value} · Bluff ${bluff + draw} (draws ${draw}) · Other ${other}</div>
+    ${chart}
+    <div class="rl-detail">
+      <p>${esc(r.definition)}</p>
+      ${r.unclassified.length ? `<details><summary>${r.unclassified.length} raises without classifiable holdings</summary>${
+        r.unclassified.map(e => handRowHTML(e.h, o.id, e.why)).join("")}</details>` : ""}
+      ${r.ignored ? `<p>${r.ignored} raises need data review.</p>` : ""}
+      <button class="chip" data-lab-flag="${id}">Flag an issue</button>
+      ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join("")}
+    </div>
+    <div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${combo ? esc(combo) + " · " : ""}${rows.length} shown raises</b>
+      <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${id}">Clear hand filter</button>` : ""}</div>
+    <div class="list rgcell-hands">${rows.map(e => `<div class="rl-evidence"><b>${buckets[e.bucket]}</b>
+      <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
+      <button class="linkbtn" data-lab-flag="${id}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`).join("")
+      || '<div class="empty">No raises with known holdings in this sample.</div>'}</div>`);
+  if (combo) $("rl-evidence-heading").focus();
+  else $("sheet").scrollTop = 0;
+}
+
 function readLabDetail(id, combo = null, showAll = false) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
+  if (r.mix) { readLabMixDetail(r, o, combo); return; }
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
   const rule = r.mode === "cap" ? `Yes after ${r.min === 1 ? "one qualifying hand" : `${r.min} distinct qualifying hands`}. ${r.positiveOnly
     ? "Fewer examples means Not established."
@@ -1480,7 +1526,8 @@ function bindReadLab() {
     const rule = e.target.closest("[data-lab-rule]");
     if (readLabEditing && (manual || rule)) {
       const r = readLabResults.find(r => r.id === (manual?.dataset.labManual || rule?.dataset.labRule));
-      if (r) readLabVerdictEditor(r, o);
+      if (r?.mix) readLabDetail(r.id);
+      else if (r) readLabVerdictEditor(r, o);
       return;
     }
     if (manual) {

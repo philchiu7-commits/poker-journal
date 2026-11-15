@@ -110,7 +110,16 @@ const ReadLab = (() => {
   }
   const eq=(ok,why)=>({ok:!!ok,why});
   const eligibleBet=(F,s)=>F.st[s].can;
-  const known=(F,s,gate,pred)=>{if(!gate)return null;const H=holding(F,s);if(!H){F.skippedCards=true;return null;}if(H.ignored){F.skippedTexture=true;return null;}return eq(pred(H,F),H.why);};
+  function classifiableHolding(F, street) {
+    const H = holding(F, street);
+    if (!H) { F.skippedCards = true; return null; }
+    if (H.ignored) { F.skippedTexture = true; return null; }
+    return H;
+  }
+  const known = (F, street, gate, pred) => {
+    const H = gate && classifiableHolding(F, street);
+    return H ? eq(pred(H, F), H.why) : null;
+  };
   const frequency=(id,sec,label,def,test,threshold,more=true,extra={})=>add(id,sec,label,def,test,{mode:'freq',threshold,more,...extra});
   const cap=(id,sec,label,def,test,extra={})=>add(id,sec,label,def,test,extra);
   // A holding-specific rate uses decisions made with that holding as its sample.
@@ -241,6 +250,23 @@ const ReadLab = (() => {
   for (const [label, pred] of [['Air', H => H.air], ['Equity', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong]])
     holdingCap('pfc-xr-' + label, 'Flop · PFC', 'xR or R · ' + label, 'flop',
       F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised, xrCapability);
+  const raiseMixDefinition = raiseCriteria + ' The ratio uses recorded flop raises with known cards. ' +
+    'Bluffs include draws below Strong and weaker-than-second-pair bluff holdings. Other holdings are listed separately.';
+  function flopRaiseMix(id, section, label, role, kind) {
+    add(id, section, label, raiseMixDefinition, F => {
+      const flop = F.st.flop;
+      if (!F[role] || !post(F) || !raiseDecision(flop)?.ok) return null;
+      if (kind !== 'all' && !!flop.xrChance !== (kind === 'xr')) return null;
+      const H = classifiableHolding(F, 'flop');
+      if (!H) return null;
+      const bucket = raiseStrong(H, F) ? 'value' : raiseDraw(H, F) ? 'draw' : H.bluff ? 'bluff' : 'other';
+      return { ok: bucket === 'value', bucket, why: H.why + (flop.xrChance ? ' · Check-raised' : ' · Raised without checking') };
+    }, { mode: 'mix' });
+  }
+  flopRaiseMix('pfr-xr-mix', 'Flop · PFR', 'xR · Mix', 'pfr', 'xr');
+  flopRaiseMix('pfc-xrr-mix', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
+  flopRaiseMix('pfc-xr-mix', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
+  flopRaiseMix('pfc-r-mix', 'Flop · PFC', 'xR or R · R only', 'pfc', 'r');
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;
@@ -425,11 +451,16 @@ const ReadLab = (() => {
         const sq=squidState(F);if(base.squid&&sq!==base.squid||!base.combined&&squid!=='all'&&sq!==squid)continue;
         F.skippedCards=false;F.skippedTexture=false;
         let r;try{r=base.test(F);}catch(e){ignored++;continue;}
-        if(r)ev.push({id:F.h.id,h:F.h,ok:r.ok,why:r.why});
+        if(r)ev.push({id:F.h.id,h:F.h,...r});
         else if(F.skippedCards||F.skippedTexture)unclassified.push({id:F.h.id,h:F.h,why:F.skippedTexture?"Two pair/set/trips ignored on four-flush/four-straight board":"Missing, invalid or ambiguous cards"});
       }
       const k = ev.filter(e => e.ok).length, n = ev.length, pct = n ? 100 * k / n : null;
       const key = sampleKey(cfg, squid);
+      if (cfg.mode === 'mix') {
+        const mix = { value: 0, bluff: 0, draw: 0, other: 0 };
+        for (const e of ev) mix[e.bucket]++;
+        return { ...cfg, mix, n, ev, ignored, unclassified, sampleKey: key };
+      }
       const savedMin = samples[key]?.value;
       const acceptedSample = !cfg.positiveOnly && Number.isInteger(savedMin) && savedMin > 0 ? savedMin : null;
       const ruleMin = cfg.minOpp || 1;

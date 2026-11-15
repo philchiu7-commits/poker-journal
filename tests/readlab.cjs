@@ -297,3 +297,29 @@ for (const prefix of ['limp-xr', 'pfr-xr', 'pfc-xr']) {
 }
 assert.ok(holding(['9d','Qs'], ['9c','5d','2h'], 'flop').strong); // the general top-pair+ definition
 console.log('PASS: raise-specific Strong in all three groups, paired-board two pair excluded, trips and full houses included, and draw fallback.');
+
+const raiseMixSample = [
+  holdingRaise('caller-xr-value', ['9d','Ks'], ['9c','5d','2h'], 'pfc-xr'),
+  holdingRaise('caller-xr-air', ['Qs','7d'], ['9c','5d','2h'], 'pfc-xr'),
+  holdingRaise('caller-xr-draw', ['9s','7s'], ['9c','5s','2s'], 'pfc-xr'),
+  holdingRaise('caller-xr-other', ['9d','Qs'], ['9c','5d','2h'], 'pfc-xr'),
+  holdingRaise('caller-xr-unknown', null, ['9c','5d','2h'], 'pfc-xr'),
+  holdingRaise('opener-xr-value', ['9d','As'], ['9c','5d','2h'], 'pfr-xr'),
+  holdingRaise('caller-direct-value', ['Td','Ts'], ['9c','5d','2h'], 'pfc-xr'),
+  holdingRaise('caller-call', ['9d','As'], ['9c','5d','2h'], 'pfc-xr'),
+];
+raiseMixSample[6].actions.splice(2, 1); // faced the bet without checking
+raiseMixSample[6].villains[0].squid = 1;
+raiseMixSample[7].actions[4].act = 'call';
+const mixes = results(raiseMixSample);
+assert.deepEqual(plain(find(mixes, 'pfr-xr-mix').mix), {value:1, bluff:0, draw:0, other:0});
+assert.deepEqual(plain(find(mixes, 'pfc-xr-mix').mix), {value:1, bluff:1, draw:1, other:1});
+assert.deepEqual(plain(find(mixes, 'pfc-r-mix').mix), {value:1, bluff:0, draw:0, other:0});
+const combinedRaiseMix = find(mixes, 'pfc-xrr-mix');
+assert.deepEqual(plain(combinedRaiseMix.mix), {value:2, bluff:1, draw:1, other:1});
+assert.equal(combinedRaiseMix.n,5);
+assert.deepEqual(Array.from(combinedRaiseMix.unclassified, e => e.id), ['caller-xr-unknown']);
+assert.deepEqual(plain(find(results(raiseMixSample, {squid:'have'}), 'pfc-xrr-mix').mix),
+  {value:1, bluff:0, draw:0, other:0});
+assert.equal(find(mixes, 'pfc-xr-Strong').k, 2); // the combined capability stat remains available
+console.log('PASS: actual value/bluff/draw raise mix, PFR/PFC and check/direct separation, and squid filtering.');
