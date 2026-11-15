@@ -38,8 +38,17 @@
   <div class="panel rl-intro">
     <button id="rl-edit-verdicts" type="button" class="chip on" aria-pressed="false">Edit verdicts</button>
     <p id="rl-verdict-help">Tap a read to see its evidence. Verdicts you set show a Manual badge.</p>
-    <div class="rl-controls"><label>Squid <select id="rl-squid"><option value="all">All</option><option value="have">Have squid</option><option value="none">No squid</option></select></label>
-    <label>Show <select id="rl-show"><option value="all">All reads</option><option value="auto">Automatic</option><option value="established">Established</option><option value="unestablished">Not established</option><option value="manual">Manual</option><option value="overridden">Manually overridden</option><option value="flagged">Flagged for review</option></select></label></div>
+    <div class="rl-controls">
+      <div class="rl-squid-controls">
+        <span id="rl-squid-label">Squid</span>
+        <div id="rl-squid" class="hudsquid" role="group" aria-labelledby="rl-squid-label">
+          <button type="button" data-lab-squid="all" aria-label="All hands" aria-pressed="true" title="All hands">ALL</button>
+          <button type="button" data-lab-squid="have" aria-label="Have squid" aria-pressed="false" title="Have squid"><span aria-hidden="true">🦑</span></button>
+          <button type="button" data-lab-squid="none" aria-label="No squid" aria-pressed="false" title="No squid"><span class="hudsquid-cross" aria-hidden="true">🦑</span></button>
+        </div>
+      </div>
+      <label>Show <select id="rl-show"><option value="all">All reads</option><option value="auto">Automatic</option><option value="established">Established</option><option value="unestablished">Not established</option><option value="manual">Manual</option><option value="overridden">Manually overridden</option><option value="flagged">Flagged for review</option></select></label>
+    </div>
     <div id="rl-status" class="muted sub2"></div>
   </div>
   <div id="rl-results"></div>

@@ -1166,6 +1166,7 @@ function route() {
 let readLabPlayer = null, readLabResults = [], readLabOverrides = {}, readLabFeedback = [], readLabReady = false;
 const readLabShut = new Set();
 let readLabEditing = false;
+let readLabSquid = "all";
 const readLabIsVisible = () => curView === "readlab" ||
   (curView === "handview" && hvUnder === "readlab" && matchMedia("(min-width: 1000px)").matches);
 
@@ -1180,7 +1181,7 @@ function renderReadLab(id) {
   curOppId = id;
   $("rl-name").textContent = o.name + " · Read Lab";
   readLabResults = ReadLab.evaluate(id, HANDS, {
-    squid: $("rl-squid").value, overrides: readLabOverrides, samples: o.readLabSamples || {},
+    squid: readLabSquid, overrides: readLabOverrides, samples: o.readLabSamples || {},
   });
   const playerHands = HANDS.filter(h => (h.villainIds || []).includes(id));
   const imported = playerHands.filter(h => h.imported).length;
@@ -1243,14 +1244,13 @@ function readLabChip(r, label, state, flags, overridden) {
 
 function renderReadLabGroups(o) {
   const filter = $("rl-show").value;
-  const squid = $("rl-squid").value;
   const flagsByRule = new Map();
   for (const f of readLabFeedback) {
     if (f.player === o.id) flagsByRule.set(f.rule, (flagsByRule.get(f.rule) || 0) + 1);
   }
   const sections = new Map();
   for (const r of readLabResults) {
-    if (squid !== "all" && r.squid && r.squid !== squid) continue;
+    if (readLabSquid !== "all" && r.squid && r.squid !== readLabSquid) continue;
     const manual = r.mode === "manual";
     const verdict = r.mix ? null : readLabManualVerdict(o, r);
     const overridden = !manual && !!verdict;
@@ -1359,7 +1359,7 @@ function currentReadLabSheet() {
   const sheet = $("sheet");
   if (sheet.classList.contains("hidden") || !readLabIsVisible()) return null;
   const context = readLabSheets.get(sheet.firstElementChild);
-  return context && context.player === readLabPlayer && context.squid === $("rl-squid").value ? context : null;
+  return context && context.player === readLabPlayer && context.squid === readLabSquid ? context : null;
 }
 
 function returnToReadLabEvidence(context) {
@@ -1376,7 +1376,7 @@ function finishReadLabSave(context, button, message) {
 
 function readLabVerdictEditor(r, o) {
   sheetGroup = "__labVerdict__";
-  const context = { player: o.id, rule: r, squid: $("rl-squid").value };
+  const context = { player: o.id, rule: r, squid: readLabSquid };
   showReadLabSheet(context, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${r.mode === "manual" ? "" : `<div class="rdsub">Automatic: ${esc(r.state)} · ${r.k}/${r.n} supporting</div>`}
     ${readLabVerdictPicker(r, o)}`);
@@ -1394,7 +1394,7 @@ function readLabMixDetail(r, o, combo) {
     ? evidenceChartHTML(o, null, plotted, "Value", "Bluff or draw", r.label, { labRule: id, combo }) : "";
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
   sheetGroup = "__rdrill__";
-  showReadLabSheet({ player: o.id, rule: r, squid: $("rl-squid").value, combo }, `
+  showReadLabSheet({ player: o.id, rule: r, squid: readLabSquid, combo }, `
     <div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     <div class="rdsub"><b>Value:Bluff ${readLabMixRatio(r.mix)}</b> · Value ${value} · Bluff ${bluff + draw} (draws ${draw}) · Other ${other}</div>
     ${chart}
@@ -1457,7 +1457,7 @@ function readLabDetail(id, combo = null, showAll = false) {
       <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
   }).join("");
   sheetGroup = "__rdrill__";
-  showReadLabSheet({ player: o.id, rule: r, squid: $("rl-squid").value, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+  showReadLabSheet({ player: o.id, rule: r, squid: readLabSquid, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${readLabVerdictPicker(r, o)}
     <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
@@ -1529,7 +1529,15 @@ function bindReadLab() {
   $("rl-journal").onclick = journal; $("rl-journal-tab").onclick = journal;
   $("rl-refresh").onclick = refreshCache;
   $("rl-edit-verdicts").onclick = () => setReadLabEditing(!readLabEditing);
-  $("rl-squid").onchange = $("rl-show").onchange = () => renderReadLab(readLabPlayer);
+  $("rl-show").onchange = () => renderReadLab(readLabPlayer);
+  $("rl-squid").onclick = e => {
+    const button = e.target.closest("[data-lab-squid]");
+    if (!button || button.dataset.labSquid === readLabSquid) return;
+    readLabSquid = button.dataset.labSquid;
+    for (const choice of $("rl-squid").querySelectorAll("[data-lab-squid]"))
+      choice.setAttribute("aria-pressed", String(choice === button));
+    renderReadLab(readLabPlayer);
+  };
   $("rl-results").onclick = async e => {
     const fold = e.target.closest("[data-lab-fold]");
     const o = oppById(readLabPlayer);

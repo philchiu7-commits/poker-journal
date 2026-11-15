@@ -1754,7 +1754,7 @@ button.estn:active { color: var(--accent); }
 .rl-tabs .on { background:var(--accent,#568bfa); color:white; }
 .rl-intro p { margin:8px 0 14px; color:var(--muted,#9aa4b3); font-size:14px; }
 .rl-controls { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
-.rl-controls label { display:flex; align-items:center; gap:8px; }
+.rl-controls label, .rl-squid-controls { display:flex; align-items:center; gap:8px; }
 .rl-controls select { max-width:190px; }
 .rl-hit { color: #47d898; }
 .rgcell.rng[data-lab-combo] { border: 0; cursor: pointer; }
