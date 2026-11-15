@@ -298,9 +298,23 @@ const ReadLab = (() => {
   const bluffOrDraw = H => H.bluff || H.kind === 'draw';
   holdingCap('delay-bluff', 'Turn · PFR', 'Delay Bluff', 'turn',
     F => delay(F) && betDecision(F, 'turn'), bluffOrDraw, ['Delayed c-bet', 'Checked']);
-  for (const [label, pred] of [['Air', H => H.air], ['EquityBased', H => H.kind === 'draw'], ['Mergy', H => H.kind === 'pair'], ['Strong', H => H.strong]])
-    holdingCap('barrel-' + label, 'Turn · PFR', 'Barrel · ' + label, 'turn',
-      F => barrel(F) && betDecision(F, 'turn'), pred, ['Barrelled', 'Checked']);
+  const barrelDecision = F => barrel(F) && betDecision(F, 'turn');
+  const barrelAction = ['Barrelled', 'Checked'];
+  for (const [label, pred] of [['Air', H => H.air], ['Mergy', H => H.kind === 'pair'], ['Strong', H => H.strong]])
+    holdingCap('barrel-' + label, 'Turn · PFR', 'Barrel · ' + label, 'turn', barrelDecision, pred, barrelAction);
+  const barrelDraws = [['GS', 'gutshot', H => H.gut], ['OESD', 'open-ended straight draw', H => H.oesd],
+    ['FD', 'flush draw', H => H.fd]];
+  for (const [label, name, hasDraw] of barrelDraws)
+    holdingCap('barrel-' + label, 'Turn · PFR', 'Barrel · ' + label, 'turn', barrelDecision,
+      H => H.kind === 'draw' && hasDraw(H), barrelAction, {
+        definition: 'After a called flop c-bet, measure turn barrels with a ' + name +
+          ' below top pair. A hand with a flush draw and a straight draw can count in both samples.',
+      });
+  holdingCap('t-barrel-sdv', 'Turn · PFR', 'Barrel · SDV', 'turn', barrelDecision,
+    H => H.kind === 'pair' && H.above >= 2, barrelAction, {
+      definition: 'After a called flop c-bet, measure turn barrels with third pair or weaker, including bottom pair and underpairs, without a qualifying draw.',
+      legacyManual: true,
+    });
   const types = [['4Str','4str'], ['3Flush','flush'], ['4Flush','4flush'], ['Overcards','over'], ['Blank','blank']];
   for (const [label, key] of types)
     holdingCap('bluff-turn-' + key, 'Turn · PFR', 'Bluff Turn · ' + label, 'turn',
@@ -384,7 +398,7 @@ const ReadLab = (() => {
       ['f-attack-adv', 'Attack · Adv. Brd.'], ['f-attack-disadv', 'Attack · Dis. Adv'],
     ],
     'Turn · PFR': [
-      ['t-barrel-sdv', 'Barrel · SDV'], ['punchbag-t-pfr', 'Punching Bag'],
+      ['punchbag-t-pfr', 'Punching Bag'],
     ],
     'Turn · PFC': [
       ['t-bet-vol-high', 'Bet Volume · High'], ['t-bet-vol-low', 'Bet Volume · Low'],

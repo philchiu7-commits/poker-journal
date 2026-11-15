@@ -323,3 +323,33 @@ assert.deepEqual(plain(find(results(raiseMixSample, {squid:'have'}), 'pfc-xrr-mi
   {value:1, bluff:0, draw:0, other:0});
 assert.equal(find(mixes, 'pfc-xr-Strong').k, 2); // the combined capability stat remains available
 console.log('PASS: actual value/bluff/draw raise mix, PFR/PFC and check/direct separation, and squid filtering.');
+
+function turnBarrel(id, cards, action, board = ['9c', '6d', '2s', '3s', null]) {
+  return h(id, cards, board, [
+    act('pre', 'v0', 'raise', '$6'), act('pre', 'v1', 'call'),
+    act('flop', 'v0', 'bet', '$8'), act('flop', 'v1', 'call'),
+    act('turn', 'v0', action, action === 'bet' ? '$20' : null),
+    act('turn', 'v1', action === 'bet' ? 'fold' : 'check'),
+  ]);
+}
+const barrelRead = results([
+  turnBarrel('barrel-gs', ['As','4h'], 'bet'),
+  turnBarrel('check-gs', ['As','4h'], 'check'),
+  turnBarrel('barrel-oesd', ['7c','8d'], 'bet'),
+  turnBarrel('check-fd', ['Ks','Qs'], 'check'),
+  turnBarrel('barrel-combo', ['7s','8s'], 'bet'),
+  turnBarrel('barrel-top-plus-fd', ['9s','Ks'], 'bet'),
+  turnBarrel('barrel-third-pair', ['3c','Jh'], 'bet'),
+  turnBarrel('check-bottom-pair', ['2c','Jd'], 'check'),
+  turnBarrel('barrel-underpair', ['2c','2d'], 'bet', ['9c', '7d', '5s', '3s', null]),
+  turnBarrel('barrel-second-pair', ['6c','Jd'], 'bet'),
+  turnBarrel('barrel-air', ['Qc','Jd'], 'bet'),
+]);
+const idsFor = id => Array.from(find(barrelRead, id).ev, e => [e.id, e.ok]);
+assert.deepEqual(idsFor('barrel-GS'), [['barrel-gs',true],['check-gs',false]]);
+assert.deepEqual(idsFor('barrel-OESD'), [['barrel-oesd',true],['barrel-combo',true]]);
+assert.deepEqual(idsFor('barrel-FD'), [['check-fd',false],['barrel-combo',true]]);
+assert.deepEqual(idsFor('t-barrel-sdv'), [['barrel-third-pair',true],['check-bottom-pair',false],['barrel-underpair',true]]);
+assert.equal(find(barrelRead,'t-barrel-sdv').state,'Yes');
+assert.equal(find(barrelRead,'barrel-EquityBased'),undefined);
+console.log('PASS: distinct turn barrel draw rates and actionable third-pair-or-weaker SDV.');

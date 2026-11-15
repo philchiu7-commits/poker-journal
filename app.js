@@ -1188,8 +1188,15 @@ function renderReadLab(id) {
   renderReadLabGroups(o);
 }
 
-function readLabManualVerdict(o, key) {
-  const value = o.readLabManual?.[key]?.value;
+function readLabManualVerdict(o, rule) {
+  const entries = o.readLabManual || {};
+  const key = rule.mode === "manual" ? rule.id : rule.sampleKey;
+  let entry = entries[key];
+  // An older manual-only read belongs to the all-squid view. An explicit
+  // clear at the new key wins so clearing it doesn't revive the old answer.
+  if (!Object.hasOwn(entries, key) && rule.legacyManual && key === "all:" + rule.id)
+    entry = entries[rule.id];
+  const value = entry?.value;
   return value === "yes" || value === "no" ? value : null;
 }
 
@@ -1235,7 +1242,7 @@ function renderReadLabGroups(o) {
   const sections = new Map();
   for (const r of readLabResults) {
     const manual = r.mode === "manual";
-    const verdict = r.mix ? null : readLabManualVerdict(o, manual ? r.id : r.sampleKey);
+    const verdict = r.mix ? null : readLabManualVerdict(o, r);
     const overridden = !manual && !!verdict;
     const state = verdict ? STATE_WORD[verdict] : manual ? "Unset" : r.state;
     const flags = flagsByRule.get(r.id);
@@ -1257,7 +1264,8 @@ function renderReadLabGroups(o) {
   }
 
   const line = (group, entries, item) => {
-    const labels = item ? [item.chip, ...(item.also || []).map(([, label]) => label)] : [];
+    const labels = group === "Barrel" ? ["Air", "GS", "OESD", "FD", "Mergy", "SDV", "Strong"] :
+      item ? [item.chip, ...(item.also || []).map(([, label]) => label)] : [];
     const order = label => label === "Have" ? -1 : labels.includes(label) ? labels.indexOf(label) : labels.length;
     entries.sort((a, b) => order(a.label) - order(b.label));
     const wide = entries.length >= 4 ? " rlwide" : "";
@@ -1296,7 +1304,7 @@ function renderReadLabGroups(o) {
 }
 function readLabVerdictControls(r, o) {
   const manualOnly = r.mode === "manual";
-  const manual = readLabManualVerdict(o, manualOnly ? r.id : r.sampleKey);
+  const manual = readLabManualVerdict(o, r);
   return [["yes", "Yes"], ["no", "No"], ["auto", manualOnly ? "Clear" : "Use automatic"]].map(([value, label]) => {
     const selected = (manual || "auto") === value;
     const cls = selected ? " on " + (STATE_CLASS[value] || "") : "";
@@ -1306,7 +1314,7 @@ function readLabVerdictControls(r, o) {
 }
 
 function readLabVerdictStatus(r, o, saved = false) {
-  const manual = readLabManualVerdict(o, r.mode === "manual" ? r.id : r.sampleKey);
+  const manual = readLabManualVerdict(o, r);
   if (manual) return `${saved ? "Saved " : ""}${STATE_WORD[manual]}<small class="rl-manual-badge">Manual</small>`;
   return saved ? (r.mode === "manual" ? "Verdict cleared" : "Automatic verdict restored") : "";
 }
