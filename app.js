@@ -1446,9 +1446,9 @@ function readLabDetail(id, combo = null, showAll = false) {
   const countLabel = rangeCheck ? "checked" : r.action ? r.action[0].toLowerCase() : "supporting";
   const scopeToggle = rangeCheck ? `<div class="rl-sample-controls">
     <button type="button" class="chip" data-lab-chart-rule="${id}" data-lab-all="${!showAll}">
-      ${betsOnly ? "Show checks too" : "Show flop bets only"}</button></div>` : "";
+      ${betsOnly ? "Show checks too" : "Show all flop probes"}</button></div>` : "";
   const evidenceTitle = combo ? `${esc(combo)} · ${rows.length} hands` :
-    betsOnly ? `Flop leads and probes · ${rows.length}` : "Eligible hands";
+    betsOnly ? `Flop probes and leads · ${rows.length} ${rows.length === 1 ? "hand" : "hands"}` : "Eligible hands";
   const rowHTML = rows.map(e => {
     const highlight = rangeCheck ? !e.ok : e.ok;
     const label = highlight ? yes : no;
@@ -1456,11 +1456,16 @@ function readLabDetail(id, combo = null, showAll = false) {
       <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
       <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
   }).join("");
+  const evidenceList = `<div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${evidenceTitle}</b>
+      <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${esc(id)}" data-lab-all="${showAll}">${betsOnly ? "Show all flop probes" : "Clear hand filter"}</button>` : ""}</div>
+    <div class="list rgcell-hands">${rowHTML || `<div class="empty">${betsOnly
+      ? "No flop leads or probes in this sample." : "No eligible evidence on record."}</div>`}</div>`;
   sheetGroup = "__rdrill__";
   showReadLabSheet({ player: o.id, rule: r, squid: readLabSquid, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${readLabVerdictPicker(r, o)}
     <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
+    ${rangeCheck ? evidenceList : ""}
     <div data-lab-all="${showAll}">${chart}</div>
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
     ${!r.positiveOnly || r.ignored ? `<p>${r.positiveOnly ? "" : `${sampleLabel} ${r.sampleMin} hands.`}
@@ -1469,10 +1474,7 @@ function readLabDetail(id, combo = null, showAll = false) {
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
     ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
     ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
-    <div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${evidenceTitle}</b>
-      <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${esc(id)}" data-lab-all="${showAll}">Clear hand filter</button>` : ""}</div>
-    <div class="list rgcell-hands">${rowHTML || `<div class="empty">${betsOnly
-      ? "No flop leads or probes in this sample." : "No eligible evidence on record."}</div>`}</div>`);
+    ${rangeCheck ? "" : evidenceList}`);
   if (combo) $("rl-evidence-heading").focus();
   else $("sheet").scrollTop = 0;
 }
