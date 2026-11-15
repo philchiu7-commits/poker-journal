@@ -349,6 +349,8 @@ const ReadLab = (() => {
   const cleanBet=(F,s)=>F.st[s].bet&&F.st[s].bets.length===1&&F.st[s].acts.some(a=>a.actor!==F.me&&a.act==='call');
   const riverBetDecision = F => riverChance(F) && betDecision(F, 'river');
   const checkCalled = S => S.first?.act === 'check' && S.response?.act === 'call';
+  const riverBluffChance = F => riverChance(F) && !checkCalled(F.st.turn);
+  const riverBluffDecision = F => riverBluffChance(F) && betDecision(F, 'river');
   const xcxb = F => checkCalled(F.st.flop) && F.st.flop.bets.length === 1 && quiet(F, 'turn');
   const lines={BBB:F=>cleanBet(F,'flop')&&cleanBet(F,'turn'),BXB:F=>cleanBet(F,'flop')&&quiet(F,'turn'),XBB:F=>quiet(F,'flop')&&cleanBet(F,'turn'),XXB:F=>quiet(F,'flop')&&quiet(F,'turn'),xCXB:xcxb,MWP:F=>F.st.river.alive.length>=3};
   for (const [name, gate] of Object.entries(lines))
@@ -376,10 +378,10 @@ const ReadLab = (() => {
   };
   for (const [name, pred] of Object.entries(hands))
     holdingCap('river-hand-' + name, 'River · PFR', 'Bluff hands · ' + name, 'river',
-      F => !checkCalled(F.st.turn) && riverBetDecision(F), (H, F) => H.riverBluff && pred(F, H), bet);
+      riverBluffDecision, (H, F) => H.riverBluff && pred(F, H), bet);
   for (const [name, key] of [['3Flush','flush'], ['4Flush','4flush'], ['4Str','4str'], ['Blanks','blank'], ['OverCards','over']])
     holdingCap('river-card-' + key, 'River · PFR', 'Rivers · ' + name, 'river',
-      F => texture(F, 'river')[key] && riverBetDecision(F), H => H.riverBluff, bet);
+      F => texture(F, 'river')[key] && riverBluffDecision(F), H => H.riverBluff, bet);
   for(const hit of [true,false]){
     const gate=F=>{const T=holding(F,'turn'),b=F.st.turn.board;if(!T||b.length!==4)return false;
       const counts={};b.forEach(c=>counts[c[1]]=(counts[c[1]]||0)+1);const r=new Set(b.map(rank));let straight=false;
@@ -388,7 +390,7 @@ const ReadLab = (() => {
       const tex=texture(F,'river'),complete=!!(tex.flush||tex['4flush']||tex.straight||tex['4str']);return possible&&complete===hit;
     };
     cap('river-type-'+hit,'River · PFR','Bluff Type · '+(hit?'DrawsHit':'DrawsMiss'),'River bluff on this board type. Stat: bets / genuine opportunities while holding a qualifying bluff. DrawsHit takes priority.',F=>{
-      if(!riverChance(F)||!gate(F))return null;const H=holding(F,'river');if(!H||!H.riverBluff)return null;return eq(F.st.river.bet,H.why+'; '+F.st.river.first.act);
+      if(!riverBluffChance(F)||!gate(F))return null;const H=holding(F,'river');if(!H||!H.riverBluff)return null;return eq(F.st.river.bet,H.why+'; '+F.st.river.first.act);
     });
   }
   frequency('force-nonsd','River · PFR','Force Bluff · NonSD','Bet / genuine river betting chances holding K-high or worse. >34% Yes.',F=>{const H=holding(F,'river');return riverChance(F)&&H&&H.air&&!F.cards.some(c=>rank(c)===14)?eq(F.st.river.bet,H.why):null;},34,true,{strict:true});
@@ -414,6 +416,11 @@ const ReadLab = (() => {
     holdingCap('turn-call-' + label, 'River · PFC', 'T call range · ' + label, 'turn',
       F => F.pfc && post(F) && callDecision(F.st.turn), pred, called);
   const manual = {
+    'Most Important': [
+      ['nuts-flop', 'Nuts · Flop'], ['nuts-turn', 'Nuts · Turn'],
+      ['bet-vol-high', 'Bet Volume · High'], ['bet-vol-low', 'Bet Volume · Low'],
+      ['donks', 'Donks', { manualPair: true }], ['frontload', 'Frontload', { manualPair: true }],
+    ],
     'Preflop': [
       ['3bet-linear', '3bet · Linear'], ['3bet-polar', '3bet · Polar'],
     ],
@@ -452,8 +459,8 @@ const ReadLab = (() => {
     ],
   };
   for (const [section, reads] of Object.entries(manual))
-    for (const [id, label] of reads)
-      add(id, section, label, 'Set this read manually.', null, { mode: 'manual' });
+    for (const [id, label, options] of reads)
+      add(id, section, label, 'Set this read manually.', null, { mode: 'manual', ...options });
   for (const r of rules) {
     if (r.definition === holdingDefinition) r.definition = common + holdingDefinition;
     if(r.id.startsWith('float-'))r.definition = 'Call a flop cbet as preflop caller with Air, neither hole card A or K. No own pair, FD, OESD or gutshot; backdoors allowed.';
@@ -470,7 +477,7 @@ const ReadLab = (() => {
     if (r.id === 'line-XXB') r.definition += ' Only unpaired river holdings qualify after the flop and turn check through.';
     else if (r.id.startsWith('line-') || r.id.startsWith('river-hand-') || r.id.startsWith('river-card-') || r.id === 'river-raise')
       r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
-    if (r.id.startsWith('river-hand-')) r.definition += ' Turn check-calls are excluded.';
+    if (/^river-(hand|card|type)-/.test(r.id)) r.definition += ' Turn check-calls are excluded.';
     if (r.id === 'river-hand-FD') r.definition += ' Flush draw on both flop and turn that missed on the river.';
     if (r.id === 'river-hand-BDFD') r.definition += ' Backdoor flush draw on the flop that became a flush draw on the turn and missed on the river.';
     if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip.';

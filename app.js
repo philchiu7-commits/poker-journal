@@ -1206,6 +1206,14 @@ function readLabMixRatio(mix) {
 }
 
 function readLabChip(r, label, state, flags, overridden) {
+  if (r.manualPair) {
+    return [["yes", "Yes", "sgreen"], ["no", "No", "sred"]].map(([value, word, color]) => {
+      const selected = state === word;
+      return `<button type="button" class="chip mini${selected ? " on " + color : ""}" data-lab-manual="${esc(r.id)}"
+        data-lab-choice="${value}" aria-pressed="${selected}" aria-label="${esc(r.label + " " + word)}">${word}` +
+        (selected ? '<small class="rl-manual-badge">Manual</small>' : "") + "</button>";
+    }).join("");
+  }
   if (r.mix) {
     const prefix = label === "Mix" ? "" : label + " · ";
     return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}">
@@ -1533,7 +1541,8 @@ function bindReadLab() {
     }
     const manual = e.target.closest("[data-lab-manual]");
     const rule = e.target.closest("[data-lab-rule]");
-    if (readLabEditing && (manual || rule)) {
+    const choice = manual?.dataset.labChoice;
+    if (readLabEditing && !choice && (manual || rule)) {
       const r = readLabResults.find(r => r.id === (manual?.dataset.labManual || rule?.dataset.labRule));
       if (r?.mix) readLabDetail(r.id);
       else if (r) readLabVerdictEditor(r, o);
@@ -1543,12 +1552,14 @@ function bindReadLab() {
       const id = manual.dataset.labManual;
       manual.disabled = true;
       try {
-        const fresh = await saveReadLabEntry(o, "readLabManual", id,
-          value => value === "yes" ? "no" : value === "no" ? null : "yes");
+        const fresh = await saveReadLabEntry(o, "readLabManual", id, value =>
+          choice ? (value === choice ? null : choice) : value === "yes" ? "no" : value === "no" ? null : "yes");
         if (!fresh) return;
         if (readLabIsVisible() && readLabPlayer === o.id) {
           renderReadLabGroups(fresh);
-          $("rl-results").querySelector(`[data-lab-manual="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+          const selector = `[data-lab-manual="${CSS.escape(id)}"]` +
+            (choice ? `[data-lab-choice="${CSS.escape(choice)}"]` : "");
+          $("rl-results").querySelector(selector)?.focus({ preventScroll: true });
         }
       } catch {
         manual.disabled = false;

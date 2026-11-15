@@ -493,3 +493,26 @@ const afterTurnCall = results([
 assert.ok(afterTurnCall.filter(r => r.id.startsWith('river-hand-')).every(r => r.n === 0));
 assert.equal(find(afterTurnCall, 'river-over').n, 2);
 console.log('PASS: FD and BDFD have distinct missed-draw samples; turn check-calls are excluded from Bluff hands.');
+
+const riverReadCases = [
+  ['Kc', betRiver, ['river-card-over', 'river-type-false']],
+  ['Js', checkedRiver, ['river-card-flush', 'river-type-true']],
+];
+for (const [river, decision, ids] of riverReadCases) {
+  const board = [...fdBoard.slice(0, 4), river];
+  const matched = results([
+    h('turn-xc', a4Diamonds, board, [...pfrPre, ...xcxbFlop, ...checkCallTurn, ...decision]),
+    h('turn-xx', a4Diamonds, board, [...pfrPre, ...xcxbFlop, ...checkedTurn, ...decision]),
+  ]);
+  for (const id of ids) {
+    assert.deepEqual(Array.from(find(matched, id).ev, e => [e.id, e.ok]), [['turn-xx', decision === betRiver]]);
+    assert.match(find(matched, id).definition, /Turn check-calls are excluded/);
+  }
+}
+const mostImportant = results([]).filter(r => r.section === 'Most Important');
+assert.deepEqual(Array.from(mostImportant, r => [r.label, r.mode, !!r.manualPair]), [
+  ['Nuts · Flop', 'manual', false], ['Nuts · Turn', 'manual', false],
+  ['Bet Volume · High', 'manual', false], ['Bet Volume · Low', 'manual', false],
+  ['Donks', 'manual', true], ['Frontload', 'manual', true],
+]);
+console.log('PASS: Rivers and Bluff Type exclude turn check-calls and Most Important is available for manual reads.');
