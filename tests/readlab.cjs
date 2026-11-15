@@ -225,9 +225,32 @@ const lowProtect = find(lowReads, 'low-protect');
 assert.deepEqual(Array.from(lowProtect.ev, e => [e.id, e.ok]), [['weak-top-check', true], ['overpair-bet', false]]);
 assert.equal(lowProtect.state, 'Yes');
 assert.equal(lowProtect.pct, 50);
-assert.equal(find(lowReads, 'oop-protect').k, 0); // the separate kicker-specific read
+const oopProtect = find(lowReads, 'oop-protect');
+assert.deepEqual(Array.from(oopProtect.ev, e => [e.id, e.ok]), [
+  ['pair-check', true], ['weak-top-check', true], ['overpair-bet', false], ['high-board-check', true],
+]);
 const lowRate = bets => results(Array.from({ length: 16 }, (_, i) =>
   lowFlop('low-rate-' + i, ['Qc', '7s'], i < bets ? 'bet' : 'check')));
 assert.equal(find(lowRate(8), 'low-wide').state, 'No');
 assert.equal(find(lowRate(9), 'low-wide').state, 'Yes');
 console.log('PASS: low-board betting with below-top-pair holdings, checks with all top pairs or better, and strict 50% Too wide cutoff.');
+
+const ipPair = lowFlop('ip-pair-check', ['5c', 'Jd'], 'check');
+ipPair.villains[0].pos = 'BN';
+ipPair.villains[1].pos = 'BB';
+ipPair.actions = ipPair.actions.slice(0, 2).concat(act('flop', 'v1', 'check'), act('flop', 'v0', 'check'));
+const thirdPair = lowFlop('third-pair-check', ['2c', 'Jd'], 'check');
+const caller = h('caller-second-pair', ['5c', 'Jd'], ['9c', '5d', '2h', null, null], [
+  act('pre', 'v1', 'raise', '$6'), act('pre', 'v0', 'call'),
+  act('flop', 'v0', 'check'), act('flop', 'v1', 'check'),
+]);
+const oopPairOnly = find(results([
+  lowFlop('second-pair-check', ['5c', 'Jd'], 'check'),
+  lowFlop('second-pair-bet', ['5c', 'Jd'], 'bet'),
+  thirdPair, ipPair, caller,
+]), 'oop-protect');
+assert.deepEqual(Array.from(oopPairOnly.ev, e => [e.id, e.ok]),
+  [['second-pair-check', true], ['second-pair-bet', false]]);
+assert.equal(oopPairOnly.pct, 50);
+assert.equal(oopPairOnly.state, 'Yes');
+console.log('PASS: OOP Protective samples second pair or better as the preflop raiser, with checks and bets both counted.');

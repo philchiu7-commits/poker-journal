@@ -96,9 +96,7 @@ const ReadLab = (() => {
     const riverBluff=!ignored&&!strong&&(texture?raw.t<4:(!pair||above>=4));
     const ownSuited=hole.filter(c=>board.filter(b=>b[1]===c[1]).length+hole.filter(b=>b[1]===c[1]).length===4);
     const topPair=raw.name==='top pair',kicker=pair?Math.max(...hr.filter(r=>r!==pairRank),0):0;
-    const kickers=Array.from({length:13},(_,i)=>14-i).filter(r=>!br.includes(r));
-    const protective=strong&&(raw.t>=3||topPair&&kicker>=(kickers[1]||13));
-    return {raw,draw,pair,above,pairRank,strong,ignored,kind,hasDraw,riverBluff,topPair,kicker,protective,
+    return {raw,draw,pair,above,pairRank,strong,ignored,kind,hasDraw,riverBluff,topPair,kicker,
       two:raw.t===4,fd:!!draw.fd,oesd:!!draw.oesd,gut:!!draw.gut,air:!pair&&!hasDraw&&raw.t<4,
       wfd:!!draw.fd&&ownSuited.length>0&&Math.max(...ownSuited.map(rank))<=11,
       weakTop:topPair&&kicker<=9&&!hasDraw,
@@ -222,7 +220,7 @@ const ReadLab = (() => {
     F => lowCbetChance(F) && checkDecision(F, 'flop'), H => H.strong, checked);
   holdingCap('oop-protect', 'Flop · PFR', 'OOP Protective', 'flop',
     F => F.pfr && position(F, 'flop') === 'OOP' && F.st.flop.can && checkDecision(F, 'flop'),
-    H => H.protective, checked);
+    H => H.strong || (H.pair && H.above === 1), checked);
   for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('pfr-xr-' + label, 'Flop · PFR', 'xR · ' + label, 'flop',
       F => F.pfr && post(F) && F.st.flop.xrChance && raiseDecision(F.st.flop),
@@ -387,7 +385,7 @@ const ReadLab = (() => {
     if(r.id==='trap')r.definition = 'As PFR, check river with two pair+ when able to bet. Check-throughs count. Apply texture exclusions.';
     if(r.id==='lead-blankstrong')r.definition = 'Lead a blank river with two pair or better. Previous aggressor still in and waiting. Apply texture exclusions.';
     if (r.id === 'low-protect') r.definition = 'On flops with a highest card of 9 or lower, measure checks with top pair or better. Every top-pair kicker qualifies.';
-    if (r.id === 'oop-protect') r.definition = 'Check OOP with top pair and second-best kicker or better, including stronger hands, on all flop textures.';
+    if (r.id === 'oop-protect') r.definition = 'As the preflop raiser, measure flop checks when out of position and holding second pair or better. Both checks and bets with those holdings enter the sample.';
     if(r.id.includes('WKtp'))r.definition = 'OOP first flop bet in a limped multiway pot: top pair with kicker 9 or lower, without FD/OESD/gutshot. Original OOP grouping.';
     if(r.id.startsWith('line-')||r.id.startsWith('river-hand-')||r.id.startsWith('river-card-')||r.id==='river-raise')r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
     if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip.';
