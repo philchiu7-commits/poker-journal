@@ -1005,6 +1005,16 @@ img[data-photo] { -webkit-touch-callout: none; -webkit-user-select: none; user-s
    Auto-fill rather than a fixed three, so a wide window packs more per row
    instead of stretching three cells across it, and the sample size rides on
    the label's line instead of claiming a third one. */
+.hudsquid { display: inline-flex; gap: 3px; padding: 3px; margin: 4px 0 3px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel2); }
+.hudsquid button { display: grid; place-items: center; min-width: 44px; min-height: 38px;
+  padding: 0 9px; border: 1px solid transparent; border-radius: 8px; background: transparent;
+  color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }
+.hudsquid button span { font-size: 19px; line-height: 1; }
+.hudsquid button[aria-pressed="true"] { border-color: var(--accent); background: #1c2c47; color: var(--text); }
+.hudsquid-cross { position: relative; display: inline-block; }
+.hudsquid-cross::after { content: ""; position: absolute; top: 50%; left: -1px; right: -1px;
+  height: 2px; border-radius: 2px; background: var(--text); transform: rotate(-45deg); }
 .hudgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:4px; }
 .hudgrid + .hudgrid { margin-top:4px; }
 .hudcell { background:#161a22; border:1px solid #232a36; border-radius:8px;

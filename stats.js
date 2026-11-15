@@ -18,7 +18,7 @@ const HUD_MIN = 15;
 
 function hudCount(oppId, hands) {
   const c = {
-    seats: 0, vpip: 0, pfr: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0, f4b: 0, oppF4b: 0,
+    seats: 0, vpip: 0, pfr: 0, open: 0, openOpp: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0, f4b: 0, oppF4b: 0,
     cbIp: 0, oppCbIp: 0, cbOop: 0, oppCbOop: 0, cbMw: 0, oppCbMw: 0,
     fcbIp: 0, oppFcbIp: 0, fcbOop: 0, oppFcbOop: 0, fcbMw: 0, oppFcbMw: 0, bar: 0, oppBar: 0, barR: 0, oppBarR: 0, ftb: 0, oppFtb: 0,
     frb: 0, oppFrb: 0, fxr: 0, oppFxr: 0, fxrT: 0, oppFxrT: 0, xr: 0, oppXr: 0, xrC: 0, oppXrC: 0,
@@ -33,7 +33,7 @@ function hudCount(oppId, hands) {
   for (const w of ["Hu", "Mw"])
     for (const k of ["cbF", "xOop", "fxr", "xrV", "xrB", "xrG", "xrC", "fcbF", "bar", "fxrT", "ftb", "barR", "frb", "rAgg", "rCall"])
       c[k + w] = c["opp" + k[0].toUpperCase() + k.slice(1) + w] = 0;
-  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, iso: 0, isoOpp: 0, three: 0, opp3: 0, limp: 0, lrr: 0, faced: 0, lcall: 0 });
+  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, open: 0, openOpp: 0, iso: 0, isoOpp: 0, three: 0, opp3: 0, limp: 0, lrr: 0, faced: 0, lcall: 0 });
   /* Every stat also keeps the hands it was counted off — one entry per hand it
      had a chance in, flagged with whether that chance was taken — so tapping a
      number can show you the hands behind it instead of asking you to trust it.
@@ -69,7 +69,16 @@ function hudCount(oppId, hands) {
        discounted price and a different range, which is the whole reason the
        word "cold" is in the name. A limper who then calls a raise is out for
        the same reason. */
-    const cold = !HUD_BLIND_SEATS.has(myPos) && !straddlePosts(h).some((p) => p.pos === myPos);
+    const posted = straddlePosts(h);
+    const cold = !HUD_BLIND_SEATS.has(myPos) && !posted.some((p) => p.pos === myPos);
+    const opened = openDecision(pre, me, myPos, preflopEntryPosts(h, posted));
+    if (opened !== null) {
+      c.openOpp++;
+      pos(myPos).openOpp++;
+      if (opened) { c.open++; pos(myPos).open++; }
+      mark("open", opened, h.id);
+      mark("open|" + myPos, opened, h.id);
+    }
     for (const a of pre) {
       const mine = a.actor === me;
       if (mine) {
@@ -406,6 +415,7 @@ function hudStats(c) {
   return [
     r("vpip", "VPIP", c.vpip, c.seats, "Voluntarily put money in preflop — limps included"),
     r("pfr", "PFR", c.pfr, c.seats, "Raised preflop"),
+    r("open", "Open", c.open, c.openOpp, "First raise in an unraised pot, including isolation raises. Free blind and straddle options are excluded."),
     r("iso", "Iso", c.iso, c.oppIso, "Raised over a limp with the pot still unraised — over-limping, calling or folding behind is the same chance declined"),
     r("cc", "Cold call", c.cc, c.oppCc, "Called a raise with nothing of his in the pot yet — blind and straddle defends are not cold calls"),
     w("three", "3-bet", c.n3b, c.opp3b, "3-bet when facing an unraised open"),
@@ -670,6 +680,29 @@ function straddlePosts(h) {
     return [{ pos: "STD", amount: low / u }, { pos: second, amount: b.std }];
   }
   return [{ pos: "STD", amount: b.std }];
+}
+
+// Chip units for entry decisions before the first raise, shared with Read Lab.
+function preflopEntryPosts(h, posted = straddlePosts(h)) {
+  const b = h.blinds || {};
+  const unit = b.bb > 0 && b.bb < 1 ? 1000 : 1;
+  const blind = (b.bb || 0) * unit;
+  const forced = { SB: (b.sb || 0) * unit, BB: blind };
+  for (const post of posted) forced[post.pos] = post.amount * unit;
+  return { forced, price: Math.max(blind, ...posted.map(post => post.amount * unit)) };
+}
+
+function openDecision(pre, actor, seat, { forced, price }) {
+  // The biggest forced post can already check. Smaller posts must still decide
+  // whether to pay to enter, including the BB and early straddles behind a live straddle.
+  if ((forced[seat] || 0) >= price) return null;
+  for (const action of pre) {
+    const amount = action.act === "jam" ? sizeAmount(action.size) ?? sizeMult(action.size, price) : null;
+    const raises = HUD_AGG.has(action.act) && !(amount !== null && amount <= price);
+    if (action.actor === actor) return raises;
+    if (raises) return null;
+  }
+  return null;
 }
 
 function potWalk(h) {

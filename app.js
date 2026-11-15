@@ -1309,7 +1309,7 @@ function readLabVerdictEditor(r, o) {
   $("sheet").scrollTop = 0;
 }
 
-function readLabDetail(id, combo = null) {
+function readLabDetail(id, combo = null, showAll = false) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
   const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
@@ -1319,29 +1319,52 @@ function readLabDetail(id, combo = null) {
     (r.acceptedSample ? `<button type="button" class="chip" data-lab-sample="${esc(id)}" data-lab-sample-reset>Restore default minimum</button>` : "");
   const sampleScope = r.combined ? "Combined squid" : r.sampleKey.startsWith("have:") ? "Have squid" :
     r.sampleKey.startsWith("none:") ? "No squid" : "All squid states";
-  const rows = (combo ? r.ev.filter(e => {
+  const rangeCheck = id === "range-x";
+  const betsOnly = rangeCheck && !showAll;
+  const evidence = betsOnly ? r.ev.filter(e => !e.ok) : r.ev;
+  const rows = evidence.filter(e => {
+    if (!combo) return true;
     const v = (e.h.villains || []).find(v => v.opponentId === o.id);
     return evidenceHandClass(v?.cards) === combo;
-  }) : r.ev.slice())
-    .sort((a,b) => Number(b.ok)-Number(a.ok) || (b.h.ts||0)-(a.h.ts||0));
-  const chart = evidenceChartHTML(o, null, r.ev, "Supports", "Other outcome", r.label, { labRule: id, combo });
+  }).sort((a, b) => (rangeCheck ? Number(a.ok) - Number(b.ok) : Number(b.ok) - Number(a.ok)) ||
+    (b.h.ts || 0) - (a.h.ts || 0));
+  const chartHands = rangeCheck ? evidence.map(e => ({ ...e, ok: !e.ok })) : evidence;
+  const chart = evidence.length || !betsOnly
+    ? evidenceChartHTML(o, null, chartHands, rangeCheck ? "Led or probed" : "Supports",
+      rangeCheck ? "Checked" : "Other outcome", r.label, { labRule: id, combo })
+    : "";
+  const checkCount = rangeCheck ? `${r.k}/${r.n} checked` : `${r.k}/${r.n} supporting`;
+  const scopeToggle = rangeCheck ? `<div class="rl-sample-controls">
+    <button type="button" class="chip" data-lab-chart-rule="${id}" data-lab-all="${!showAll}">
+      ${betsOnly ? "Show checks too" : "Show flop bets only"}</button></div>` : "";
+  const evidenceTitle = combo ? `${esc(combo)} · ${rows.length} hands` :
+    betsOnly ? `Flop leads and probes · ${rows.length}` : "Eligible hands";
+  const rowHTML = rows.map(e => {
+    const label = rangeCheck ? (e.ok ? "Checked" : "Led or probed") : (e.ok ? "Supports" : "Other outcome");
+    const highlight = rangeCheck ? !e.ok : e.ok;
+    return `<div class="rl-evidence"><b class="${highlight ? "rl-hit" : "muted"}">${label}</b>
+      <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
+      <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
+  }).join("");
   sheetGroup = "__rdrill__";
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     <div class="rl-verdict">
       <div class="muted sub2">Read Lab verdict</div>
       <div class="chiprow" role="group" aria-label="Read Lab verdict">${readLabVerdictControls(r, o)}</div>
     </div>
-    <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} supporting${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
-    ${chart}
+    <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${checkCount}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    ${scopeToggle}
+    <div data-lab-all="${showAll}">${chart}</div>
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
     <p>${sampleLabel} ${r.sampleMin} hands. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
     ${sampleControls ? `<div class="chiprow rl-sample-controls">${sampleControls}</div>` : ""}
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
     ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
     ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
-    <div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${combo ? esc(combo) + " · " + rows.length + " hands" : "Eligible hands"}</b>
-      <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${esc(id)}">Show all hands</button>` : ""}</div>
-    <div class="list rgcell-hands">${rows.map(e => `<div class="rl-evidence"><b class="${e.ok?'rl-hit':'muted'}">${e.ok?'Supports':'Other outcome'}</b><div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}<button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`).join('') || '<div class="empty">No eligible evidence on record.</div>'}</div>`);
+    <div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${evidenceTitle}</b>
+      <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${esc(id)}" data-lab-all="${showAll}">Clear hand filter</button>` : ""}</div>
+    <div class="list rgcell-hands">${rowHTML || `<div class="empty">${betsOnly
+      ? "No flop leads or probes in this sample." : "No eligible evidence on record."}</div>`}</div>`);
   if (combo) $("rl-evidence-heading").focus();
   else $("sheet").scrollTop = 0;
 }
@@ -1440,7 +1463,8 @@ function bindReadLab() {
     }
     const chart = e.target.closest("[data-lab-chart-rule]");
     if (chart) {
-      readLabDetail(chart.dataset.labChartRule, chart.dataset.labCombo || null);
+      const showAll = chart.closest("[data-lab-all]")?.dataset.labAll === "true";
+      readLabDetail(chart.dataset.labChartRule, chart.dataset.labCombo || null, showAll);
       if (!chart.dataset.labCombo) $("sheet").querySelector("[data-lab-combo]")?.focus({ preventScroll: true });
       return;
     }
@@ -2224,6 +2248,7 @@ function openReadProof(o, label, ids, sub, other) {
 const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lcall: "Limp-call", af: "Agg factor" };
 const HUD_DRILL_LABEL = {
   vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
+  open: ["Opened or isolated", "Did not open"],
   iso: ["Isolated the limper", "Limped along, called or folded"],
   cc: ["Cold called", "Raised or folded"],
   three: ["3-bet", "Did not 3-bet"], four: ["4-bet", "Did not 4-bet"],
@@ -2244,7 +2269,7 @@ const HUD_DRILL_LABEL = {
    an outlined one is a hand he had the same chance in and did something else.
    Only hands he turned up can appear at all, so the foot says how many of them
    that is — most of a preflop stat's hands were never shown. */
-const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
+const HUD_CHART_ACT = { vpip: null, pfr: "raise", open: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
   f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lcall: "call" };
 /* The other bucket gets a fill of its own where the action has a name worth
    seeing: on Iso the hands he did not raise are the ones he came along with,
@@ -2253,7 +2278,7 @@ const HUD_CHART_ACT = { vpip: null, pfr: "raise", iso: "raise", cc: "call", thre
    grid, so one hand class reads the same in both places (Phil, v201). */
 const HUD_CHART_MISS = { iso: NOTCH_COLORS.limp };
 /* Which model ordering a stat's own percentage gets drawn as. */
-const HUD_MODEL_KIND = { vpip: "play", pfr: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet",
+const HUD_MODEL_KIND = { vpip: "play", pfr: "raise", open: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet",
   limp: "limp", lrr: "lrr", lcall: "call" };
 /* The model is a wash over the same 13x13 rather than a second grid: the peek
    is already nearly a phone wide, two grids would run past the viewport, and
@@ -4159,7 +4184,8 @@ let posHidden = new Set();
 const savePosHidden = () => metaSet("hudHiddenSeats", [...posHidden]);
 function renderOppHud(o) {
   const c = hudFor(o.id, HANDS, hudSquid);
-  $("od-hud-squid").value = hudSquid;
+  for (const button of $("od-hud-squid").querySelectorAll("[data-hud-squid]"))
+    button.setAttribute("aria-pressed", String(button.dataset.hudSquid === hudSquid));
   const nEl = $("od-hud-n"), box = $("od-hud");
   if (!c.seats) {
     nEl.textContent = "";
@@ -4225,6 +4251,7 @@ function renderOppHud(o) {
     ? `<div class="hudpos">${!seats.length ? "" : `<table>
          <tr><th></th>${seats.map((p) => `<td data-poscol="${p}" title="Hide the ${p} column">${p}</td>`).join("")}</tr>
          ${row("PFR", "pfr", "seats", "Raised preflop")}
+         ${row("Open", "open", "openOpp", "Opened or isolated on the first decision in an unraised pot")}
          ${row("3bet", "three", "opp3", "3-bet the first raise he faced")}
          ${row("Iso", "iso", "isoOpp", "Raised over a limp with the pot unraised")}
          ${row("Limp", "limp", "seats", "Limped")}
@@ -7411,8 +7438,10 @@ function bindStatic() {
   };
   bindPhotoLongPress($("opp-list"));
   bindPhotoLongPress($("tbl-list"));
-  $("od-hud-squid").onchange = () => {
-    hudSquid = $("od-hud-squid").value;
+  $("od-hud-squid").onclick = (event) => {
+    const button = event.target.closest("[data-hud-squid]");
+    if (!button || button.dataset.hudSquid === hudSquid) return;
+    hudSquid = button.dataset.hudSquid;
     metaSet("hudSquid", hudSquid);
     hideRangePeek();
     if (curOppId) renderOppDetail(curOppId);

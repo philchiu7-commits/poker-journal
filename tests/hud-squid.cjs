@@ -17,3 +17,29 @@ for(const [mode,ids] of [['have',['yes','two']],['none',['no']]]) {
 }
 assert.equal(run("hudFor('other',hands,'have').seats"),1); // opponent's squid, not the hand or someone else's
 console.log('Passed: every HUD counter and evidence list uses the selected opponent’s squid count; zero, one, multiple and unknown counts; cache switching.');
+
+const openHand = (id, squid, seat, pre, blinds = { sb: 1, bb: 2 }) => ({
+  id, ts: 2, imported: {}, villainIds: ['p', 'other'],
+  villains: [{ opponentId: 'p', pos: seat, squid }, { opponentId: 'other', pos: 'HJ' }],
+  blinds, actions: pre.map(([actor, act, size]) => ({ street: 'pre', actor, act, size })),
+});
+c.openHands = [
+  openHand('rfi', 0, 'CO', [['v0', 'raise', '$6']]),
+  openHand('iso', 1, 'CO', [['v1', 'limp', '$2'], ['v0', 'raise', '$8']]),
+  openHand('fold', 1, 'CO', [['v0', 'fold']]),
+  openHand('limp-reraise', 0, 'CO', [['v0', 'limp'], ['v1', 'raise', '$6'], ['v0', '3bet', '$20']]),
+  openHand('3bet', 1, 'CO', [['v1', 'raise', '$6'], ['v0', '3bet', '$20']]),
+  openHand('blind-option', 0, 'BB', [['v1', 'limp'], ['v0', 'raise', '$8']]),
+  openHand('short-jam', 1, 'CO', [['v1', 'jam', '$1'], ['v0', 'raise', '$8']]),
+  openHand('straddled-bb', 0, 'BB', [['v1', 'limp'], ['v0', 'raise', '$20']], { sb: 1, bb: 2, straddles: [{ pos: 'STD', amount: 4 }, { pos: 'U7', amount: 8 }] }),
+  openHand('top-straddle', 1, 'U7', [['v1', 'limp'], ['v0', 'check']], { sb: 1, bb: 2, straddles: [{ pos: 'STD', amount: 4 }, { pos: 'U7', amount: 8 }] }),
+];
+const openCounters = run("hudCount('p',openHands)");
+assert.equal(openCounters.open, 4);
+assert.equal(openCounters.openOpp, 6);
+assert.deepEqual(Array.from(openCounters.ev.open, x => [x.id, x.ok]),
+  [['rfi',true],['iso',true],['fold',false],['limp-reraise',false],['short-jam',true],['straddled-bb',true]]);
+assert.equal(openCounters.ev['open|BB'].length, 1);
+assert.equal(run("hudFor('p',openHands,'have').openOpp"), 3);
+assert.equal(run("hudFor('p',openHands,'none').openOpp"), 3);
+console.log('Passed: Open and isolation raises, first decision only, short all-in calls, and free options in straddled pots.');

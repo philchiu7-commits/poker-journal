@@ -17,9 +17,9 @@ const ReadLab = (() => {
     const idx=(h.villains||[]).findIndex(v=>v.opponentId===id); if(idx<0)return null;
     const F={h,idx,me:'v'+idx,st:{},squid:h.villains[idx].squid};
     F.pos=a=>a==='hero'?h.heroPos:h.villains?.[Number(a.slice(1))]?.pos;
-    const posted=straddlePosts(h), u=h.blinds?.bb>0&&h.blinds.bb<1?1000:1;
-    F.forced={SB:(h.blinds?.sb||0)*u,BB:(h.blinds?.bb||0)*u,...Object.fromEntries(posted.map(p=>[p.pos,p.amount*u]))};
-    F.price=Math.max(h.blinds?.bb*u||0,...posted.map(p=>p.amount*u));
+    const { forced, price: entryPrice } = preflopEntryPosts(h);
+    F.forced = forced;
+    F.price = entryPrice;
     const source=actsAsPlayed(h); let lv=0, price=F.price;
     const A=source.map(a=>{
       if(a.street!=='pre')return {...a,src:a.src||a};
@@ -35,6 +35,7 @@ const ReadLab = (() => {
     });
     const pre=A.filter(a=>a.street==='pre'); F.pre=pre;F.preAgg=pre.filter(a=>AGG.has(a.act)).at(-1)?.actor;
     F.pfr=F.preAgg===F.me;F.pfc=!F.pfr&&pre.some(a=>a.actor===F.me&&a.act==='call');F.limped=lv===0;
+    F.opened = openDecision(pre, F.me, F.pos(F.me), { forced, price: entryPrice });
     F.first=pre.find(a=>a.actor===F.me);F.openLimp=F.first&&F.first.levelBefore===0&&['limp','call'].includes(F.first.act)&&(F.forced[F.pos(F.me)]||0)<F.price;
     const actors=[...new Set(pre.map(a=>a.actor))],folded=new Set(),allin=new Set();let prevAgg=F.preAgg,init=F.preAgg;
     for(const st of ST){
@@ -124,7 +125,7 @@ const ReadLab = (() => {
     for(const [name,v] of [['LrrV',true],['LrrB',false]])cap('lrr-'+name+'-'+sq,'Squid',lab+' · '+name,'AQ/AK and 99+ = value. Ignore AJ/AT and 66–88; other known holdings = bluff. 3 examples.',F=>{const a=lrr(F);return a?eq(a.value===v,a.why):null;},{squid:sq});
     const chance=F=>F.first&&F.first.levelBefore===0&&(F.forced[F.pos(F.me)]||0)<F.price;
     bands('limp-'+sq,'Preflop','Limps '+lab,'Limp or overlimp / genuine unraised-pot entry opportunities. Free checks excluded.',F=>chance(F)?eq(['limp','call'].includes(F.first.act),'First response: '+F.first.act):null,sq==='have'?35:40,sq==='have'?45:55,{squid:sq});
-    bands('open-'+sq,'Preflop','Open '+lab,'Open + isolation raises / genuine unraised-pot entry opportunities.',F=>chance(F)?eq(AGG.has(F.first.act),'First response: '+F.first.act):null,sq==='have'?19:17,sq==='have'?24:23,{squid:sq});
+    bands('open-'+sq,'Preflop','Open '+lab,'Open + isolation raises / genuine unraised-pot entry opportunities.',F=>F.opened===null?null:eq(F.opened,'First response: '+F.first.act),sq==='have'?19:17,sq==='have'?24:23,{squid:sq});
   }
   bands('threebet','Preflop','3bet','3bets including squeezes and all-in reraises / chances facing the first raise. Limp-reraises excluded. Combined squid.',F=>{
     if(F.openLimp)return null;const a=F.pre.find(a=>a.actor===F.me&&a.levelBefore===1);return a?eq(AGG.has(a.act)&&a.levelAfter===2,'Response: '+a.act):null;
