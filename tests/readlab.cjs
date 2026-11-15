@@ -369,3 +369,15 @@ assert.deepEqual(Array.from(find(turnTextureReads, 'bluff-turn-flush').ev, e => 
 assert.deepEqual(Array.from(find(turnTextureReads, 'bluff-turn-4flush').ev, e => e.id), ['overcard-four-flush']);
 assert.deepEqual(Array.from(find(turnTextureReads, 'bluff-turn-over').ev, e => e.id), ['off-suit-overcard']);
 console.log('PASS: three-flush and four-flush turn overcards only enter the flush sample, on both barrels and delayed c-bets.');
+
+const overcardBoard = ['Th','Qh','2d','Kc',null];
+const unpairedOvercards = results([
+  turnBarrel('screenshot-second-pair-gs', ['As','Qc'], 'check', overcardBoard),
+  turnBarrel('second-pair-gs-bet', ['As','Qc'], 'bet', overcardBoard),
+  turnBarrel('pocket-pair-gs', ['Jc','Jd'], 'bet', overcardBoard),
+  turnBarrel('unpaired-gs-bet', ['As','4s'], 'bet', overcardBoard),
+  turnBarrel('unpaired-air-check', ['8s','5s'], 'check', overcardBoard),
+]);
+assert.deepEqual(Array.from(find(unpairedOvercards, 'bluff-turn-over').ev, e => [e.id,e.ok]),
+  [['unpaired-gs-bet', true], ['unpaired-air-check', false]]);
+console.log('PASS: overcard turn opportunities exclude paired hands even with draws, including both checks and bets.');

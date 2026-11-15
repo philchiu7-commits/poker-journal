@@ -323,7 +323,7 @@ const ReadLab = (() => {
       // Suit completion gets the hand when the same turn is also an overcard.
       if (key === 'over' && (board.flush || board['4flush'])) return null;
       return board[key] && betDecision(F, 'turn');
-    }, bluffOrDraw, bet);
+    }, H => (key !== 'over' || !H.pair) && bluffOrDraw(H), bet);
   add('turn-low','Turn · PFR','Low Boards · Passive / Aggro','Turn highest card ≤9; unpaired holdings without FD/OESD. Gutshots allowed. Bet ≥50% Aggro; below Passive.',F=>{
     const H=holding(F,'turn');if(!F.pfr||!F.st.turn.can||!H||H.pair||H.two||H.fd||H.oesd||Math.max(...F.st.turn.board.map(rank))>9)return null;return eq(F.st.turn.bet,H.why+'; '+F.st.turn.first.act);
   },{mode:'activity',threshold:50});
@@ -449,7 +449,7 @@ const ReadLab = (() => {
     if(r.id==='turn-call-3rdP or worse')r.definition = 'Call turn with third pair or worse, including unpaired holdings. Ignore ambiguous/texture-excluded hands.';
     if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed.';
     if(r.id==='turn-call-SD')r.definition = 'Call turn with an OESD or gutshot.';
-    if (r.id === 'bluff-turn-over') r.definition += ' Turns that make a three-flush or four-flush are counted in those categories instead of Overcards.';
+    if (r.id === 'bluff-turn-over') r.definition += ' Only unpaired holdings qualify, even when the hand also has a draw. Turns that make a three-flush or four-flush count in those categories instead.';
     if (r.action) r.definition += ' Sample: eligible decisions with this holding. The percentage is the share that took the named action.';
   }
   const DEFAULT_SAMPLE_MIN = 15;
