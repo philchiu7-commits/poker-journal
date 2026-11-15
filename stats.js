@@ -47,7 +47,7 @@ function hudCount(oppId, hands) {
     xrV: 0, xrB: 0, oppXrG: 0,
     probeTHu: 0, oppProbeTHu: 0, probeTMw: 0, oppProbeTMw: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
-    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpCall: 0, byPos: {}, ev: {}, seatExcluded: 0, squidUnknown: 0,
+    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpCall: 0, limpFold: 0, byPos: {}, ev: {}, seatExcluded: 0, squidUnknown: 0,
   };
   /* The tree stats again, each asked once of the heads-up pots and once of the
      multiway ones. In a loop because thirty more `: 0,` above would bury the
@@ -55,7 +55,7 @@ function hudCount(oppId, hands) {
   for (const w of ["Hu", "Mw"])
     for (const k of ["cbF", "xOop", "fxr", "xrV", "xrB", "xrG", "xrC", "fcbF", "bar", "fxrT", "ftb", "barR", "frb", "rAgg", "rCall"])
       c[k + w] = c["opp" + k[0].toUpperCase() + k.slice(1) + w] = 0;
-  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, open: 0, openOpp: 0, iso: 0, isoOpp: 0, three: 0, opp3: 0, limp: 0, lrr: 0, faced: 0, lcall: 0 });
+  const pos = (p) => (c.byPos[p] = c.byPos[p] || { seats: 0, pfr: 0, open: 0, openOpp: 0, iso: 0, isoOpp: 0, three: 0, opp3: 0, limp: 0, lrr: 0, faced: 0, lcall: 0, lfold: 0 });
   /* Every stat also keeps the hands it was counted off — one entry per hand it
      had a chance in, flagged with whether that chance was taken — so tapping a
      number can show you the hands behind it instead of asking you to trust it.
@@ -83,7 +83,7 @@ function hudCount(oppId, hands) {
     // ---- preflop walk. Flags flip *after* an action so a player never counts
     // as having faced their own raise.
     let sawRaise = false, sawThree = false, sawFour = false, lastAgg = null;
-    let limped = false, limpThenRaise = false, limpFaced = false, limpCall = false, limpAnswered = false;
+    let limped = false, limpThenRaise = false, limpFaced = false, limpResponse = null;
     /* Preflop counts are per HAND, not per action. A villain who limps and then
        calls a raise took two voluntary actions in one seat — incrementing on
        each pushed VPIP over 100% and made the drill-down disagree with the
@@ -114,8 +114,8 @@ function hudCount(oppId, hands) {
         if (HUD_AGG.has(a.act)) aggPre = true;
         if (a.act === "limp") limped = true;
         else if (limped && HUD_AGG.has(a.act)) limpThenRaise = true;
-        // The first answer to a raise after limping; a later call after a limp-reraise is not limp-call.
-        if (limpFaced && !limpAnswered) { limpAnswered = true; limpCall = a.act === "call"; }
+        // A later action after a call or reraise is a different decision.
+        if (limpFaced && limpResponse === null) limpResponse = a.act;
         /* Isolating: raising over a limp while the pot is still unraised. The
            chance is his first turn in a hand somebody has already limped into
            — over-limping behind, calling or folding is that chance declined.
@@ -186,16 +186,20 @@ function hudCount(oppId, hands) {
     if (bySeat) {
       mark("limp|" + statPos, limped, h.id);
       if (limped) mark("lrr|" + statPos, limpThenRaise, h.id);
-      if (limpFaced) mark("lcall|" + statPos, limpCall, h.id);
+      if (limpResponse !== null) {
+        mark("lcall|" + statPos, limpResponse === "call", h.id);
+        mark("lfold|" + statPos, limpResponse === "fold", h.id);
+      }
     }
     if (limped) {
       c.limps++;
       if (bySeat) bySeat.limp++;
       if (limpThenRaise) { c.lrr++; if (bySeat) bySeat.lrr++; }
-      if (limpFaced) {
+      if (limpResponse !== null) {
         c.limpFaced++;
         if (bySeat) bySeat.faced++;
-        if (limpCall) { c.limpCall++; if (bySeat) bySeat.lcall++; }
+        if (limpResponse === "call") { c.limpCall++; if (bySeat) bySeat.lcall++; }
+        if (limpResponse === "fold") { c.limpFold++; if (bySeat) bySeat.lfold++; }
       }
     }
 

@@ -2408,7 +2408,7 @@ function openReadProof(o, label, ids, sub, other) {
    the ones that counted and the ones that did not. The split is the point — a
    fold-to-cbet of 60% is four hands you want to read and six you want to read
    for why he did not. */
-const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lcall: "Limp-call", af: "Agg factor" };
+const HUD_ROW_LABEL = { limp: "Limp", lrr: "Limp-RR", lcall: "Limp-call", lfold: "Limp-fold", af: "Agg factor" };
 const HUD_DRILL_LABEL = {
   vpip: ["Put money in", "Folded"], pfr: ["Raised", "Did not raise"],
   open: ["Opened or isolated", "Did not open"],
@@ -2426,6 +2426,7 @@ const HUD_DRILL_LABEL = {
   af: ["Bet or raised more", "Called more"],
   limp: ["Limped", "Did not limp"], lrr: ["Limp-reraised", "Just limped"],
   lcall: ["Called after limping", "Did not call after limping"],
+  lfold: ["Folded after limping", "Did not fold after limping"],
 };
 /* The hands behind a preflop HUD number, on the same 13x13 the Ranges panel
    draws. A filled cell is a hand he did it with, in that action's own colour;
@@ -2433,7 +2434,7 @@ const HUD_DRILL_LABEL = {
    Only hands he turned up can appear at all, so the foot says how many of them
    that is — most of a preflop stat's hands were never shown. */
 const HUD_CHART_ACT = { vpip: null, pfr: "raise", open: "raise", iso: "raise", cc: "call", three: "3bet", four: "4bet+",
-  f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lcall: "call" };
+  f3b: "fold", f4b: "fold", limp: "limp", lrr: "Lrr", lcall: "call", lfold: "fold" };
 /* The other bucket gets a fill of its own where the action has a name worth
    seeing: on Iso the hands he did not raise are the ones he came along with,
    and a hollow ring is nearly invisible next to 168 other squares (Phil). The
@@ -4425,6 +4426,7 @@ function renderOppHud(o) {
          ${row("Limp", "limp", "seats", "Limped")}
          ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
          ${row("Limp-call", "lcall", "faced", "Limped, got raised, called the first raise")}
+         ${row("Limp-fold", "lfold", "faced", "Limped, got raised, folded at the first response")}
        </table>`}${posHid}
        <details class="sizenote">
          <summary>Position names by table size</summary>
