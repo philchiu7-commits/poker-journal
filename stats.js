@@ -21,10 +21,12 @@ function playerSquidState(count) {
   return Number(count) > 0 ? "have" : "none";
 }
 
-function hudSeatFor(h, seat) {
+function hudSeatFor(h, seat, posted = straddlePosts(h)) {
   const positions = (h.villains || []).map(v => v.pos);
   if (h.heroPos && (h.hero || h.actions?.some(a => a.actor === "hero"))) positions.push(h.heroPos);
   if (!seat || positions.length > 8 || positions.filter(p => p === seat).length !== 1) return null;
+  const straddlers = new Set(posted.filter(p => p.amount > 0).map(p => p.pos));
+  if (straddlers.has(seat)) return "STD";
   if (!/^U\d+$/.test(seat)) return seat;
 
   // Remap numbered seats only when the full ring is anchored. A missing blind
@@ -34,8 +36,9 @@ function hudSeatFor(h, seat) {
   const early = positions.filter(p => /^U\d+$/.test(p)).sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)));
   if (fixed.length + early.length !== positions.length ||
       !fixed.every(p => positions.includes(p)) || new Set(positions).size !== positions.length ||
-      (h.blinds?.std && !positions.includes("STD"))) return null;
-  return "U" + (positions.length - early.indexOf(seat));
+      (h.blinds?.std && !positions.includes("STD") && !straddlers.size)) return null;
+  const voluntarySeats = early.filter(p => !straddlers.has(p));
+  return "U" + (positions.length - voluntarySeats.indexOf(seat));
 }
 
 function hudCount(oppId, hands) {
@@ -73,7 +76,8 @@ function hudCount(oppId, hands) {
     const pre = A.filter((a) => a.street === "pre");
     const me = Object.keys(seat)[0];
     const myPos = (seat[me].pos || "?");
-    const statPos = hudSeatFor(h, seat[me].pos);
+    const posted = straddlePosts(h);
+    const statPos = hudSeatFor(h, seat[me].pos, posted);
     const bySeat = statPos ? pos(statPos) : null;
     c.seats++;
     if (playerSquidState(seat[me].squid) === null) c.squidUnknown++;
@@ -96,10 +100,10 @@ function hudCount(oppId, hands) {
        discounted price and a different range, which is the whole reason the
        word "cold" is in the name. A limper who then calls a raise is out for
        the same reason. */
-    const posted = straddlePosts(h);
     const cold = !HUD_BLIND_SEATS.has(myPos) && !posted.some((p) => p.pos === myPos);
     const entry = preflopEntryPosts(h, posted);
     const opened = openDecision(pre, me, myPos, entry);
+    const firstDecision = pre.find(a => a.actor === me);
     if (opened !== null) {
       c.openOpp++;
       if (bySeat) bySeat.openOpp++;
@@ -124,7 +128,10 @@ function hudCount(oppId, hands) {
         if (!oppIso && limpSeen && !sawRaise) { oppIso = true; didIso = HUD_AGG.has(a.act); }
         if (cold && !oppCc && !actedVol && sawRaise) { oppCc = true; if (a.act === "call") didCc = true; }
         if (HUD_VOL.has(a.act)) actedVol = true;    // after the test — his own call is not money already in
-        if (sawRaise && !sawThree) { opp3 = true; if (a.act === "3bet") did3 = true; }
+        if (sawRaise && !sawThree) {
+          if (a === firstDecision) opp3 = true;
+          if (a.act === "3bet") did3 = true;
+        }
         /* Everyone who gets a turn against a live 3-bet, not just the man who
            opened it — a cold 4-bet is still a 4-bet, and 20 of the 52 on record
            are cold. Opener-only would leave most of his opponents under the
@@ -709,7 +716,7 @@ function straddlePosts(h) {
   const b = h.blinds || {};
   if (Array.isArray(b.straddles) && b.straddles.length) return b.straddles;
   const ring = ["SB", "BB", "STD", "U9", "U8", "U7", "U6", "HJ", "CO", "BN"];
-  const pos = (a) => a === "hero" ? h.heroPos : h.villains?.[Number(a.slice(1))]?.pos;
+  const pos = (a) => a === "hero" ? h.heroPos : h.villains?.[Number(a?.slice(1))]?.pos;
   const seated = new Set((h.villains || []).map((v) => v.pos));
   if (h.heroPos) seated.add(h.heroPos);
   if (!b.std || !seated.has("STD")) return [];

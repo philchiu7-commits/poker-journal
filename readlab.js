@@ -183,7 +183,8 @@ const ReadLab = (() => {
     bands('open-'+sq,'Preflop','Open '+lab,'Open + isolation raises / genuine unraised-pot entry opportunities.',F=>F.opened===null?null:eq(F.opened,'First response: '+F.first.act),sq==='have'?19:17,sq==='have'?24:23,{squid:sq});
   }
   bands('threebet','Preflop','3bet','3bets including squeezes and all-in reraises / chances facing the first raise. Limp-reraises excluded. Combined squid.',F=>{
-    if(F.openLimp)return null;const a=F.pre.find(a=>a.actor===F.me&&a.levelBefore===1);return a?eq(AGG.has(a.act)&&a.levelAfter===2,'Response: '+a.act):null;
+    const a = F.first;
+    return a?.levelBefore === 1 ? eq(AGG.has(a.act) && a.levelAfter === 2, 'Response: ' + a.act) : null;
   },8.5,14,{highInclusive:true,combined:true});
   for(const pos of ['IP','OOP']) add('fold3-'+pos,'Preflop','Fold to 3bet · '+pos,'First answer after an opening or isolation raise; intervening 4bets excluded. Strong Yes ≥65; Yes ≥58; No ≥50; Hard No <50.',F=>{
     if(F.openLimp)return null;

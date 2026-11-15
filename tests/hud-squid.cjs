@@ -76,3 +76,24 @@ assert.equal(run("hudSeatFor(tableSizes[1], 'U6')"), 'U7');
 assert.equal(run("hudSeatFor({...tableSizes[0], hero: true, heroPos: 'U9'}, 'U8')"), 'U7');
 assert.equal(run("hudSeatFor({...tableSizes[1], hero: true, heroPos: 'U9'}, 'U7')"), null);
 console.log('Passed: seven- and eight-handed position labels, hero seat included, and nine-handed or unclear positions excluded from the seat grid.');
+
+c.restraddled = seatedHand('restraddled', ['U8','U7'], true, {
+  blinds: { sb:1, bb:2, std:8, straddles:[{pos:'STD', amount:4},{pos:'U8', amount:8}] },
+  actions: [
+    {street:'pre', actor:'v4', act:'fold'}, {street:'pre', actor:'v5', act:'fold'},
+    {street:'pre', actor:'v6', act:'raise', size:'$28'}, {street:'pre', actor:'v7', act:'fold'},
+    {street:'pre', actor:'v0', act:'fold'}, {street:'pre', actor:'v1', act:'fold'},
+    {street:'pre', actor:'v2', act:'fold'}, {street:'pre', actor:'v3', act:'3bet', size:'$80'},
+  ],
+});
+assert.equal(run("hudSeatFor(restraddled, 'U8')"), 'STD');
+assert.equal(run("hudSeatFor(restraddled, 'U7')"), 'U8');
+assert.equal(run("hudSeatFor(restraddled, 'STD')"), 'STD');
+const restraddled = run("hudCount('p', [restraddled])");
+assert.equal(restraddled.n3b, 1);
+assert.equal(restraddled.byPos.STD.three, 1);
+assert.equal(restraddled.ev['three|STD'][0].id, 'restraddled');
+assert.equal(restraddled.ev['three|U8'], undefined);
+assert.equal(restraddled.ev['open|STD'], undefined);
+assert.equal(run("hudSeatFor({ ...tableSizes[0], actions:[] }, 'U8')"), 'U7');
+console.log('Passed: re-straddlers and their 3-bet evidence are grouped under STD, with the first voluntary seat numbered correctly.');

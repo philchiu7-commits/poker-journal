@@ -4454,6 +4454,7 @@ function renderOppHud(o) {
          <div>8-handed without a straddle · U8, U7, U6, HJ, CO, BN, SB, BB</div>
          <div>7-handed with a straddle · STD, U7, HJ, CO, BN, SB, BB</div>
          <div>7-handed without a straddle · U7, U6, HJ, CO, BN, SB, BB</div>
+         <div>All straddles and re-straddles count under STD. Numbered seats start at the first player to act after the posts.</div>
        </details></div>`
     : "";
   const seatNote = c.seatExcluded
