@@ -814,7 +814,7 @@ async function refreshCache() {
   [OPP, HANDS] = await Promise.all(["opponents", "hands"].map(dbAll));
   if (readLabReady) { readLabOverrides = (await metaGet("readLabRulesV1")) || {}; readLabFeedback = (await metaGet("readLabFeedbackV1")) || []; }
   savedRanges = ((await metaGet("savedRanges")) || []).filter((r) => r && r.id && Array.isArray(r.hands));   // an import can add ranges too
-  if (curView === "readlab" && readLabPlayer) renderReadLab(readLabPlayer);
+  if (readLabIsVisible() && readLabPlayer) renderReadLab(readLabPlayer);
 }
 
 /* Legacy read migration: fold removed tags onto their surviving axis-mate. */
@@ -1166,6 +1166,8 @@ function route() {
 let readLabPlayer = null, readLabResults = [], readLabOverrides = {}, readLabFeedback = [], readLabReady = false;
 const readLabShut = new Set();
 let readLabEditing = false;
+const readLabIsVisible = () => curView === "readlab" ||
+  (curView === "handview" && hvUnder === "readlab" && matchMedia("(min-width: 1000px)").matches);
 
 function renderReadLab(id) {
   const o = oppById(id);
@@ -1291,6 +1293,20 @@ function readLabVerdictControls(r, o) {
   }).join("");
 }
 
+function readLabVerdictStatus(r, o, saved = false) {
+  const manual = readLabManualVerdict(o, r.mode === "manual" ? r.id : r.sampleKey);
+  if (manual) return `${saved ? "Saved " : ""}${STATE_WORD[manual]}<small class="rl-manual-badge">Manual</small>`;
+  return saved ? (r.mode === "manual" ? "Verdict cleared" : "Automatic verdict restored") : "";
+}
+
+function readLabVerdictPicker(r, o) {
+  return `<div class="rl-verdict">
+    <div class="muted sub2">Read Lab verdict</div>
+    <div class="chiprow" role="group" aria-label="Set verdict">${readLabVerdictControls(r, o)}</div>
+    <div class="rl-verdict-status sub2" role="status">${readLabVerdictStatus(r, o)}</div>
+  </div>`;
+}
+
 function setReadLabEditing(editing) {
   readLabEditing = editing;
   const button = $("rl-edit-verdicts");
@@ -1305,14 +1321,16 @@ function readLabVerdictEditor(r, o) {
   sheetGroup = "__labVerdict__";
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${r.mode === "manual" ? "" : `<div class="rdsub">Automatic: ${esc(r.state)} · ${r.k}/${r.n} supporting</div>`}
-    <div class="rl-verdict"><div class="chiprow" role="group" aria-label="Set verdict">${readLabVerdictControls(r, o)}</div></div>`);
+    ${readLabVerdictPicker(r, o)}`);
   $("sheet").scrollTop = 0;
 }
 
 function readLabDetail(id, combo = null, showAll = false) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
-  const rule = r.mode === "cap" ? `Yes after ${r.min === 1 ? "one qualifying hand" : `${r.min} distinct qualifying hands`}. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
+  const rule = r.mode === "cap" ? `Yes after ${r.min === 1 ? "one qualifying hand" : `${r.min} distinct qualifying hands`}. ${r.positiveOnly
+    ? "Fewer examples means Not established."
+    : "Below that count, No once the eligible sample is large enough."}` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
   const sampleLabel = r.acceptedSample ? "Your accepted sample" : "Default sample minimum";
   const sampleControls = (r.canAcceptSample
     ? `<button type="button" class="chip" data-lab-sample="${esc(id)}">Accept ${r.n} hands · ${esc(r.verdict)}</button>` : "") +
@@ -1348,15 +1366,13 @@ function readLabDetail(id, combo = null, showAll = false) {
   }).join("");
   sheetGroup = "__rdrill__";
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
-    <div class="rl-verdict">
-      <div class="muted sub2">Read Lab verdict</div>
-      <div class="chiprow" role="group" aria-label="Read Lab verdict">${readLabVerdictControls(r, o)}</div>
-    </div>
+    ${readLabVerdictPicker(r, o)}
     <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
     <div data-lab-all="${showAll}">${chart}</div>
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
-    <p>${sampleLabel} ${r.sampleMin} hands. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
+    ${!r.positiveOnly || r.ignored ? `<p>${r.positiveOnly ? "" : `${sampleLabel} ${r.sampleMin} hands.`}
+      ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>` : ""}
     ${sampleControls ? `<div class="chiprow rl-sample-controls">${sampleControls}</div>` : ""}
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
     ${r.mode !== 'manual' ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>` : ''}
@@ -1420,7 +1436,7 @@ function bindReadLab() {
         const fresh = await saveReadLabEntry(o, "readLabManual", id,
           value => value === "yes" ? "no" : value === "no" ? null : "yes");
         if (!fresh) return;
-        if (curView === "readlab" && readLabPlayer === o.id) {
+        if (readLabIsVisible() && readLabPlayer === o.id) {
           renderReadLabGroups(fresh);
           $("rl-results").querySelector(`[data-lab-manual="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
         }
@@ -1441,21 +1457,23 @@ function bindReadLab() {
       if (!o || !r || !["yes", "no", "auto"].includes(value) ||
           verdict.parentElement.getAttribute("aria-busy") === "true") return;
       const controls = verdict.parentElement;
-      const compact = sheetGroup === "__labVerdict__";
+      const status = controls.parentElement.querySelector(".rl-verdict-status");
       const key = r.mode === "manual" ? r.id : r.sampleKey;
       controls.setAttribute("aria-busy", "true");
       try {
         const fresh = await saveReadLabEntry(o, "readLabManual", key, () => value === "auto" ? null : value);
-        if (fresh && curView === "readlab" && readLabPlayer === o.id) {
+        if (!fresh) throw new Error("Player no longer available");
+        if (readLabIsVisible() && readLabPlayer === o.id) {
           renderReadLabGroups(fresh);
-          if (verdict.isConnected && !$("sheet").classList.contains("hidden")) {
-            if (compact) readLabVerdictEditor(r, fresh);
-            else readLabDetail(r.id);
-            $("sheet").querySelector(`[data-lab-verdict="${value}"]`)?.focus({ preventScroll: true });
+          if (controls.isConnected && !$("sheet").classList.contains("hidden")) {
+            controls.innerHTML = readLabVerdictControls(r, fresh);
+            status.innerHTML = readLabVerdictStatus(r, fresh, true);
+            controls.querySelector(`[data-lab-verdict="${value}"]`)?.focus({ preventScroll: true });
           }
         }
       } catch {
-        toast("Could not save the verdict.");
+        if (status.isConnected) status.textContent = "Could not save the verdict.";
+        else toast("Could not save the verdict.");
       } finally {
         controls.removeAttribute("aria-busy");
       }
@@ -1477,7 +1495,7 @@ function bindReadLab() {
       sample.disabled = true;
       try {
         const fresh = await saveReadLabEntry(o, "readLabSamples", r.sampleKey, () => reset ? null : r.n);
-        if (fresh && curView === "readlab" && readLabPlayer === o.id) {
+        if (fresh && readLabIsVisible() && readLabPlayer === o.id) {
           renderReadLab(o.id);
           if (sample.isConnected) readLabDetail(r.id);
         }
@@ -1507,8 +1525,8 @@ function bindReadLab() {
     await metaSet('readLabFeedbackV1',readLabFeedback);renderReadLab(readLabPlayer);readLabDetail(issue.dataset.labSaveIssue);
   });
   document.addEventListener('visibilitychange',async () => {
-    if(document.hidden || curView !== 'readlab' || !readLabReady)return;
-    await refreshCache(); renderReadLab(readLabPlayer);
+    if (document.hidden || !readLabIsVisible() || !readLabReady) return;
+    await refreshCache();
   });
 }
 

@@ -1768,6 +1768,7 @@ button.estn:active { color: var(--accent); }
 .rl-sample-controls { margin: 10px 0; }
 .rl-verdict { margin: 0 0 12px; }
 .rl-verdict .chiprow { margin-top: 5px; }
+.rl-verdict-status:not(:empty) { margin-top: 6px; font-weight: 600; }
 .rl-manual-badge { display: inline-block; margin-left: 5px; padding: 1px 5px;
   border-radius: 4px; background: #3c2d16; color: #f2ca81; font-size: 10px; font-weight: 700; }
 #rl-results .roleblk { grid-template-columns: minmax(65px, max-content) minmax(0, 1fr); }

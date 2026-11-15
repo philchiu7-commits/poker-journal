@@ -120,9 +120,10 @@ const ReadLab = (() => {
     const match = known(F, street, true, matches);
     return match?.ok ? eq(decision.ok, match.why + ' · ' + decision.why) : null;
   };
-  const holdingCap = (id, section, label, street, decision, matches, action) =>
+  const holdingCap = (id, section, label, street, decision, matches, action, options = {}) =>
     cap(id, section, label, holdingDefinition,
-      F => holdingDecision(F, street, decision(F), matches), { action });
+      F => holdingDecision(F, street, decision(F), matches), { ...options, action });
+  const xrCapability = { min: 3, positiveOnly: true };
   const betDecision = (F, street) => eq(F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const checkDecision = (F, street) => eq(!F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const responseDecision = (street, matches) => {
@@ -192,7 +193,7 @@ const ReadLab = (() => {
       F => oopLimp(F) && betDecision(F, 'flop'), pred, ['Probed', 'Checked']);
   for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong], ['Bluff', H => H.bluff]])
     holdingCap('limp-xr-' + label, 'MWP Limp', 'xR · ' + label, 'flop',
-      F => limpMw(F) && F.st.flop.xrChance && raiseDecision(F.st.flop), pred, ['Check-raised', 'Did not raise']);
+      F => limpMw(F) && F.st.flop.xrChance && raiseDecision(F.st.flop), pred, ['Check-raised', 'Did not raise'], xrCapability);
   for (const [label, pred] of [['Air', H => H.air], ['Merge', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('limp-ip-' + label, 'MWP Limp', 'IP Stab · ' + label, 'flop',
       F => ipLimp(F) && betDecision(F, 'flop'), pred, ['Stabbed', 'Checked']);
@@ -224,10 +225,10 @@ const ReadLab = (() => {
   for (const [label, pred] of [['Air', H => H.air], ['Draw', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('pfr-xr-' + label, 'Flop · PFR', 'xR · ' + label, 'flop',
       F => F.pfr && post(F) && F.st.flop.xrChance && raiseDecision(F.st.flop),
-      pred, ['Check-raised', 'Did not raise']);
+      pred, ['Check-raised', 'Did not raise'], xrCapability);
   for (const [label, pred] of [['Air', H => H.air], ['Equity', H => H.kind === 'draw'], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', H => H.strong]])
     holdingCap('pfc-xr-' + label, 'Flop · PFC', 'xR or R · ' + label, 'flop',
-      F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised);
+      F => F.pfc && post(F) && raiseDecision(F.st.flop), pred, raised, xrCapability);
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;
@@ -419,12 +420,12 @@ const ReadLab = (() => {
       const k = ev.filter(e => e.ok).length, n = ev.length, pct = n ? 100 * k / n : null;
       const key = sampleKey(cfg, squid);
       const savedMin = samples[key]?.value;
-      const acceptedSample = Number.isInteger(savedMin) && savedMin > 0 ? savedMin : null;
+      const acceptedSample = !cfg.positiveOnly && Number.isInteger(savedMin) && savedMin > 0 ? savedMin : null;
       const ruleMin = cfg.minOpp || 1;
       const sampleMin = Math.max(ruleMin, acceptedSample ?? DEFAULT_SAMPLE_MIN);
       let verdict = null;
       if (n >= ruleMin) {
-        if (cfg.mode === 'cap') verdict = k >= cfg.min ? 'Yes' : 'No';
+        if (cfg.mode === 'cap') verdict = k >= cfg.min ? 'Yes' : cfg.positiveOnly ? null : 'No';
         else if (cfg.mode === 'bands') {
           const wide = cfg.highInclusive ? pct >= cfg.high : pct > cfg.high;
           verdict = pct < cfg.low ? 'Tight' : wide ? 'Wide' : 'Normal';

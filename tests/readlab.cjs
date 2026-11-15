@@ -155,15 +155,23 @@ const xrSample = [
 ];
 for (const category of ['Air', 'Bluff']) {
   const x = find(results(xrSample), 'limp-xr-' + category);
-  assert.equal(x.state, 'Yes');
-  assert.equal(x.min, 1);
+  assert.equal(x.state, 'Not established');
+  assert.equal(x.min, 3);
   assert.deepEqual(Array.from(x.ev, e => [e.id, e.ok]), [['air-raise', true], ['air-fold', false]]);
 }
 const pairXR = find(results(xrSample), 'limp-xr-BottomP / 2ndP');
 assert.equal(pairXR.n, 1);
 assert.equal(pairXR.state, 'Not established');
 const noXR = Array.from({ length: 15 }, (_, i) => limpXR('only-fold-' + i, ['Qs', '7d'], 'fold'));
-assert.equal(find(results(noXR), 'limp-xr-Air').state, 'No');
+assert.equal(find(results(noXR), 'limp-xr-Air').state, 'Not established');
+const repeatedXR = [0, 1, 2].map(i => limpXR('raise-air-' + i, ['Qs', '7d'], 'raise'));
+assert.equal(find(results(repeatedXR.slice(0, 2).concat(noXR)), 'limp-xr-Air').state, 'Not established');
+const establishedXR = find(results(repeatedXR.concat(noXR)), 'limp-xr-Air');
+assert.equal(establishedXR.state, 'Yes');
+assert.equal(establishedXR.k, 3);
+assert.equal(establishedXR.n, 18);
+assert.equal(find(results([repeatedXR[0], repeatedXR[0], repeatedXR[0]]), 'limp-xr-Air').state, 'Not established');
+assert.equal(find(results(noXR, { samples: { 'all:limp-xr-Air': { value: 1 } } }), 'limp-xr-Air').canAcceptSample, false);
 const jammed = limpXR('facing-jam', ['Qs', '7d'], 'fold');
 jammed.actions[5] = act('flop', 'v1', 'jam', '$20');
 assert.equal(find(results([jammed]), 'limp-xr-Air').n, 0);
@@ -181,7 +189,7 @@ const turnCalls = results([
 ]);
 assert.deepEqual(Array.from(find(turnCalls, 'turn-call-2ndP').ev, e => [e.id, e.ok]),
   [['pair-call-turn', true], ['pair-fold-turn', false]]);
-console.log('PASS: conditional probe, xR and turn-call denominators, one-example xR, and no raise chance against a lone all-in.');
+console.log('PASS: conditional probe, xR and turn-call denominators, three-example xR, and no raise chance against a lone all-in.');
 
 const leadDecision = action => [
   act('pre', 'v1', 'raise', '$6'), act('pre', 'v0', 'call'),
@@ -198,7 +206,7 @@ assert.equal(leadMerge.pct, 50);
 assert.equal(leadMerge.k, 1);
 assert.equal(leadMerge.n, 2);
 assert.equal(find(results(leadSample.slice(1,2)), 'lead-Merge-flop').state, 'Not established');
-assert.ok(run('ReadLab.rules.filter(r => r.mode === "cap").every(r => r.min === 1)'));
+assert.ok(run('ReadLab.rules.filter(r => r.mode === "cap").every(r => r.min === (r.positiveOnly ? 3 : 1))'));
 assert.equal(find(results(leadSample, {overrides:{'lead-Merge-flop':{min:2}}}), 'lead-Merge-flop').state, 'Not established');
 console.log('PASS: Lead and other capability reads establish Yes from one hand while retaining their rates and editable minimums.');
 
