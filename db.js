@@ -115,6 +115,31 @@ const metaSet = (key, value) => {
   return write;
 };
 
+/* Read Lab rule and note edits must read the latest backup settings before writing. */
+function updateReadLabMeta(key, change) {
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction("meta", "readwrite");
+    const store = tx.objectStore("meta");
+    const request = store.get(key);
+    let value, error;
+    request.onsuccess = () => {
+      try {
+        value = change(request.result?.value ?? _mirrorGet(key));
+        store.put({ key, value });
+      } catch (err) {
+        error = err;
+        tx.abort();
+      }
+    };
+    tx.oncomplete = () => {
+      _mirrorSet(key, value);
+      scheduleAutoSnapshot();
+      resolve(value);
+    };
+    tx.onabort = () => reject(error || tx.error);
+  });
+}
+
 const uid = () => (crypto.randomUUID ? crypto.randomUUID()
   : Date.now().toString(36) + Math.random().toString(36).slice(2));
 

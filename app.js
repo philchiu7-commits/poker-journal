@@ -1317,9 +1317,36 @@ function setReadLabEditing(editing) {
     : "Tap an automatic read to see its evidence. Your overrides are marked Manual.";
 }
 
+const readLabSheets = new WeakMap();
+
+function showReadLabSheet(context, html) {
+  showSheet(html);
+  readLabSheets.set($("sheet").firstElementChild, context);
+}
+
+function currentReadLabSheet() {
+  const sheet = $("sheet");
+  if (sheet.classList.contains("hidden") || !readLabIsVisible()) return null;
+  const context = readLabSheets.get(sheet.firstElementChild);
+  return context && context.player === readLabPlayer && context.squid === $("rl-squid").value ? context : null;
+}
+
+function returnToReadLabEvidence(context) {
+  readLabDetail(context.rule.id, context.combo, context.showAll);
+}
+
+function finishReadLabSave(context, button, message) {
+  if (readLabIsVisible() && readLabPlayer === context.player) {
+    renderReadLab(context.player);
+    if (button.isConnected && currentReadLabSheet() === context) returnToReadLabEvidence(context);
+  }
+  toast(message);
+}
+
 function readLabVerdictEditor(r, o) {
   sheetGroup = "__labVerdict__";
-  showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+  const context = { player: o.id, rule: r, squid: $("rl-squid").value };
+  showReadLabSheet(context, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${r.mode === "manual" ? "" : `<div class="rdsub">Automatic: ${esc(r.state)} · ${r.k}/${r.n} supporting</div>`}
     ${readLabVerdictPicker(r, o)}`);
   $("sheet").scrollTop = 0;
@@ -1365,7 +1392,7 @@ function readLabDetail(id, combo = null, showAll = false) {
       <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
   }).join("");
   sheetGroup = "__rdrill__";
-  showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+  showReadLabSheet({ player: o.id, rule: r, squid: $("rl-squid").value, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${readLabVerdictPicker(r, o)}
     <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
@@ -1386,13 +1413,40 @@ function readLabDetail(id, combo = null, showAll = false) {
 }
 const labEditKeys = r => r.mode === 'cap' ? ['min'] : ['bands','interval'].includes(r.mode) ? ['low','high'] : r.mode === 'fold3' ? ['threshold','strong','hard'] : ['threshold',...('minOpp' in r?['minOpp']:[]),...('minHits' in r?['minHits']:[])];
 const labCountKey = key => ['min','minOpp','minHits'].includes(key);
-function editReadLab(id) {
-  const r=readLabResults.find(r=>r.id===id);if(!r)return;
-  const labels={min:'Supporting hands required',low:'Lower boundary (%)',high:'Upper boundary (%)',threshold:'Cutoff (%)',strong:'Strong Yes (%)',hard:'Hard No below (%)',minOpp:'Minimum eligible samples',minHits:'Minimum supporting hands'};
-  showSheet(`<div class="sheethead"><span class="t">Trial thresholds · ${esc(r.label)}</span><button data-lab-cancel="${esc(id)}">Back</button></div><div class="rl-detail"><p>These settings apply to every player’s Read Lab. Your saved reads stay unchanged.</p>${labEditKeys(r).map(key=>`<label class="rl-edit-field">${labels[key]}<input type="number" data-lab-key="${key}" value="${r[key]}" min="${labCountKey(key)?1:0}" ${labCountKey(key)?'step="1"':'max="100" step="any"'}></label>`).join('')}<button class="primary" data-lab-save="${esc(id)}">Save trial rule</button></div>`);
+function editReadLab(context) {
+  const r = context.rule;
+  const labels = { min: 'Supporting hands required', low: 'Lower boundary (%)', high: 'Upper boundary (%)',
+    threshold: 'Cutoff (%)', strong: 'Strong Yes (%)', hard: 'Hard No below (%)',
+    minOpp: 'Minimum eligible samples', minHits: 'Minimum supporting hands' };
+  showReadLabSheet(context, `<div class="sheethead"><span class="t">Trial thresholds · ${esc(r.label)}</span>
+    <button data-lab-cancel>Back</button></div>
+    <div class="rl-detail"><p>These settings apply to every player’s Read Lab.</p>
+    ${labEditKeys(r).map(key => `<label class="rl-edit-field">${labels[key]}<input type="number" data-lab-key="${key}"
+      value="${r[key]}" min="${labCountKey(key) ? 1 : 0}" ${labCountKey(key) ? 'step="1"' : 'max="100" step="any"'}></label>`).join("")}
+    <button class="primary" data-lab-save>Save trial rule</button></div>`);
 }
-function flagReadLab(id,hand) {
-  showSheet(`<div class="sheethead"><span class="t">Flag a classification</span><button data-lab-cancel="${esc(id)}">Back</button></div><div class="rl-detail"><label>What should count differently, and why?<textarea id="rl-issue" rows="5" placeholder="Describe the expected result or missing information"></textarea></label><button class="primary" data-lab-save-issue="${esc(id)}" data-lab-hand="${esc(hand||'')}">Save review note</button></div>`);
+
+function flagReadLab(context, hand) {
+  showReadLabSheet(context, `<div class="sheethead"><span class="t">Flag a classification</span>
+    <button data-lab-cancel>Back</button></div>
+    <div class="rl-detail"><label>What should count differently, and why?
+      <textarea id="rl-issue" rows="5" placeholder="Describe the expected result or missing information"></textarea></label>
+    <button class="primary" data-lab-save-issue data-lab-hand="${esc(hand || "")}">Save review note</button></div>`);
+}
+
+function readLabThresholds(r) {
+  const values = { updatedAt: Date.now() };
+  for (const input of $("sheet").querySelectorAll("[data-lab-key]")) {
+    const key = input.dataset.labKey;
+    const n = Number(input.value);
+    const valid = labCountKey(key) ? Number.isInteger(n) && n >= 1 : Number.isFinite(n) && n >= 0 && n <= 100;
+    if (!input.value.trim() || !valid) throw new Error("Enter a valid number.");
+    values[key] = n;
+  }
+  if (("low" in values && values.low >= values.high) ||
+      (r.mode === "fold3" && !(values.hard <= values.threshold && values.threshold <= values.strong)))
+    throw new Error("Boundaries must be in ascending order.");
+  return values;
 }
 
 async function saveReadLabEntry(o, field, key, change) {
@@ -1408,7 +1462,7 @@ function bindReadLab() {
   $("od-readlab").onclick = () => location.hash = '#readlab/' + curOppId;
   const journal = () => location.hash = '#opp/' + readLabPlayer;
   $("rl-journal").onclick = journal; $("rl-journal-tab").onclick = journal;
-  $("rl-refresh").onclick = async () => { await refreshCache(); renderReadLab(readLabPlayer); };
+  $("rl-refresh").onclick = refreshCache;
   $("rl-edit-verdicts").onclick = () => setReadLabEditing(!readLabEditing);
   $("rl-squid").onchange = $("rl-show").onchange = () => renderReadLab(readLabPlayer);
   $("rl-results").onclick = async e => {
@@ -1449,12 +1503,15 @@ function bindReadLab() {
     if (rule) readLabDetail(rule.dataset.labRule);
   };
   $("sheet").addEventListener('click',async e => {
+    const context = currentReadLabSheet();
+    if (!context) return;
+    const r = context.rule;
+    const o = oppById(context.player);
+    if (!o) return;
     const verdict = e.target.closest("[data-lab-set-verdict]");
     if (verdict) {
-      const r = readLabResults.find(r => r.id === verdict.dataset.labSetVerdict);
-      const o = oppById(readLabPlayer);
       const value = verdict.dataset.labVerdict;
-      if (!o || !r || !["yes", "no", "auto"].includes(value) ||
+      if (!["yes", "no", "auto"].includes(value) ||
           verdict.parentElement.getAttribute("aria-busy") === "true") return;
       const controls = verdict.parentElement;
       const status = controls.parentElement.querySelector(".rl-verdict-status");
@@ -1465,7 +1522,7 @@ function bindReadLab() {
         if (!fresh) throw new Error("Player no longer available");
         if (readLabIsVisible() && readLabPlayer === o.id) {
           renderReadLabGroups(fresh);
-          if (controls.isConnected && !$("sheet").classList.contains("hidden")) {
+          if (controls.isConnected && currentReadLabSheet() === context) {
             controls.innerHTML = readLabVerdictControls(r, fresh);
             status.innerHTML = readLabVerdictStatus(r, fresh, true);
             controls.querySelector(`[data-lab-verdict="${value}"]`)?.focus({ preventScroll: true });
@@ -1488,41 +1545,52 @@ function bindReadLab() {
     }
     const sample = e.target.closest("[data-lab-sample]");
     if (sample) {
-      const r = readLabResults.find(r => r.id === sample.dataset.labSample);
-      const o = oppById(readLabPlayer);
       const reset = sample.hasAttribute("data-lab-sample-reset");
-      if (!o || !r || !(reset ? r.acceptedSample : r.canAcceptSample)) return;
+      if (!(reset ? r.acceptedSample : r.canAcceptSample) || sample.disabled) return;
       sample.disabled = true;
       try {
         const fresh = await saveReadLabEntry(o, "readLabSamples", r.sampleKey, () => reset ? null : r.n);
-        if (fresh && readLabIsVisible() && readLabPlayer === o.id) {
-          renderReadLab(o.id);
-          if (sample.isConnected) readLabDetail(r.id);
-        }
+        if (!fresh) throw new Error("Player no longer available");
+        finishReadLabSave(context, sample, reset ? "Default sample restored" : `Accepted ${r.n} hands`);
       } catch {
         sample.disabled = false;
         toast("Could not save the sample minimum.");
       }
       return;
     }
-    const cancel=e.target.closest('[data-lab-cancel]');if(cancel){readLabDetail(cancel.dataset.labCancel);return;}
-    const save=e.target.closest('[data-lab-save]');if(save){
-      const id=save.dataset.labSave,r=readLabResults.find(r=>r.id===id);if(!r)return;
-      const next={updatedAt:Date.now()};
-      for(const input of $("sheet").querySelectorAll('[data-lab-key]')){
-        const key=input.dataset.labKey,n=Number(input.value);
-        if(!input.value.trim()||!Number.isFinite(n)||n<0||(labCountKey(key)?n<1||!Number.isInteger(n):n>100)){toast('Enter a valid number.');return;}next[key]=n;
+    if (e.target.closest("[data-lab-cancel]")) { returnToReadLabEvidence(context); return; }
+    if (e.target.closest("[data-lab-edit]")) { editReadLab(context); return; }
+    const flag = e.target.closest("[data-lab-flag]");
+    if (flag) { flagReadLab(context, flag.dataset.labHand); return; }
+
+    const settings = e.target.closest("[data-lab-save], [data-lab-reset]");
+    const issue = e.target.closest("[data-lab-save-issue]");
+    const button = settings || issue;
+    if (!button || button.disabled) return;
+    try {
+      button.disabled = true;
+      if (settings) {
+        const resetRule = settings.hasAttribute("data-lab-reset");
+        const values = resetRule ? null : readLabThresholds(r);
+        readLabOverrides = await updateReadLabMeta("readLabRulesV1", previous => {
+          const next = { ...previous };
+          if (resetRule) delete next[r.id];
+          else next[r.id] = values;
+          return next;
+        });
+        finishReadLabSave(context, button, resetRule ? "Default trial rule restored" : "Trial rule saved");
+      } else {
+        const note = $("rl-issue").value.trim();
+        if (!note) throw new Error("Add a review note first.");
+        const entry = { player: context.player, rule: r.id, hand: issue.dataset.labHand || null, note, ts: Date.now() };
+        readLabFeedback = await updateReadLabMeta("readLabFeedbackV1", previous =>
+          [...(Array.isArray(previous) ? previous : []), entry]);
+        finishReadLabSave(context, button, "Review note saved");
       }
-      if('low' in next&&next.low>=next.high||r.mode==='fold3'&&!(next.hard<=next.threshold&&next.threshold<=next.strong)){toast('Boundaries must be in ascending order.');return;}
-      readLabOverrides[id]=next;await metaSet('readLabRulesV1',readLabOverrides);renderReadLab(readLabPlayer);readLabDetail(id);return;
+    } catch (error) {
+      button.disabled = false;
+      toast(error?.message || "Could not save the Read Lab change.");
     }
-    const reset=e.target.closest('[data-lab-reset]');if(reset){delete readLabOverrides[reset.dataset.labReset];await metaSet('readLabRulesV1',readLabOverrides);renderReadLab(readLabPlayer);readLabDetail(reset.dataset.labReset);return;}
-    const edit=e.target.closest('[data-lab-edit]');if(edit){editReadLab(edit.dataset.labEdit);return;}
-    const flag=e.target.closest('[data-lab-flag]');if(flag){flagReadLab(flag.dataset.labFlag,flag.dataset.labHand);return;}
-    const issue=e.target.closest('[data-lab-save-issue]');if(!issue)return;
-    const note=$("rl-issue").value.trim();if(!note){toast('Add a review note first.');return;}
-    readLabFeedback.push({player:readLabPlayer,rule:issue.dataset.labSaveIssue,hand:issue.dataset.labHand||null,note,ts:Date.now()});
-    await metaSet('readLabFeedbackV1',readLabFeedback);renderReadLab(readLabPlayer);readLabDetail(issue.dataset.labSaveIssue);
   });
   document.addEventListener('visibilitychange',async () => {
     if (document.hidden || !readLabIsVisible() || !readLabReady) return;
@@ -6798,9 +6866,11 @@ function sheetClick(e) {
     if (r) {
       /* the drilled hands become the run, so the docked hand's rail pages
          through exactly this list while the reads stay tappable beside it */
-      if (curView === "opp" && curOppId) {
-        const ids = [...$("sheet").querySelectorAll("[data-hand]")].map((x) => x.dataset.hand);
-        handPlay = { oppId: curOppId, ids: [...new Set(ids)], filtered: false };
+      const lab = currentReadLabSheet();
+      if (lab || curView === "opp" && curOppId) {
+        const list = lab ? r.closest(".rgcell-hands") : $("sheet");
+        const ids = list ? [...list.querySelectorAll("[data-hand]")].map(x => x.dataset.hand) : [r.dataset.hand];
+        handPlay = { oppId: lab?.player || curOppId, ids: [...new Set(ids)], filtered: false };
       }
       hideSheet(); location.hash = "#handview/" + r.dataset.hand; return;
     }
