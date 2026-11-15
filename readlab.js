@@ -317,8 +317,13 @@ const ReadLab = (() => {
     });
   const types = [['4Str','4str'], ['3Flush','flush'], ['4Flush','4flush'], ['Overcards','over'], ['Blank','blank']];
   for (const [label, key] of types)
-    holdingCap('bluff-turn-' + key, 'Turn · PFR', 'Bluff Turn · ' + label, 'turn',
-      F => (barrel(F) || delay(F)) && texture(F, 'turn')[key] && betDecision(F, 'turn'), bluffOrDraw, bet);
+    holdingCap('bluff-turn-' + key, 'Turn · PFR', 'Bluff Turn · ' + label, 'turn', F => {
+      if (!barrel(F) && !delay(F)) return null;
+      const board = texture(F, 'turn');
+      // Suit completion gets the hand when the same turn is also an overcard.
+      if (key === 'over' && (board.flush || board['4flush'])) return null;
+      return board[key] && betDecision(F, 'turn');
+    }, bluffOrDraw, bet);
   add('turn-low','Turn · PFR','Low Boards · Passive / Aggro','Turn highest card ≤9; unpaired holdings without FD/OESD. Gutshots allowed. Bet ≥50% Aggro; below Passive.',F=>{
     const H=holding(F,'turn');if(!F.pfr||!F.st.turn.can||!H||H.pair||H.two||H.fd||H.oesd||Math.max(...F.st.turn.board.map(rank))>9)return null;return eq(F.st.turn.bet,H.why+'; '+F.st.turn.first.act);
   },{mode:'activity',threshold:50});
@@ -444,6 +449,7 @@ const ReadLab = (() => {
     if(r.id==='turn-call-3rdP or worse')r.definition = 'Call turn with third pair or worse, including unpaired holdings. Ignore ambiguous/texture-excluded hands.';
     if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed.';
     if(r.id==='turn-call-SD')r.definition = 'Call turn with an OESD or gutshot.';
+    if (r.id === 'bluff-turn-over') r.definition += ' Turns that make a three-flush or four-flush are counted in those categories instead of Overcards.';
     if (r.action) r.definition += ' Sample: eligible decisions with this holding. The percentage is the share that took the named action.';
   }
   const DEFAULT_SAMPLE_MIN = 15;

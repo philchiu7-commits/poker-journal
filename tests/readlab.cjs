@@ -353,3 +353,19 @@ assert.deepEqual(idsFor('t-barrel-sdv'), [['barrel-third-pair',true],['check-bot
 assert.equal(find(barrelRead,'t-barrel-sdv').state,'Yes');
 assert.equal(find(barrelRead,'barrel-EquityBased'),undefined);
 console.log('PASS: distinct turn barrel draw rates and actionable third-pair-or-weaker SDV.');
+
+const delayedTurnBluff = (id, board) => h(id, ['As','5s'], board, [
+  act('pre','v0','limp'), act('pre','v1','raise','$20'), act('pre','v0','3bet','$66'),
+  act('pre','v1','call'), act('flop','v0','check'), act('flop','v1','check'),
+  act('turn','v0','bet','$45'), act('turn','v1','fold'),
+]);
+const turnTextureReads = results([
+  delayedTurnBluff('screenshot-kh', ['Qh','4d','6h','Kh',null]),
+  delayedTurnBluff('off-suit-overcard', ['Qh','4d','6h','Kc',null]),
+  delayedTurnBluff('overcard-four-flush', ['Qh','4h','6h','Kh',null]),
+  turnBarrel('barrel-kh', ['As','5s'], 'bet', ['Qh','4d','6h','Kh',null]),
+]);
+assert.deepEqual(Array.from(find(turnTextureReads, 'bluff-turn-flush').ev, e => e.id), ['screenshot-kh', 'barrel-kh']);
+assert.deepEqual(Array.from(find(turnTextureReads, 'bluff-turn-4flush').ev, e => e.id), ['overcard-four-flush']);
+assert.deepEqual(Array.from(find(turnTextureReads, 'bluff-turn-over').ev, e => e.id), ['off-suit-overcard']);
+console.log('PASS: three-flush and four-flush turn overcards only enter the flush sample, on both barrels and delayed c-bets.');
