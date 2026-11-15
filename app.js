@@ -2579,11 +2579,52 @@ function hudDrillHands(o, key) {
     if (seen.has(e.id)) continue;
     seen.add(e.id);
     const h = byId.get(e.id);
-    if (h) hands.push({ h, ok: e.ok });
+    if (h) hands.push({ h, ok: e.ok, why: stat === "lrr" && e.ok ? limpOrderEvidence(h, o.id) : null });
   }
   if (!hands.length) return null;
   const [yes, no] = HUD_DRILL_LABEL[stat] || ["Counted", "Did not"];
   return { stat, label, hands, yes, no };
+}
+
+function limpOrderEvidence(h, oppId) {
+  const me = "v" + h.villains.findIndex(v => v.opponentId === oppId);
+  const { forced, price } = preflopEntryPosts(h);
+  const pre = preflopActionsWithLevels(actsAsPlayed(h).filter(a => a.street === "pre"), price);
+  const seat = actor => actor === "hero" ? h.heroPos : h.villains[Number(actor.slice(1))]?.pos;
+  const isLimp = a => a.levelBefore === 0 && ["limp", "call"].includes(a.act) && (forced[seat(a.actor)] || 0) < price;
+  const ownLimp = pre.findIndex(a => a.actor === me && isLimp(a));
+  if (ownLimp < 0) return null;
+  const actors = new Set(pre.slice(0, ownLimp).filter(isLimp).map(a => a.actor));
+  const earlier = [...actors].map(actor => actor === "hero" ? "You" :
+    oppById(h.villains[Number(actor.slice(1))]?.opponentId)?.name || seat(actor) || "Unknown seat");
+  return earlier.length ? "Earlier limpers · " + earlier.join(", ") : "First recorded voluntary limper";
+}
+
+function youtubeHandSource(h) {
+  const match = String(h.note || "").match(/https?:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]{11})[^\s]*\s+@(\d+(?::[0-5]\d){0,2})(?:s|(?=\s|$))/i);
+  const seconds = match?.[2].split(":").reduce((total, part) => total * 60 + Number(part), 0);
+  if (!match || !Number.isSafeInteger(seconds)) return "";
+  const label = match[2].includes(":") ? match[2] : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  return `<a class="secondary" href="https://www.youtube.com/watch?v=${match[1]}&amp;t=${seconds}s" target="_blank" rel="noopener">YouTube · ${label}</a>`;
+}
+
+function openUnknownSquidHands(o, page = 0) {
+  const hands = HANDS.filter(h => {
+    if (!h.imported || !h.villainIds?.includes(o.id)) return false;
+    const v = h.villains?.find(v => v.opponentId === o.id);
+    return v && playerSquidState(v.squid) === null;
+  }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const pageSize = 30;
+  const last = Math.max(0, Math.ceil(hands.length / pageSize) - 1);
+  page = Math.max(0, Math.min(page, last));
+  const offset = page * pageSize;
+  sheetGroup = "__rdrill__";
+  showSheet(`<div class="sheethead"><span class="t">Unknown squid · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
+    <div class="rdhead"><b>${hands.length ? `${offset + 1}–${Math.min(offset + pageSize, hands.length)} of ${hands.length}` : "No unknown hands"}</b>
+      <span class="spacer"></span>${page > 0 ? `<button class="secondary" data-unknown-squid-page="${page - 1}">Previous</button>` : ""}
+      ${page < last ? `<button class="secondary" data-unknown-squid-page="${page + 1}">Next</button>` : ""}</div>
+    <div class="list rgcell-hands">${hands.slice(offset, offset + pageSize).map(h =>
+      `<div class="rl-evidence">${handRowHTML(h, o.id)}${youtubeHandSource(h)}</div>`).join("")}</div>`);
 }
 function openHudDrill(o, key) {
   const d = hudDrillHands(o, key);
@@ -4370,8 +4411,8 @@ const savePosHidden = () => metaSet("hudHiddenSeats", [...posHidden]);
 function renderOppHud(o) {
   const c = hudFor(o.id, HANDS, hudSquid);
   const unknown = (hudSquid === "all" ? c : hudFor(o.id, HANDS)).squidUnknown;
-  $("od-hud-squid-note").textContent = unknown
-    ? `${unknown.toLocaleString()} hand${unknown === 1 ? "" : "s"} with an unknown squid count appear${unknown === 1 ? "s" : ""} only in All.`
+  $("od-hud-squid-note").innerHTML = unknown
+    ? `<button type="button" class="secondary" data-unknown-squid>${unknown.toLocaleString()} with unknown squid</button> · Included in All`
     : "Uses this player's squid count.";
   for (const button of $("od-hud-squid").querySelectorAll("[data-hud-squid]"))
     button.setAttribute("aria-pressed", String(button.dataset.hudSquid === hudSquid));
@@ -6985,6 +7026,9 @@ function sheetClick(e) {
     }
   }
   if (sheetGroup === "__rdrill__") {
+    const unknownPage = e.target.closest("[data-unknown-squid-page]");
+    const o = unknownPage && oppById(curOppId);
+    if (o) { openUnknownSquidHands(o, Number(unknownPage.dataset.unknownSquidPage)); return; }
     const r = e.target.closest("[data-hand]");
     if (r) {
       /* the drilled hands become the run, so the docked hand's rail pages
@@ -7656,6 +7700,10 @@ function bindStatic() {
     metaSet("hudSquid", hudSquid);
     hideRangePeek();
     if (curOppId) renderOppDetail(curOppId);
+  };
+  $("od-hud-squid-note").onclick = (event) => {
+    const o = event.target.closest("[data-unknown-squid]") && oppById(curOppId);
+    if (o) openUnknownSquidHands(o);
   };
   $("od-hud").onclick = (e) => {
     const pc = e.target.closest("[data-poscol]");
