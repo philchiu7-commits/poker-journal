@@ -1243,12 +1243,14 @@ function readLabChip(r, label, state, flags, overridden) {
 
 function renderReadLabGroups(o) {
   const filter = $("rl-show").value;
+  const squid = $("rl-squid").value;
   const flagsByRule = new Map();
   for (const f of readLabFeedback) {
     if (f.player === o.id) flagsByRule.set(f.rule, (flagsByRule.get(f.rule) || 0) + 1);
   }
   const sections = new Map();
   for (const r of readLabResults) {
+    if (squid !== "all" && r.squid && r.squid !== squid) continue;
     const manual = r.mode === "manual";
     const verdict = r.mix ? null : readLabManualVerdict(o, r);
     const overridden = !manual && !!verdict;
