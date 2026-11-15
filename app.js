@@ -1329,19 +1329,19 @@ function readLabDetail(id, combo = null, showAll = false) {
   }).sort((a, b) => (rangeCheck ? Number(a.ok) - Number(b.ok) : Number(b.ok) - Number(a.ok)) ||
     (b.h.ts || 0) - (a.h.ts || 0));
   const chartHands = rangeCheck ? evidence.map(e => ({ ...e, ok: !e.ok })) : evidence;
+  const [yes, no] = rangeCheck ? ["Led or probed", "Checked"] : r.action || ["Supports", "Other outcome"];
   const chart = evidence.length || !betsOnly
-    ? evidenceChartHTML(o, null, chartHands, rangeCheck ? "Led or probed" : "Supports",
-      rangeCheck ? "Checked" : "Other outcome", r.label, { labRule: id, combo })
+    ? evidenceChartHTML(o, null, chartHands, yes, no, r.label, { labRule: id, combo })
     : "";
-  const checkCount = rangeCheck ? `${r.k}/${r.n} checked` : `${r.k}/${r.n} supporting`;
+  const countLabel = rangeCheck ? "checked" : r.action ? r.action[0].toLowerCase() : "supporting";
   const scopeToggle = rangeCheck ? `<div class="rl-sample-controls">
     <button type="button" class="chip" data-lab-chart-rule="${id}" data-lab-all="${!showAll}">
       ${betsOnly ? "Show checks too" : "Show flop bets only"}</button></div>` : "";
   const evidenceTitle = combo ? `${esc(combo)} · ${rows.length} hands` :
     betsOnly ? `Flop leads and probes · ${rows.length}` : "Eligible hands";
   const rowHTML = rows.map(e => {
-    const label = rangeCheck ? (e.ok ? "Checked" : "Led or probed") : (e.ok ? "Supports" : "Other outcome");
     const highlight = rangeCheck ? !e.ok : e.ok;
+    const label = highlight ? yes : no;
     return `<div class="rl-evidence"><b class="${highlight ? "rl-hit" : "muted"}">${label}</b>
       <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
       <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
@@ -1352,7 +1352,7 @@ function readLabDetail(id, combo = null, showAll = false) {
       <div class="muted sub2">Read Lab verdict</div>
       <div class="chiprow" role="group" aria-label="Read Lab verdict">${readLabVerdictControls(r, o)}</div>
     </div>
-    <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${checkCount}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
     <div data-lab-all="${showAll}">${chart}</div>
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}

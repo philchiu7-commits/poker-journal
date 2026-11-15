@@ -97,8 +97,9 @@ assert.equal(find(results(Array.from({length:100},(_,i)=>limped4('range'+i,i>=94
 console.log('PASS: original vs stricter OOP groups, exact 95% Range X boundary.');
 
 // Sample sufficiency and the verdict answer different questions.
+const foldedAir = floatActions.slice(0, -1).concat(act('flop', 'v0', 'fold'));
 const knownNonFloats = Array.from({ length: 15 }, (_, i) =>
-  h('ace-high-' + i, ['As', '7d'], ['9c', '5d', '2h', null, null], floatActions));
+  h('folded-air-' + i, ['Qs', '7d'], ['9c', '5d', '2h', null, null], foldedAir));
 const smallSample = find(results(knownNonFloats.slice(0, 14)), 'float-OOP');
 assert.equal(smallSample.state, 'Not established');
 assert.equal(smallSample.established, false);
@@ -116,3 +117,65 @@ assert.equal(find(results(chanceHands(14, 1)), 'river-over').established, false)
 assert.equal(find(results(chanceHands(15, 1)), 'river-over').state, 'No');
 assert.equal(find(results([]), 'river-over').canAcceptSample, false);
 console.log('PASS: 15-hand threshold, established No, and live per-filter sample acceptance.');
+
+// A holding rate counts decisions with that holding, whether the action was taken or declined.
+function limpHolding(id, cards, bet) {
+  const hand = limped4(id, bet);
+  hand.villains[0].cards = cards;
+  return hand;
+}
+const probeSample = [
+  limpHolding('merge-bet', ['5c', 'Jd'], true),
+  limpHolding('merge-check', ['5c', 'Jd'], false),
+  limpHolding('strong-bet', ['9d', 'As'], true),
+  limpHolding('unknown-bet', null, true),
+];
+const mergeProbe = find(results(probeSample), 'limp-oop-Merge');
+assert.deepEqual(Array.from(mergeProbe.ev, e => [e.id, e.ok]), [['merge-bet', true], ['merge-check', false]]);
+assert.equal(mergeProbe.pct, 50);
+const strongProbe = find(results(probeSample), 'limp-oop-TopP+');
+assert.equal(strongProbe.n, 1);
+assert.equal(strongProbe.pct, 100);
+
+function limpXR(id, cards, response) {
+  const hand = limpHolding(id, cards, false);
+  hand.actions = hand.actions.slice(0, 4).concat(
+    act('flop', 'v0', 'check'), act('flop', 'v1', 'bet', '$8'),
+    act('flop', 'v2', 'fold'), act('flop', 'v3', 'fold'),
+    act('flop', 'v0', response, response === 'raise' ? '$24' : null));
+  return hand;
+}
+const xrSample = [
+  limpXR('air-raise', ['Qs', '7d'], 'raise'),
+  limpXR('air-fold', ['Qs', '7d'], 'fold'),
+  limpXR('pair-call', ['5c', 'Jd'], 'call'),
+];
+for (const category of ['Air', 'Bluff']) {
+  const x = find(results(xrSample), 'limp-xr-' + category);
+  assert.equal(x.state, 'Yes');
+  assert.equal(x.min, 1);
+  assert.deepEqual(Array.from(x.ev, e => [e.id, e.ok]), [['air-raise', true], ['air-fold', false]]);
+}
+const pairXR = find(results(xrSample), 'limp-xr-BottomP / 2ndP');
+assert.equal(pairXR.n, 1);
+assert.equal(pairXR.state, 'Not established');
+const noXR = Array.from({ length: 15 }, (_, i) => limpXR('only-fold-' + i, ['Qs', '7d'], 'fold'));
+assert.equal(find(results(noXR), 'limp-xr-Air').state, 'No');
+const jammed = limpXR('facing-jam', ['Qs', '7d'], 'fold');
+jammed.actions[5] = act('flop', 'v1', 'jam', '$20');
+assert.equal(find(results([jammed]), 'limp-xr-Air').n, 0);
+assert.equal(find(results([h('ak-not-eligible', ['As','7d'], ['9c','5d','2h',null,null], floatActions)]), 'float-OOP').n, 0);
+
+const turnActions = response => [
+  act('pre', 'v1', 'raise', '$6'), act('pre', 'v0', 'call'),
+  act('flop', 'v0', 'check'), act('flop', 'v1', 'check'),
+  act('turn', 'v0', 'check'), act('turn', 'v1', 'bet', '$9'), act('turn', 'v0', response),
+];
+const turnCalls = results([
+  h('pair-call-turn', ['5c', 'Jd'], ['9c','5d','2h','3s',null], turnActions('call')),
+  h('pair-fold-turn', ['5c', 'Jd'], ['9c','5d','2h','3s',null], turnActions('fold')),
+  h('strong-call-turn', ['9d', 'As'], ['9c','5d','2h','3s',null], turnActions('call')),
+]);
+assert.deepEqual(Array.from(find(turnCalls, 'turn-call-2ndP').ev, e => [e.id, e.ok]),
+  [['pair-call-turn', true], ['pair-fold-turn', false]]);
+console.log('PASS: conditional probe, xR and turn-call denominators, one-example xR, and no raise chance against a lone all-in.');
