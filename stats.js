@@ -16,6 +16,28 @@ const HUD_BLIND_SEATS = new Set(["SB", "BB", "STD"]);
 /* Below this many opportunities a percentage is noise, shown greyed. */
 const HUD_MIN = 15;
 
+function playerSquidState(count) {
+  if (count == null || count === "" || !Number.isFinite(Number(count)) || Number(count) < 0) return null;
+  return Number(count) > 0 ? "have" : "none";
+}
+
+function hudSeatFor(h, seat) {
+  const positions = (h.villains || []).map(v => v.pos);
+  if (h.heroPos && (h.hero || h.actions?.some(a => a.actor === "hero"))) positions.push(h.heroPos);
+  if (!seat || positions.length > 8 || positions.filter(p => p === seat).length !== 1) return null;
+  if (!/^U\d+$/.test(seat)) return seat;
+
+  // Remap numbered seats only when the full ring is anchored. A missing blind
+  // or dead button can leave a source label from a larger nominal table.
+  const fixed = ["SB", "BB", "HJ", "CO", "BN"];
+  if (positions.includes("STD")) fixed.push("STD");
+  const early = positions.filter(p => /^U\d+$/.test(p)).sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)));
+  if (fixed.length + early.length !== positions.length ||
+      !fixed.every(p => positions.includes(p)) || new Set(positions).size !== positions.length ||
+      (h.blinds?.std && !positions.includes("STD"))) return null;
+  return "U" + (positions.length - early.indexOf(seat));
+}
+
 function hudCount(oppId, hands) {
   const c = {
     seats: 0, vpip: 0, pfr: 0, open: 0, openOpp: 0, iso: 0, oppIso: 0, cc: 0, oppCc: 0, n3b: 0, opp3b: 0, n4b: 0, opp4b: 0, f3b: 0, oppF3b: 0, f4b: 0, oppF4b: 0,
@@ -25,7 +47,7 @@ function hudCount(oppId, hands) {
     xrV: 0, xrB: 0, oppXrG: 0,
     probeTHu: 0, oppProbeTHu: 0, probeTMw: 0, oppProbeTMw: 0, xrF: 0, oppXrF: 0, xrT: 0, oppXrT: 0, xrR: 0, oppXrR: 0,
     bxtF: 0, oppBxtF: 0, bxtT: 0, oppBxtT: 0, bxtR: 0, oppBxtR: 0, rAgg: 0, rCall: 0,
-    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpCall: 0, byPos: {}, ev: {},
+    agg: 0, calls: 0, limps: 0, lrr: 0, limpFaced: 0, limpCall: 0, byPos: {}, ev: {}, seatExcluded: 0, squidUnknown: 0,
   };
   /* The tree stats again, each asked once of the heads-up pots and once of the
      multiway ones. In a loop because thirty more `: 0,` above would bury the
@@ -51,7 +73,12 @@ function hudCount(oppId, hands) {
     const pre = A.filter((a) => a.street === "pre");
     const me = Object.keys(seat)[0];
     const myPos = (seat[me].pos || "?");
-    c.seats++; pos(myPos).seats++;
+    const statPos = hudSeatFor(h, seat[me].pos);
+    const bySeat = statPos ? pos(statPos) : null;
+    c.seats++;
+    if (playerSquidState(seat[me].squid) === null) c.squidUnknown++;
+    if (bySeat) bySeat.seats++;
+    else c.seatExcluded++;
 
     // ---- preflop walk. Flags flip *after* an action so a player never counts
     // as having faced their own raise.
@@ -75,10 +102,10 @@ function hudCount(oppId, hands) {
     const opened = openDecision(pre, me, myPos, entry);
     if (opened !== null) {
       c.openOpp++;
-      pos(myPos).openOpp++;
-      if (opened) { c.open++; pos(myPos).open++; }
+      if (bySeat) bySeat.openOpp++;
+      if (opened) { c.open++; if (bySeat) bySeat.open++; }
       mark("open", opened, h.id);
-      mark("open|" + myPos, opened, h.id);
+      if (bySeat) mark("open|" + statPos, opened, h.id);
     }
     for (const a of pre) {
       const mine = a.actor === me;
@@ -118,8 +145,12 @@ function hudCount(oppId, hands) {
       }
     }
     if (vol) c.vpip++;
-    if (aggPre) { c.pfr++; pos(myPos).pfr++; }
-    if (oppIso) { c.oppIso++; pos(myPos).isoOpp++; if (didIso) { c.iso++; pos(myPos).iso++; } }
+    if (aggPre) { c.pfr++; if (bySeat) bySeat.pfr++; }
+    if (oppIso) {
+      c.oppIso++;
+      if (bySeat) bySeat.isoOpp++;
+      if (didIso) { c.iso++; if (bySeat) bySeat.iso++; }
+    }
     if (oppCc) { c.oppCc++; if (didCc) c.cc++; }
     /* A limp that comes back over the top is a limp-reraise, not a 3-bet
        (Phil, v205). Limp-RR already counts it, the Ranges panel has always
@@ -128,7 +159,11 @@ function hudCount(oppId, hands) {
        denominator included: a limper facing a raise answers with Limp-RR or
        Limp-fold, so he was never in a 3-bet spot to decline. `did3` is left
        alone — folding to the 4-bet that came back is still a fold to a 4-bet. */
-    if (opp3 && !limped) { c.opp3b++; pos(myPos).opp3++; if (did3) { c.n3b++; pos(myPos).three++; } }
+    if (opp3 && !limped) {
+      c.opp3b++;
+      if (bySeat) bySeat.opp3++;
+      if (did3) { c.n3b++; if (bySeat) bySeat.three++; }
+    }
     if (opp4) { c.opp4b++; if (did4) c.n4b++; }
     const vsThree = aggPre && foldToThreeBetSpot(preflopActionsWithLevels(pre, entry.price), me);
     if (vsThree) {
@@ -140,21 +175,28 @@ function hudCount(oppId, hands) {
     if (oppF4) { c.oppF4b++; if (didF4) c.f4b++; }
     mark("vpip", vol, h.id);
     mark("pfr", aggPre, h.id);
-    mark("pfr|" + myPos, aggPre, h.id);
-    if (oppIso) mark("iso|" + myPos, didIso, h.id);
+    if (bySeat) mark("pfr|" + statPos, aggPre, h.id);
+    if (oppIso && bySeat) mark("iso|" + statPos, didIso, h.id);
     if (oppIso) mark("iso", didIso, h.id);
     if (oppCc) mark("cc", didCc, h.id);
     if (opp3 && !limped) mark("three", did3, h.id);
-    if (opp3 && !limped) mark("three|" + myPos, did3, h.id);
+    if (opp3 && !limped && bySeat) mark("three|" + statPos, did3, h.id);
     if (opp4) mark("four", did4, h.id);
     if (oppF4) mark("f4b", didF4, h.id);
-    mark("limp|" + myPos, limped, h.id);
-    if (limped) mark("lrr|" + myPos, limpThenRaise, h.id);
-    if (limpFaced) mark("lcall|" + myPos, limpCall, h.id);
+    if (bySeat) {
+      mark("limp|" + statPos, limped, h.id);
+      if (limped) mark("lrr|" + statPos, limpThenRaise, h.id);
+      if (limpFaced) mark("lcall|" + statPos, limpCall, h.id);
+    }
     if (limped) {
-      c.limps++; pos(myPos).limp++;
-      if (limpThenRaise) { c.lrr++; pos(myPos).lrr++; }
-      if (limpFaced) { c.limpFaced++; pos(myPos).faced++; if (limpCall) { c.limpCall++; pos(myPos).lcall++; } }
+      c.limps++;
+      if (bySeat) bySeat.limp++;
+      if (limpThenRaise) { c.lrr++; if (bySeat) bySeat.lrr++; }
+      if (limpFaced) {
+        c.limpFaced++;
+        if (bySeat) bySeat.faced++;
+        if (limpCall) { c.limpCall++; if (bySeat) bySeat.lcall++; }
+      }
     }
 
     // ---- postflop
@@ -517,9 +559,7 @@ function handsForSquid(oppId, hands, mode = "all") {
   if (mode === "all") return hands;
   return hands.filter((h) => {
     const v = (h.villains || []).find((v) => v.opponentId === oppId);
-    const n = v?.squid;
-    if (n == null || n === "" || !Number.isFinite(Number(n)) || Number(n) < 0) return false;
-    return mode === "have" ? Number(n) > 0 : Number(n) === 0;
+    return playerSquidState(v?.squid) === mode;
   });
 }
 function hudFor(oppId, hands, squid = "all") {

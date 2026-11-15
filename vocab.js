@@ -941,18 +941,15 @@ const rangeSpotTitle = (sq, sit, pg) =>
 const handClassCombos = (c) => c.length === 2 ? 6 : c[2] === "s" ? 4 : 12;   // of 1326
 
 /* ---------- Model ranges ----------
-   A measured frequency is a width, and a width is a shape: "PFR 22%" is a range
-   you can draw. `modelRange(kind, pct)` walks that kind's ordering, adding
-   classes until the combos reach that percent of 1326, so the grid it returns
-   really is the size of the number above it.
+   The measured action frequency sets the width. Shown decisions rank the
+   hand classes within that width, with a different default ordering per action.
    The orderings are NOT one strength ladder read at different depths. A cold
    call or a limp is what he did *instead* of raising, so the top of the
    strength ladder belongs at the bottom of those two — nobody's 8% cold-call
    range is AA/KK/QQ/AKs (Phil). There they come last, as the trap tail, and the
    hands that flat well lead: pairs for the set, suited connectors and suited
    broadways for the multiway pots a limped table actually plays.
-   This is a model, not a read: it says what a range of his width looks like,
-   never what he holds. */
+   The orderings give unobserved hands a starting point. */
 const MR_RANKS = "23456789TJQKA";
 const mrParts = (c) => {
   const a = MR_RANKS.indexOf(c[0]) + 2, b = MR_RANKS.indexOf(c[1]) + 2;
@@ -999,8 +996,44 @@ const MR_ORDERS = {
   limp:   mrOrder(mrFlat(mrSpec)),
   lrr:    mrOrder((c) => mrStrength(c) + (mrParts(c).suited && mrParts(c).hi - mrParts(c).lo <= 2 ? 8 : 0)),
 };
-function modelRange(kind, pct) {
-  const ord = MR_ORDERS[kind] || MR_ORDERS.raise;
+const MR_PARTS = Object.fromEntries(HAND_CLASSES.map(c => [c, mrParts(c)]));
+function modelRange(kind, pct, evidence = {}) {
+  let ord = MR_ORDERS[kind] || MR_ORDERS.raise;
+  const observed = ord.filter(c => evidence[c]?.did || evidence[c]?.miss);
+  if (observed.length) {
+    let combosBefore = 0;
+    const scores = new Map();
+    // Rare actions keep more of the default ordering while evidence is sparse.
+    const priorWeight = kind === "limp" ? 4 : kind === "play" ? 6
+      : kind === "3bet" || kind === "lrr" ? 24 : 12;
+    const baseline = Math.max(0.02, Math.min(0.98, pct / 100));
+    const baselineOdds = baseline / (1 - baseline);
+    for (const c of ord) {
+      const { hi, lo, pair, suited } = MR_PARTS[c];
+      const combos = handClassCombos(c);
+      const percentile = (combosBefore + combos / 2) / 1326;
+      const priorOdds = baselineOdds * Math.exp(2.5 * (0.5 - percentile));
+      const prior = priorOdds / (1 + priorOdds);
+      combosBefore += combos;
+
+      let nearbyDid = 0, nearbyMiss = 0;
+      for (const other of observed) {
+        const p = MR_PARTS[other];
+        if (c === other || p.pair !== pair || p.suited !== suited) continue;
+        const distance = pair ? Math.abs(hi - p.hi) : Math.abs(hi - p.hi) + Math.abs(lo - p.lo);
+        const weight = distance === 1 ? 0.35 : distance === 2 ? 0.15 : 0;
+        nearbyDid += weight * (evidence[other].did || 0);
+        nearbyMiss += weight * (evidence[other].miss || 0);
+      }
+      // Nearby classes can contribute at most one extra observation.
+      const nearbyTotal = nearbyDid + nearbyMiss;
+      const nearbyWeight = 1 / Math.max(1, nearbyTotal);
+      const { did = 0, miss = 0 } = evidence[c] || {};
+      scores.set(c, (priorWeight * prior + did + nearbyWeight * nearbyDid) /
+        (priorWeight + did + miss + nearbyWeight * nearbyTotal));
+    }
+    ord = ord.slice().sort((a, b) => scores.get(b) - scores.get(a));
+  }
   const want = Math.max(0, Math.min(100, pct || 0)) * 13.26;     // combos, of 1326
   const hands = [];
   let n = 0;
@@ -1010,5 +1043,5 @@ function modelRange(kind, pct) {
   }
   // one class either side of the target: land on whichever is closer
   if (hands.length > 1 && n - want > handClassCombos(hands[hands.length - 1]) / 2) n -= handClassCombos(hands.pop());
-  return { hands, combos: n, pct: n / 13.26 };
+  return { hands, combos: n, pct: n / 13.26, informed: observed.length > 0 };
 }

@@ -148,7 +148,6 @@ const ReadLab = (() => {
   const called = ['Called', 'Did not call'];
   const validHole = cards => cards.length === 2 && cards[0] !== cards[1] &&
     cards.every(c => /^[2-9TJQKA][cdhs]$/.test(c));
-  const squidState=F=>F.squid==null||F.squid===''||!Number.isFinite(Number(F.squid))?null:Number(F.squid)>0?'have':'none';
   const quiet=(F,s)=>F.st[s].through;
   const pfrCbet=F=>F.pfr&&eligibleBet(F,'flop');
   const cbetCalled=F=>F.st.flop.bet&&F.st.flop.acts.slice(F.st.flop.firstI+1).some(a=>a.actor!==F.me&&a.act==='call')&&F.st.flop.bets.length===1;
@@ -492,7 +491,7 @@ const ReadLab = (() => {
       if(base.mode==='manual')return {...base,state:'Manual',k:0,n:0,ev:[]};
       for(const F of Fs){
         if(base.mode!=="cap"&&!F.h.imported)continue;
-        const sq=squidState(F);if(base.squid&&sq!==base.squid||!base.combined&&squid!=='all'&&sq!==squid)continue;
+        const sq=playerSquidState(F.squid);if(base.squid&&sq!==base.squid||!base.combined&&squid!=='all'&&sq!==squid)continue;
         F.skippedCards=false;F.skippedTexture=false;
         let r;try{r=base.test(F);}catch(e){ignored++;continue;}
         if(r)ev.push({id:F.h.id,h:F.h,...r});

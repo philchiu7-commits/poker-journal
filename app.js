@@ -2464,7 +2464,7 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
   let shown = 0;
   for (const x of hands) {
     const v = (x.h.villains || []).find((z) => z.opponentId === o.id);
-    const hc = labRule ? evidenceHandClass(v?.cards) : handClass(v?.cards);
+    const hc = evidenceHandClass(v?.cards);
     if (!hc) continue;                          // never shown, or squid cards
     shown++;
     const e = cells[hc] = cells[hc] || { did: 0, miss: 0, ids: [] };
@@ -2475,8 +2475,9 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
      is the percentage printed on the cell. That is the width to draw. */
   const hit = hands.filter((x) => x.ok).length;
   const kind = HUD_MODEL_KIND[stat];
-  const model = kind && hands.length ? modelRange(kind, (100 * hit) / hands.length) : null;
+  const model = kind && hands.length ? modelRange(kind, (100 * hit) / hands.length, cells) : null;
   const mset = model ? new Set(model.hands) : null;
+  const modelPct = model ? Number(model.pct.toFixed(1)) : null;
   const foot = `${shown} of ${hands.length} hand${hands.length === 1 ? "" : "s"} had his cards on record`;
   if (!shown && !model) return `<div class="rdsub">No cards on record for any of these hands — nothing to chart.</div>`;
   const hue = HUD_CHART_ACT[stat] ? notchColor(HUD_CHART_ACT[stat]) : "var(--accent)";
@@ -2487,7 +2488,7 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
     const inm = mset && mset.has(hc);
     const cls = "rgcell rng ro" + (e && (e.did || (e.miss && mhue)) ? " inr" : "")
       + (e && e.miss && !mhue ? " opp" : "") + (inm ? " mdl" : "");
-    const tip = hc + (inm ? ` · inside a ${model.pct.toFixed(0)}% range` : "")
+    const tip = hc + (inm ? ` · in the ${modelPct}% model range` : "")
       + (e ? ` · ${e.did ? `${yes} ${e.did}×` : ""}${e.did && e.miss ? " · " : ""}${
         e.miss ? `${no} ${e.miss}×` : ""} · tap for the hand${e.ids.length === 1 ? "" : "s"}` : "");
     /* Played two ways is two facts, the same as the Ranges grid: half the cell
@@ -2504,7 +2505,7 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
   }).join("");
   const mleg = model
     ? `<span class="rglegitem"><span class="rgswatch" style="background:${tint}"></span>${
-        model.pct.toFixed(0)}% model range</span>`
+        modelPct}% model range</span>`
     : "";
   return `<div class="hudchart" data-hclabel="${esc(label || "")}"><div class="rggrid">${grid}</div></div>
     <div class="rglegend hudleg">
@@ -2513,7 +2514,7 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
         mhue ? ` style="background:${mhue}"` : ""}></span>${esc(no)}</span>
       ${mleg}
       <span class="rglegnote">${foot}${labRule ? " · Tap a square for its hands" : ""}${model
-        ? ` · the wash is what a ${model.pct.toFixed(0)}% range looks like, not what he holds` : ""}</span></div>`;
+        ? model.informed ? " · Model uses recorded decisions and similar hands" : " · Model uses the default hand ordering" : ""}</span></div>`;
 }
 /* One square off a chart: the hands behind it. A single hand opens straight
    into it — a sheet holding one row is a tap you did not need. */
@@ -4347,6 +4348,10 @@ let posHidden = new Set();
 const savePosHidden = () => metaSet("hudHiddenSeats", [...posHidden]);
 function renderOppHud(o) {
   const c = hudFor(o.id, HANDS, hudSquid);
+  const unknown = (hudSquid === "all" ? c : hudFor(o.id, HANDS)).squidUnknown;
+  $("od-hud-squid-note").textContent = unknown
+    ? `${unknown.toLocaleString()} hand${unknown === 1 ? "" : "s"} with an unknown squid count appear${unknown === 1 ? "s" : ""} only in All.`
+    : "Uses this player's squid count.";
   for (const button of $("od-hud-squid").querySelectorAll("[data-hud-squid]"))
     button.setAttribute("aria-pressed", String(button.dataset.hudSquid === hudSquid));
   const nEl = $("od-hud-n"), box = $("od-hud");
@@ -4420,13 +4425,23 @@ function renderOppHud(o) {
          ${row("Limp", "limp", "seats", "Limped")}
          ${row("Limp-RR", "lrr", "limp", "Limped then raised")}
          ${row("Limp-call", "lcall", "faced", "Limped, got raised, called the first raise")}
-       </table>`}${posHid}</div>`
+       </table>`}${posHid}
+       <details class="sizenote">
+         <summary>Position names by table size</summary>
+         <div>8-handed with a straddle · STD, U8, U7, HJ, CO, BN, SB, BB</div>
+         <div>8-handed without a straddle · U8, U7, U6, HJ, CO, BN, SB, BB</div>
+         <div>7-handed with a straddle · STD, U7, HJ, CO, BN, SB, BB</div>
+         <div>7-handed without a straddle · U7, U6, HJ, CO, BN, SB, BB</div>
+       </details></div>`
+    : "";
+  const seatNote = c.seatExcluded
+    ? `<div class="sizenote">${c.seatExcluded} hand${c.seatExcluded === 1 ? "" : "s"} omitted from position stats due to a larger table or an unclear seat.</div>`
     : "";
   /* Two blocks, not one wall: how he enters a pot and what he does once he is
      in one are read at different moments, and the limp table below belongs to
      the preflop half, so it sits with it. */
   box.innerHTML = `<div class="glabel">Preflop</div>
-    ${gridsFor("pre").map((g) => `<div class="hudgrid">${g.html}</div>`).join("")}${posTable}
+    ${gridsFor("pre").map((g) => `<div class="hudgrid">${g.html}</div>`).join("")}${posTable}${seatNote}
     <div class="glabel" style="margin-top:14px">Postflop</div>
     ${gridsFor("post").map((g) => `<div class="hudgrid">${g.html}</div>`).join("")}
     <div class="hudgrid">${afCell}</div>${sizing3HTML(o)}`;

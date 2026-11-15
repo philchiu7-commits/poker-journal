@@ -4,6 +4,7 @@ const make=(id,squid,fold=false)=>({id,ts:1,updatedAt:1,imported:{},villainIds:[
 c.hands=[make('no',0),make('yes',1,true),make('two',2),make('unknown',null),make('missing',undefined)];
 const run=s=>vm.runInContext(s,c);
 assert.equal(run("hudFor('p',hands,'all').seats"),5);
+assert.equal(run("hudFor('p',hands,'all').squidUnknown"),2);
 assert.equal(run("hudFor('p',hands,'have').seats"),2);
 assert.equal(run("hudFor('p',hands,'none').seats"),1);
 assert.equal(run("hudFor('p',hands,'have').limpCall"),1);
@@ -43,3 +44,35 @@ assert.equal(openCounters.ev['open|BB'].length, 1);
 assert.equal(run("hudFor('p',openHands,'have').openOpp"), 3);
 assert.equal(run("hudFor('p',openHands,'none').openOpp"), 3);
 console.log('Passed: Open and isolation raises, first decision only, short all-in calls, and free options in straddled pots.');
+
+function seatedHand(id, early, straddle, overrides = {}) {
+  const positions = ['SB', 'BB', ...(straddle ? ['STD'] : []), ...early, 'HJ', 'CO', 'BN'];
+  return {
+    id, imported: {}, blinds: { sb: 1, bb: 2, std: straddle ? 4 : null },
+    villains: positions.map((pos, i) => ({ pos, opponentId: pos === early[0] ? 'p' : 'other-' + i })),
+    actions: [{ street: 'pre', actor: 'v' + positions.indexOf(early[0]), act: 'raise', size: '$12' }],
+    ...overrides,
+  };
+}
+c.tableSizes = [
+  seatedHand('seven-with', ['U8'], true),
+  seatedHand('eight-with', ['U7', 'U6'], true),
+  seatedHand('seven-without', ['U7', 'U6'], false),
+  seatedHand('eight-without', ['U8', 'U7', 'U6'], false),
+  seatedHand('nine-with', ['U9', 'U8', 'U7'], true),
+  seatedHand('nine-without', ['U9', 'U8', 'U7', 'U6'], false),
+];
+const unclear = seatedHand('missing-sb', ['U9', 'U8', 'U7'], true);
+unclear.villains.shift();
+c.tableSizes.push(unclear);
+const seatStats = run("hudCount('p',tableSizes)");
+assert.equal(seatStats.seats, 7);
+assert.equal(seatStats.seatExcluded, 3);
+assert.deepEqual(Object.keys(seatStats.byPos).sort(), ['U7', 'U8']);
+assert.deepEqual(Array.from(seatStats.ev['pfr|U7'], e => e.id), ['seven-with', 'seven-without']);
+assert.deepEqual(Array.from(seatStats.ev['pfr|U8'], e => e.id), ['eight-with', 'eight-without']);
+assert.equal(run("hudSeatFor(tableSizes[3], 'U6')"), 'U6');
+assert.equal(run("hudSeatFor(tableSizes[1], 'U6')"), 'U7');
+assert.equal(run("hudSeatFor({...tableSizes[0], hero: true, heroPos: 'U9'}, 'U8')"), 'U7');
+assert.equal(run("hudSeatFor({...tableSizes[1], hero: true, heroPos: 'U9'}, 'U7')"), null);
+console.log('Passed: seven- and eight-handed position labels, hero seat included, and nine-handed or unclear positions excluded from the seat grid.');
