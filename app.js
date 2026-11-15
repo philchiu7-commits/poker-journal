@@ -1184,7 +1184,12 @@ function renderReadLab(id) {
   renderReadLabGroups(o);
 }
 
-function readLabChip(r, label, state, flags) {
+function readLabManualVerdict(o, key) {
+  const value = o.readLabManual?.[key]?.value;
+  return value === "yes" || value === "no" ? value : null;
+}
+
+function readLabChip(r, label, state, flags, overridden) {
   const positive = state === "Yes" || state === "Strong Yes";
   const negative = state === "No" || state === "Hard No";
   const strong = state === "Strong Yes" || state === "Hard No";
@@ -1196,9 +1201,11 @@ function readLabChip(r, label, state, flags) {
       `${esc(label ? label + (state === "Unset" ? "" : " · " + state) : state === "Unset" ? "–" : state)}</button>`;
   }
   const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
-  const title = `${r.label}: ${state} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
+  const title = `${r.label}: ${state}${overridden ? " (manual)" : ""} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
   return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}">` +
-    `<span>${esc(label ? label + " · " + state : state)}</span><small class="rl-stats"> · ${percent} · ${r.k}/${r.n}</small>` +
+    `<span>${esc(label ? label + " · " + state : state)}</span>` +
+    (overridden ? '<small class="rl-manual-badge">Manual</small>' : "") +
+    `<small class="rl-stats"> · ${percent} · ${r.k}/${r.n}</small>` +
     (flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : "") + "</button>";
 }
 
@@ -1211,11 +1218,14 @@ function renderReadLabGroups(o) {
   const sections = new Map();
   for (const r of readLabResults) {
     const manual = r.mode === "manual";
-    const state = manual ? (STATE_WORD[o.readLabManual?.[r.id]?.value] || "Unset") : r.state;
+    const verdict = readLabManualVerdict(o, manual ? r.id : r.sampleKey);
+    const overridden = !manual && !!verdict;
+    const state = verdict ? STATE_WORD[verdict] : manual ? "Unset" : r.state;
     const flags = flagsByRule.get(r.id);
     if (filter === "auto" && manual || filter === "manual" && !manual ||
         filter === "established" && (manual || !r.established) ||
         filter === "unestablished" && (manual || r.established) ||
+        filter === "overridden" && !overridden ||
         filter === "flagged" && !flags) continue;
 
     let [group, label] = r.label.split(" · ");
@@ -1226,7 +1236,7 @@ function renderReadLabGroups(o) {
     if (!sections.has(r.section)) sections.set(r.section, new Map());
     const groups = sections.get(r.section);
     if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push({ r, label, state, flags });
+    groups.get(group).push({ r, label, state, flags, overridden });
   }
 
   const line = (group, entries, item) => {
@@ -1235,7 +1245,7 @@ function renderReadLabGroups(o) {
     entries.sort((a, b) => order(a.label) - order(b.label));
     const wide = entries.length >= 4 ? " rlwide" : "";
     return `<span class="rllab${wide}">${esc(group)}</span><div class="rlctl${wide}">` +
-      entries.map(({ r, label, state, flags }) => readLabChip(r, label, state, flags)).join("") + "</div>";
+      entries.map(({ r, label, state, flags, overridden }) => readLabChip(r, label, state, flags, overridden)).join("") + "</div>";
   };
 
   $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
@@ -1270,6 +1280,13 @@ function renderReadLabGroups(o) {
 function readLabDetail(id, combo = null) {
   const r = readLabResults.find(r => r.id === id), o = oppById(readLabPlayer); if (!r || !o) return;
   const flags = readLabFeedback.filter(f => f.player === o.id && f.rule === id);
+  const manual = readLabManualVerdict(o, r.sampleKey);
+  const verdictControls = [["yes", "Yes"], ["no", "No"], ["auto", "Use automatic"]].map(([value, label]) => {
+    const selected = (manual || "auto") === value;
+    const cls = selected ? " on " + (STATE_CLASS[value] || "") : "";
+    return `<button type="button" class="chip${cls}" data-lab-set-verdict="${esc(id)}" data-lab-verdict="${value}"
+      aria-pressed="${selected}">${label}</button>`;
+  }).join("");
   const rule = r.mode === "cap" ? `Yes after ${r.min} supporting distinct hands. Below that count, No once the eligible sample is large enough.` : r.mode === "bands" ? `Tight below ${r.low}%; Wide ${r.highInclusive ? 'at or above' : 'above'} ${r.high}%; Normal between.` : r.mode === "interval" ? `Yes from ${r.low}% to below ${r.high}%.` : r.mode === "fold3" ? `Strong Yes ≥${r.strong}%; Yes ≥${r.threshold}%; Hard No <${r.hard}%.` : `${r.more === false ? 'Below' : r.strict ? 'Above' : 'At or above'} ${r.threshold}%.`;
   const sampleLabel = r.acceptedSample ? "Your accepted sample" : "Default sample minimum";
   const sampleControls = (r.canAcceptSample
@@ -1285,7 +1302,11 @@ function readLabDetail(id, combo = null) {
   const chart = evidenceChartHTML(o, null, r.ev, "Supports", "Other outcome", r.label, { labRule: id, combo });
   sheetGroup = "__rdrill__";
   showSheet(`<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
-    <div class="rdsub"><b>${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} supporting${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    <div class="rl-verdict">
+      <div class="muted sub2">Read Lab verdict</div>
+      <div class="chiprow" role="group" aria-label="Read Lab verdict">${verdictControls}</div>
+    </div>
+    <div class="rdsub"><b>Automatic: ${esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} supporting${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${chart}
     <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p><p><b>Active trial rule: ${esc(rule)}</b></p>${readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
     <p>${sampleLabel} ${r.sampleMin} hands. ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>
@@ -1358,6 +1379,31 @@ function bindReadLab() {
     if (rule) readLabDetail(rule.dataset.labRule);
   };
   $("sheet").addEventListener('click',async e => {
+    const verdict = e.target.closest("[data-lab-set-verdict]");
+    if (verdict) {
+      const r = readLabResults.find(r => r.id === verdict.dataset.labSetVerdict);
+      const o = oppById(readLabPlayer);
+      const value = verdict.dataset.labVerdict;
+      if (!o || !r?.sampleKey || !["yes", "no", "auto"].includes(value) ||
+          verdict.parentElement.getAttribute("aria-busy") === "true") return;
+      const controls = verdict.parentElement;
+      controls.setAttribute("aria-busy", "true");
+      try {
+        const fresh = await saveReadLabEntry(o, "readLabManual", r.sampleKey, () => value === "auto" ? null : value);
+        if (fresh && curView === "readlab" && readLabPlayer === o.id) {
+          renderReadLabGroups(fresh);
+          if (verdict.isConnected && !$("sheet").classList.contains("hidden")) {
+            readLabDetail(r.id);
+            $("sheet").querySelector(`[data-lab-verdict="${value}"]`)?.focus({ preventScroll: true });
+          }
+        }
+      } catch {
+        toast("Could not save the verdict.");
+      } finally {
+        controls.removeAttribute("aria-busy");
+      }
+      return;
+    }
     const chart = e.target.closest("[data-lab-chart-rule]");
     if (chart) {
       readLabDetail(chart.dataset.labChartRule, chart.dataset.labCombo || null);
