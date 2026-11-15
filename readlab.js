@@ -350,9 +350,14 @@ const ReadLab = (() => {
   const riverBetDecision = F => riverChance(F) && betDecision(F, 'river');
   const lines={BBB:F=>cleanBet(F,'flop')&&cleanBet(F,'turn'),BXB:F=>cleanBet(F,'flop')&&quiet(F,'turn'),XBB:F=>quiet(F,'flop')&&cleanBet(F,'turn'),XXB:F=>quiet(F,'flop')&&quiet(F,'turn'),xCXB:F=>F.st.flop.first?.act==='check'&&F.st.flop.response?.act==='call'&&F.st.flop.bets.length===1&&quiet(F,'turn'),MWP:F=>F.st.river.alive.length>=3};
   for (const [name, gate] of Object.entries(lines))
-    holdingCap('line-' + name, 'River · PFR', 'Bluff Lines · ' + name, 'river',
-      F => gate(F) && (name === 'XXB' ? post(F) && F.st.river.can && betDecision(F, 'river') : riverBetDecision(F)),
-      H => H.riverBluff, bet);
+    holdingCap('line-' + name, 'River · PFR', 'Bluff Lines · ' + name, 'river', F => {
+      if (!gate(F)) return null;
+      const river = name === 'XXB' ? post(F) && F.st.river.can && betDecision(F, 'river') : riverBetDecision(F);
+      if (!river || name !== 'BBB') return river;
+      const turn = classifiableHolding(F, 'turn');
+      if (!turn || turn.strong || (turn.pair && turn.above < 2)) return null;
+      return eq(river.ok, 'Turn: ' + turn.why + ' · River: ' + river.why);
+    }, H => H.riverBluff && (name !== 'XXB' || !H.pair), bet);
   const hands={FD:(F,H)=>holding(F,'turn')?.fd&&!H.flush,SD:(F,H)=>{const T=holding(F,'turn');return T&&(T.oesd||T.gut)&&H.raw.cat<4;},HL:F=>Math.max(...F.cards.map(rank))>=12&&Math.min(...F.cards.map(rank))<=7,SPEW:F=>F.cards.every(c=>rank(c)<=8)&&holding(F,'flop')?.air&&holding(F,'turn')?.air,'A-High':(F,H)=>F.cards.some(c=>rank(c)===14)&&H.air};
   for (const [name, pred] of Object.entries(hands))
     holdingCap('river-hand-' + name, 'River · PFR', 'Bluff hands · ' + name, 'river',
@@ -446,7 +451,10 @@ const ReadLab = (() => {
     if (r.id === 'low-protect') r.definition = 'On flops with a highest card of 9 or lower, measure checks with top pair or better. Every top-pair kicker qualifies.';
     if (r.id === 'oop-protect') r.definition = 'As the preflop raiser, measure flop checks when out of position and holding second pair or better. Both checks and bets with those holdings enter the sample.';
     if(r.id.includes('WKtp'))r.definition = 'OOP first flop bet in a limped multiway pot: top pair with kicker 9 or lower, without FD/OESD/gutshot. Original OOP grouping.';
-    if(r.id.startsWith('line-')||r.id.startsWith('river-hand-')||r.id.startsWith('river-card-')||r.id==='river-raise')r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
+    if (r.id === 'line-BBB') r.definition += ' The turn holding must also be third pair or worse, including unpaired hands.';
+    if (r.id === 'line-XXB') r.definition += ' Only unpaired river holdings qualify after the flop and turn check through.';
+    else if (r.id.startsWith('line-') || r.id.startsWith('river-hand-') || r.id.startsWith('river-card-') || r.id === 'river-raise')
+      r.definition += ' River bluff = fifth pair or worse on ordinary boards; any one pair or worse on four-flush/four-straight boards. Ignore two pair/sets/trips on those texture boards.';
     if(r.id==='turn-call-wFD')r.definition = 'Call turn with FD: highest own card of draw suit J or lower. Pair+draw may also support another chip.';
     if(r.id==='turn-call-3rdP or worse')r.definition = 'Call turn with third pair or worse, including unpaired holdings. Ignore ambiguous/texture-excluded hands.';
     if(r.id==='turn-call-2ndP')r.definition = 'Call turn with second pair made using own cards. Draw overlap allowed.';

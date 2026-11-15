@@ -407,3 +407,40 @@ for (const street of ['flop', 'turn']) {
   assert.equal(find(evidence, 'bxt-air-' + street).n, 2);
 }
 console.log('PASS: flop/turn BXT Overbluff excludes Strong and checks, includes weak bets, and removes Normal.');
+
+function bbbRiver(id, cards, decision) {
+  return h(id, cards, ['9c','5c','2c','3h','Jc'], [
+    act('pre','v0','raise','$6'), act('pre','v1','call'),
+    act('flop','v0','bet','$8'), act('flop','v1','call'),
+    act('turn','v0','bet','$20'), act('turn','v1','call'),
+    act('river','v0',decision,decision === 'bet' ? '$40' : null),
+    act('river','v1',decision === 'bet' ? 'fold' : 'check'),
+  ]);
+}
+const bbbSamples = find(results([
+  bbbRiver('second-pair-turn-bet', ['5s','Qd'], 'bet'),
+  bbbRiver('second-pair-turn-check', ['5s','Qd'], 'check'),
+  bbbRiver('third-pair-turn-bet', ['3s','Qd'], 'bet'),
+  bbbRiver('unpaired-turn-check', ['Qs','7d'], 'check'),
+]), 'line-BBB');
+assert.deepEqual(Array.from(bbbSamples.ev, e => [e.id,e.ok]),
+  [['third-pair-turn-bet',true], ['unpaired-turn-check',false]]);
+assert.match(bbbSamples.ev[0].why, /Turn: third pair/);
+
+function xxbRiver(id, cards, decision) {
+  return h(id, cards, ['9s','Tc','Jc','2c','Ah'], [
+    act('pre','v1','raise','$6'), act('pre','v0','call'),
+    act('flop','v0','check'), act('flop','v1','check'),
+    act('turn','v0','check'), act('turn','v1','check'),
+    act('river','v0',decision,decision === 'bet' ? '$10' : null),
+    act('river','v1',decision === 'bet' ? 'fold' : 'check'),
+  ]);
+}
+const xxbSamples = find(results([
+  xxbRiver('pocket-sixes-check', ['6s','6h'], 'check'),
+  xxbRiver('pocket-sixes-bet', ['6s','6h'], 'bet'),
+  xxbRiver('air-check', ['8s','5h'], 'check'),
+  xxbRiver('air-bet', ['8s','5h'], 'bet'),
+]), 'line-XXB');
+assert.deepEqual(Array.from(xxbSamples.ev, e => [e.id,e.ok]), [['air-check',false], ['air-bet',true]]);
+console.log('PASS: BBB requires third pair or worse on the turn and XXB excludes paired river holdings.');
