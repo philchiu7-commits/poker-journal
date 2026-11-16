@@ -1304,13 +1304,12 @@ function renderReadLabGroups(o) {
     const mixes = entries.filter(({ r }) => r.mix);
     if (rates.length || mixes.length) {
       const reads = entries.filter(({ r }) => !r.mix && r.mode !== "rate");
-      const block = (label, list) => list.length ? `<div class="rl-stat-block"><div class="rl-stat-label">${label}</div><div class="rl-stat-chips">${chips(list)}</div></div>` : "";
-      return `<span class="rllab rlwide">${esc(group)}</span><div class="rlctl rlwide rl-stat-blocks">` +
-        block("Frequency", rates) + block(group === "BXT" ? "Reads" : "By holding", reads) +
-        block("Value-to-bluff ratio", mixes) + "</div>";
+      const block = (label, list) => list.length ? `<div class="rl-stat-block">${label ? `<div class="rl-stat-label">${label}</div>` : ""}<div class="rl-stat-chips">${chips(list)}</div></div>` : "";
+      return `<div class="rl-read-row"><span class="rllab">${esc(group)}</span><div class="rlctl rl-stat-blocks">` +
+        block("", rates) + block(group === "BXT" ? "Reads" : "By holding", reads) +
+        block("Value-to-bluff ratio", mixes) + "</div></div>";
     }
-    const wide = entries.length >= 4 ? " rlwide" : "";
-    return `<span class="rllab${wide}">${esc(group)}</span><div class="rlctl${wide}">${chips(entries)}</div>`;
+    return `<div class="rl-read-row${entries.length === 1 ? " rl-single-read" : ""}"><span class="rllab">${esc(group)}</span><div class="rlctl">${chips(entries)}</div></div>`;
   };
 
   $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
@@ -1339,7 +1338,7 @@ function renderReadLabGroups(o) {
     const shut = readLabShut.has(cat.title);
     return `<section class="readcat${shut ? " shut" : ""}"><div class="rchead">` +
       `<button type="button" class="rcfold" data-lab-fold="${esc(cat.title)}" aria-expanded="${!shut}" aria-label="${shut ? "Show" : "Hide"} ${esc(cat.title)}"></button>` +
-      `<span class="rctitle">${esc(cat.title)}</span></div>${shut ? "" : roles}</section>`;
+      `<span class="rctitle">${esc(cat.title)}</span></div>${shut ? "" : `<div class="rl-role-grid">${roles}</div>`}</section>`;
   }).join("") || '<div class="panel">No reads match this filter.</div>';
 }
 function readLabVerdictControls(r, o) {
@@ -1372,8 +1371,8 @@ function setReadLabEditing(editing) {
   button.textContent = editing ? "Done editing" : "Edit verdicts";
   button.setAttribute("aria-pressed", String(editing));
   $("rl-verdict-help").textContent = editing
-    ? "Tap a verdict chip to set Yes or No. Your overrides are marked Manual."
-    : "Tap an automatic read to see its evidence. Your overrides are marked Manual.";
+    ? "Tap a read to set Yes or No."
+    : "Tap a read for hands and details.";
 }
 
 const readLabSheets = new WeakMap();
@@ -1493,12 +1492,15 @@ function readLabDetail(id, combo = null, showAll = false) {
   const sampleStatus = r.state === "Not established" ? !r.n ? "No eligible hands" :
     r.positiveOnly ? `Needs ${r.min} examples` : "Small sample" : r.state;
   showReadLabSheet({ player: o.id, rule: r, squid: readLabSquid, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
-    ${rate ? "" : readLabVerdictPicker(r, o)}
+    <div class="rl-detail-toolbar">${rate ? "" : readLabVerdictPicker(r, o)}
     <div class="rdsub rl-evidence-summary">${rate ? "Frequency" : esc(sampleStatus)} · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    </div>
     ${scopeToggle}
+    <div class="rl-evidence-layout${chart && !rangeCheck ? " rl-has-chart" : ""}">
     ${rangeCheck ? evidenceList : ""}
-    <div data-lab-all="${showAll}">${chart}</div>
-    ${rangeCheck ? "" : evidenceList}
+    ${chart ? `<div class="rl-chart-panel" data-lab-all="${showAll}">${chart}</div>` : ""}
+    ${rangeCheck ? "" : `<div class="rl-hands-panel">${evidenceList}</div>`}
+    </div>
     <div class="rl-detail rl-criteria"><p><b>Base criteria:</b> ${esc(r.definition)}</p>${rate ? "" : `<p>Active trial rule: ${esc(rule)}</p>`}${!rate && readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
     ${!rate && !r.positiveOnly || r.ignored ? `<p>${rate || r.positiveOnly ? "" : `${sampleLabel} ${r.sampleMin} hands.`}
       ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>` : ""}
@@ -2573,7 +2575,7 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo, hol
       <span class="rglegitem"><span class="rgswatch${mhue ? "" : " hudoppsw"}"${
         mhue ? ` style="background:${mhue}"` : ""}></span>${esc(no)}</span>
       ${mleg}
-      <span class="rglegnote">${foot}${holdingColors ? " · Colors show the holding when raising; split colors mean different hands in the same square" : ""}${labRule ? " · Tap a square for its hands" : ""}${model
+      <span class="rglegnote">${holdingColors ? `${shown}/${hands.length} known holdings · Split colors = multiple holdings` : foot}${labRule ? " · Tap a square for hands" : ""}${model
         ? model.informed ? " · Model uses recorded decisions and similar hands" : " · Model uses the default hand ordering" : ""}</span></div>`;
 }
 /* One square off a chart: the hands behind it. A single hand opens straight
