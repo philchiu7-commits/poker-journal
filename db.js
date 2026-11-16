@@ -649,6 +649,27 @@ function correctedHand(current, correction) {
     }
   }
 
+  if (correction.squidRetraction) {
+    const prior = correction.squidRetraction;
+    if (hand.villains.some(v => v.squid != null)) {
+      if (!hand.imported.squidCountsVerified ||
+          !equal(hand.imported.squidStartEvidence, prior.evidence) ||
+          !correction.players.every((id, i) => players.get(id).squid === prior.counts[i]))
+        return { status: "skipped" };
+      for (const player of hand.villains) {
+        player.squid = null;
+        delete player.squidPresence;
+        delete player.squidPresenceEvidence;
+      }
+      hand.squid = { ...hand.squid, have: null, left: null };
+      hand.imported.squidRetractedEvidence = prior;
+      hand.imported.squidCountsVerified = false;
+      delete hand.imported.squidStartEvidence;
+      delete hand.imported.squidCapacityVerified;
+      changed = true;
+    }
+  }
+
   if (squidPresence) {
     const observations = new Map(correction.players.map((id, i) => [id, squidPresence[i]]));
     for (const player of hand.villains) {
@@ -711,7 +732,12 @@ async function importHandCorrections(corrections, src, sourceOpponents = []) {
       corrections.some(c => !c?.id || !c.tableId || !c.roundId || !Array.isArray(c.players) ||
         new Set(c.players).size !== c.players.length ||
         (!c.betting && !c.board && !c.squid && !c.squidPresence) ||
-        (c.board != null && !validBoard(c.board)) || (c.squidPresence != null && !validPresence(c))))
+        (c.board != null && !validBoard(c.board)) || (c.squidPresence != null && !validPresence(c)) ||
+        (c.squidRetraction != null && (!validPresence(c) ||
+          !Array.isArray(c.squidRetraction.counts) || c.squidRetraction.counts.length !== c.players.length ||
+          c.squidRetraction.counts.some(n => !Number.isInteger(n) || n < 0) ||
+          !c.squidRetraction.evidence || typeof c.squidRetraction.evidence !== "object" ||
+          typeof c.squidRetraction.reason !== "string" || !c.squidRetraction.reason.trim()))))
     throw new Error("Invalid hand corrections file");
   corrections = remapCorrectionPlayers(corrections, sourceOpponents, await dbAll("opponents"));
   const counts = { corrected: 0, skipped: 0, already: 0 };
