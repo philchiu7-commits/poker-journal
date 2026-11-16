@@ -1820,8 +1820,11 @@ button.estn:active { color: var(--accent); }
   background: transparent; color: var(--muted); box-shadow: none; text-align: left;
   white-space: normal; overflow-wrap: anywhere; }
 #rl-results .chip.on { background: transparent; color: var(--accent); box-shadow: none; }
-#rl-results .chip.on.sgreen { color: #66cf94; }
-#rl-results .chip.on.sred { color: #f98282; }
+#rl-results .chip.on.sgreen { color: #66cf94; background: #102a20;
+  border-radius: 8px; box-shadow: inset 0 0 0 1px #2d7450; }
+#rl-results .chip.on.sred { color: #f98282; background: #321c21;
+  border-radius: 8px; box-shadow: inset 0 0 0 1px #88434b; }
+#rl-results .chip.on.sgreen .rl-read-name, #rl-results .chip.on.sred .rl-read-name { color: inherit; }
 #rl-results .chip:hover { background: rgba(139,147,161,.08); }
 #rl-results .chip:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 #rl-results .rl-auto { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
