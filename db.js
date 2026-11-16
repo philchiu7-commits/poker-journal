@@ -527,6 +527,18 @@ const roundKey = (h) => {
   return /^DX/.test(im.roundId) ? im.roundId : `${im.tableId || ""}|${im.roundId}`;
 };
 
+// Source reviews may append a missing street after later streets. Preserve the
+// exact sequence within each street, but always replay streets chronologically.
+function normaliseActionOrder(hand) {
+  const order = new Map(["pre", "flop", "turn", "river"].map((street, i) => [street, i]));
+  if (!Array.isArray(hand.actions) || hand.actions.some(a => !order.has(a?.street))) return false;
+  if (!hand.actions.some((a, i, all) => i && order.get(a.street) < order.get(all[i - 1].street))) return false;
+  hand.actions = hand.actions.map((action, i) => ({ action, i }))
+    .sort((a, b) => order.get(a.action.street) - order.get(b.action.street) || a.i - b.i)
+    .map(({ action }) => action);
+  return true;
+}
+
 function correctedHand(current, correction) {
   if (!current || current.imported?.tableId !== correction.tableId ||
       current.imported?.roundId !== correction.roundId || current.hero)
@@ -541,7 +553,7 @@ function correctedHand(current, correction) {
     return { status: "skipped" };
 
   const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  let changed = false;
+  let changed = normaliseActionOrder(hand);
   if (betting) {
     const { before, after, streets } = betting;
     const seats = hand.villains.map(v => [v.opponentId, v.pos]);

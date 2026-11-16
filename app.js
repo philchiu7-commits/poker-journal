@@ -907,7 +907,7 @@ async function migrateDupBoardCards() {
 const CARD_RX = /^[2-9TJQKAS][shdc]$/;
 const AGGRESSIVE_ACTS = new Set(["bet", "raise", "jam", "3bet", "4bet", "5bet"]);
 function normaliseHand(h) {
-  let dirty = false;
+  let dirty = normaliseActionOrder(h);
   if (h.blinds && !h.blinds.straddles?.length && straddlePosts(h).length > 1) {
     h.blinds.straddles = straddlePosts(h); dirty = true;
   }
