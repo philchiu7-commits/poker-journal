@@ -1304,10 +1304,8 @@ function renderReadLabGroups(o) {
     const mixes = entries.filter(({ r }) => r.mix);
     if (rates.length || mixes.length) {
       const reads = entries.filter(({ r }) => !r.mix && r.mode !== "rate");
-      const block = (label, list) => list.length ? `<div class="rl-stat-block">${label ? `<div class="rl-stat-label">${label}</div>` : ""}<div class="rl-stat-chips">${chips(list)}</div></div>` : "";
-      return `<div class="rl-read-row"><span class="rllab">${esc(group)}</span><div class="rlctl rl-stat-blocks">` +
-        block("", rates) + block(group === "BXT" ? "Reads" : "By holding", reads) +
-        block("Value-to-bluff ratio", mixes) + "</div></div>";
+      return `<div class="rl-read-row"><span class="rllab">${esc(group)}</span><div class="rlctl">` +
+        chips([...rates, ...reads, ...mixes]) + "</div></div>";
     }
     return `<div class="rl-read-row${entries.length === 1 ? " rl-single-read" : ""}"><span class="rllab">${esc(group)}</span><div class="rlctl">${chips(entries)}</div></div>`;
   };
