@@ -1249,7 +1249,7 @@ function readLabChip(r, label, state, flags, overridden) {
   return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
     (label || !provisional ? `<span class="rl-chip-head">${label ? `<span class="rl-read-name">${esc(label)}</span>` : ""}` +
       (!provisional ? `<small class="rl-read-verdict">${esc(verdictLabel)}</small>` : "") + "</span>" : "") +
-    `<span class="rl-chip-meta">${provisional ? `<small class="rl-read-status">${esc(verdictLabel)}</small>` : ""}` +
+    '<span class="rl-chip-meta">' +
     (overridden ? '<small class="rl-manual-badge">Manual</small>' : "") +
     `<small class="rl-stats">${percent} · ${r.k}/${r.n}</small>` +
     (flags ? `<small class="rl-flag">${flags} flagged</small>` : "") + "</span></button>";
@@ -1345,7 +1345,7 @@ function renderReadLabGroups(o) {
 function readLabVerdictControls(r, o) {
   const manualOnly = r.mode === "manual";
   const manual = readLabManualVerdict(o, r);
-  return [["yes", "Yes"], ["no", "No"], ["auto", manualOnly ? "Clear" : "Use automatic"]].map(([value, label]) => {
+  return [["yes", "Yes"], ["no", "No"], ["auto", manualOnly ? "Clear" : "Auto"]].map(([value, label]) => {
     const selected = (manual || "auto") === value;
     const cls = selected ? " on " + (STATE_CLASS[value] || "") : "";
     return `<button type="button" class="chip${cls}" data-lab-set-verdict="${esc(r.id)}" data-lab-verdict="${value}"
@@ -1361,7 +1361,6 @@ function readLabVerdictStatus(r, o, saved = false) {
 
 function readLabVerdictPicker(r, o) {
   return `<div class="rl-verdict">
-    <div class="muted sub2">Read Lab verdict</div>
     <div class="chiprow" role="group" aria-label="Set verdict">${readLabVerdictControls(r, o)}</div>
     <div class="rl-verdict-status sub2" role="status">${readLabVerdictStatus(r, o)}</div>
   </div>`;
@@ -1438,8 +1437,7 @@ function readLabMixDetail(r, o, combo) {
     <div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${combo ? esc(combo) + " · " : ""}${rows.length} shown raises</b>
       <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${id}">Clear hand filter</button>` : ""}</div>
     <div class="list rgcell-hands">${rows.map(e => `<div class="rl-evidence"><b>${buckets[e.bucket]}</b>
-      <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
-      <button class="linkbtn" data-lab-flag="${id}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`).join("")
+      <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join("")
       || '<div class="empty">No raises with known holdings in this sample.</div>'}</div>`);
   if (combo) $("rl-evidence-heading").focus();
   else $("sheet").scrollTop = 0;
@@ -1471,7 +1469,7 @@ function readLabDetail(id, combo = null, showAll = false) {
   const chartHands = rangeCheck ? evidence.map(e => ({ ...e, ok: !e.ok })) : evidence;
   const holdingColors = rate && evidence.some(e => e.bucket);
   const [yes, no] = rangeCheck ? ["Led or probed", "Checked"] : r.action || ["Supports", "Other outcome"];
-  const chart = evidence.length || !betsOnly
+  const chart = evidence.length
     ? evidenceChartHTML(o, null, chartHands, yes, no, r.label, { labRule: id, combo, holdingColors })
     : "";
   const countLabel = rangeCheck ? "checked" : r.action ? r.action[0].toLowerCase() : "supporting";
@@ -1485,29 +1483,30 @@ function readLabDetail(id, combo = null, showAll = false) {
     const holdingStyle = holdingColors && highlight ? READ_LAB_HOLDINGS[e.bucket] : null;
     const label = (highlight ? yes : no) + (holdingStyle ? " · " + holdingStyle.label : "");
     return `<div class="rl-evidence"><b class="${highlight ? "rl-hit" : "muted"}"${holdingStyle ? ` style="color:${holdingStyle.color}"` : ""}>${label}</b>
-      <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
-      <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
+      <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`;
   }).join("");
   const evidenceList = `<div class="rdhead" id="rl-evidence-heading" tabindex="-1"><b>${evidenceTitle}</b>
       <span class="spacer"></span>${combo ? `<button class="linkbtn" data-lab-chart-rule="${esc(id)}" data-lab-all="${showAll}">${betsOnly ? "Show all flop probes" : "Clear hand filter"}</button>` : ""}</div>
     <div class="list rgcell-hands">${rowHTML || `<div class="empty">${betsOnly
       ? "No flop leads or probes in this sample." : "No eligible evidence on record."}</div>`}</div>`;
   sheetGroup = "__rdrill__";
+  const sampleStatus = r.state === "Not established" ? !r.n ? "No eligible hands" :
+    r.positiveOnly ? `Needs ${r.min} examples` : "Small sample" : r.state;
   showReadLabSheet({ player: o.id, rule: r, squid: readLabSquid, combo, showAll }, `<div class="sheethead"><span class="t">${esc(r.label)} · ${esc(o.name)}</span><button data-sheetclose>Close</button></div>
     ${rate ? "" : readLabVerdictPicker(r, o)}
-    <div class="rdsub"><b>${rate ? "Frequency" : "Automatic: " + esc(r.state)}</b> · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
+    <div class="rdsub rl-evidence-summary">${rate ? "Frequency" : esc(sampleStatus)} · ${sampleScope} · ${r.k}/${r.n} ${countLabel}${r.pct == null ? "" : " · " + r.pct.toFixed(2) + "%"}</div>
     ${scopeToggle}
     ${rangeCheck ? evidenceList : ""}
     <div data-lab-all="${showAll}">${chart}</div>
-    <div class="rl-detail"><p><b>Base criteria:</b> ${esc(r.definition)}</p>${rate ? "" : `<p><b>Active trial rule: ${esc(rule)}</b></p>`}${!rate && readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
+    ${rangeCheck ? "" : evidenceList}
+    <div class="rl-detail rl-criteria"><p><b>Base criteria:</b> ${esc(r.definition)}</p>${rate ? "" : `<p>Active trial rule: ${esc(rule)}</p>`}${!rate && readLabOverrides[id] ? '<p>Trial thresholds have been adjusted on this device.</p>' : ''}
     ${!rate && !r.positiveOnly || r.ignored ? `<p>${rate || r.positiveOnly ? "" : `${sampleLabel} ${r.sampleMin} hands.`}
       ${r.ignored ? r.ignored + ' cases need data review.' : ''}</p>` : ""}
     ${sampleControls ? `<div class="chiprow rl-sample-controls">${sampleControls}</div>` : ""}
     ${r.unclassified?.length ? `<details><summary>${r.unclassified.length} unclassified / ignored hands</summary>${r.unclassified.map(e => `<div class="rl-evidence"><div>${esc(e.why)}</div>${handRowHTML(e.h,o.id)}</div>`).join('')}</details>` : ''}
-    ${!rate ? `<button class="chip" data-lab-edit="${esc(id)}">Edit trial thresholds</button> <button class="chip" data-lab-reset="${esc(id)}">Reset trial rule</button> ` : ''}
-    <button class="chip" data-lab-flag="${esc(id)}">Flag an issue</button>
-    ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>
-    ${rangeCheck ? "" : evidenceList}`);
+    ${!rate ? `<button class="linkbtn" data-lab-edit="${esc(id)}">Edit thresholds</button> <button class="linkbtn" data-lab-reset="${esc(id)}">Reset rule</button> ` : ''}
+    <button class="linkbtn" data-lab-flag="${esc(id)}">Flag an issue</button>
+    ${flags.map(f => `<div class="rl-note">${esc(f.note)}</div>`).join('')}</div>`);
   if (combo) $("rl-evidence-heading").focus();
   else $("sheet").scrollTop = 0;
 }
