@@ -1212,7 +1212,7 @@ function readLabChip(r, label, state, flags, overridden) {
       const selected = state === word;
       return `<button type="button" class="chip mini${selected ? " on " + color : ""}" data-lab-manual="${esc(r.id)}"
         data-lab-choice="${value}" aria-pressed="${selected}" aria-label="${esc(r.label + " " + word)}"><span class="rl-read-name">${word}</span>` +
-        (selected ? '<small class="rl-manual-badge">Manual</small>' : "") + "</button>";
+        (selected ? '<small class="rl-manual-badge" title="Manual read" aria-label="Manual read">M</small>' : "") + "</button>";
     }).join("");
   }
   if (r.mix) {
@@ -1239,7 +1239,7 @@ function readLabChip(r, label, state, flags, overridden) {
     return `<button type="button" class="${cls}" data-lab-manual="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
       `<span class="rl-read-name">${esc(label || (state === "Unset" ? "–" : state))}</span>` +
       (label && state !== "Unset" ? ` <small class="rl-read-verdict">${esc(state)}</small>` : "") +
-      (state === "Unset" ? "" : '<small class="rl-manual-badge">Manual</small>') + "</button>";
+      (state === "Unset" ? "" : '<small class="rl-manual-badge" title="Manual read" aria-label="Manual read">M</small>') + "</button>";
   }
   const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
   const verdictLabel = state !== "Not established" ? state : !r.n ? "No eligible hands" :
@@ -1248,9 +1248,9 @@ function readLabChip(r, label, state, flags, overridden) {
   const provisional = state === "Not established";
   return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
     (label || !provisional ? `<span class="rl-chip-head">${label ? `<span class="rl-read-name">${esc(label)}</span>` : ""}` +
-      (!provisional ? `<small class="rl-read-verdict">${esc(verdictLabel)}</small>` : "") + "</span>" : "") +
+      (!provisional ? `<small class="rl-read-verdict">${esc(verdictLabel)}</small>` : "") +
+      (overridden ? '<small class="rl-manual-badge" title="Manual read" aria-label="Manual read">M</small>' : "") + "</span>" : "") +
     '<span class="rl-chip-meta">' +
-    (overridden ? '<small class="rl-manual-badge">Manual</small>' : "") +
     `<small class="rl-stats">${percent} · ${r.k}/${r.n}</small>` +
     (flags ? `<small class="rl-flag">${flags} flagged</small>` : "") + "</span></button>";
 }
@@ -1353,7 +1353,7 @@ function readLabVerdictControls(r, o) {
 
 function readLabVerdictStatus(r, o, saved = false) {
   const manual = readLabManualVerdict(o, r);
-  if (manual) return `${saved ? "Saved " : ""}${STATE_WORD[manual]}<small class="rl-manual-badge">Manual</small>`;
+  if (manual) return `${saved ? "Saved " : ""}${STATE_WORD[manual]}<small class="rl-manual-badge" title="Manual read" aria-label="Manual read">M</small>`;
   return saved ? (r.mode === "manual" ? "Verdict cleared" : "Automatic verdict restored") : "";
 }
 
