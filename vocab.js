@@ -68,6 +68,15 @@ const SIZING_STEP_BY_ID = Object.fromEntries([...SIZING_STEPS, SIZING_3BET_OVER]
 const SIZING_ROW_BY_ID = Object.fromEntries(SIZING_ROWS.map((r) => [r.id, r]));
 const SIZING_3BET_ROW_BY_ID = Object.fromEntries(SIZING_3BET_ROWS.map((r) => [r.id, r]));
 
+/* Shared definitions keep Live, Online and Read Lab sizing rows aligned. */
+const FLOP_BOARD_SIZING = ['low', 'mid'].flatMap(board => ['srp', '3bp'].flatMap(pot =>
+  [25, 33, 50, 66, 75, 100].map(size => ({
+    id: `f-board-sizing-${board}-${pot}-${size}`, board, pot, size,
+    group: `${board === 'low' ? 'Low' : 'Mid'} Board Sizing ${pot.toUpperCase()}`,
+    label: `B${size}`,
+    definition: `${board === 'low' ? '9-high or lower' : 'T-high or J-high'} flops in ${pot === 'srp' ? 'single-raised' : 'exactly 3-bet'} pots. Share of this player's first flop bets at this size, across all preflop roles and table sizes. Imported hands only; hole cards optional. Excludes raises, limped pots, 4-bet+ pots and unpriceable bets. Nearest size bucket: boundaries 29%, 41.5%, 58%, 70.5%, 87.5%, 125%. Bets above 125% stay in the denominator but not these six buckets.`
+  }))));
+
 const RANKS = "AKQJT98765432";
 const SUITS = [
   { id: "s", sym: "♠", cls: "cs" },   // spade  — white
@@ -88,6 +97,7 @@ const SUITS = [
    Wide), not yes/no cycles. They store the chosen option id in o.reads[id];
    tapping the active option clears the read. */
 const TENDENCY_TAGS = [
+  ...FLOP_BOARD_SIZING.map(r => ({ id: r.id, cat: "postflop", label: `${r.group} ${r.label}` })),
   // preflop — opening
   { id: "open-too-wide",        cat: "preflop",  label: "Open too wide" },
   { id: "ep-range-limp",        cat: "preflop",  label: "EP range limp" },

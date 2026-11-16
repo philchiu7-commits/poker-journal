@@ -168,6 +168,13 @@ const readChip = (id, state) => {
    plain reads into a chip strip underneath just looks broken next to one that
    doesn't. */
 const wb = (bet, x) => [{ label: "When Bet", lines: true, ids: bet }, { label: "When Check", lines: true, ids: x }];
+const FLOP_SIZING_SECTION = { readLabSection: 'Flop Sizing', sizing: true,
+  rows: ['low', 'mid'].map(board => ({ label: `${board === 'low' ? 'Low' : 'Mid'} Board Sizing`, lines: true,
+    ids: ['srp', '3bp'].map(pot => {
+      const specs = FLOP_BOARD_SIZING.filter(r => r.board === board && r.pot === pot);
+      return { id: specs[0].id, label: pot.toUpperCase(), readLabGroup: specs[0].group,
+        chip: specs[0].label, chips: true, also: specs.slice(1).map(r => [r.id, r.label]) };
+    }) })) };
 const READ_LAYOUT = [
   /* No catch-all: this tab draws the streets and nothing else, so a read with
      no row here simply isn't on the Online tab. Every read still has a home on
@@ -218,6 +225,7 @@ const READ_LAYOUT = [
       { lines: true, ids: [{ label: "Float F", subs: [["f-float-oop", "OOP"], ["f-float-ip", "IP"]] }] },
       { lines: true, ids: [["raise-nuts-f", "Raise nuts"], ["bsti-f", "BSTI"], ["let-realize-f", "Let me Realize"], { id: "f-thin-xt-srp", label: "Thin XT F", chip: "SRP", chips: true, also: [["f-thin-xt-mwp", "MWP"], ["f-thin-xt-3bp", "3BP"]] }, { id: "f-xb-pfc-fd", label: "Check Back F", chip: "FD", chips: true, also: [["f-xb-pfc-sd", "SD"], ["f-xb-pfc-topp", "TopP"], ["f-xb-pfc-2p", "2P+"]] }, { id: "f-adv-board-bxt", label: "Adv. Board F", chip: "BXT", chips: true, also: [["f-adv-board-air", "Air"]] }] },
     ] },
+    FLOP_SIZING_SECTION,
   ] },
   { title: "Turn exploit", subs: [
     { label: "As PFR", rows: wb(["t-barrel2-freq-hu", "t-fold-to-xr-hu", { id: "t-barrel-air", label: "Barrels", chip: "Air", chips: true, also: [["t-barrel-equity", "Equity"], ["t-barrel-sdv", "SDV"], ["t-barrel-tight", "Tight"], ["t-barrel-one-done", "One&Done"], ["t-barrel-mergy", "Mergy"]] }, { id: "t-bluff-xb", label: "Bluff", chip: "XB Line", chips: true }, { id: "t-bcard-4str", label: "Turn Cards", chip: "4Str", chips: true, also: [["t-bcard-3flush", "3Flush"], ["t-bcard-4flush", "4Flush"], ["t-bcard-over", "Overcards"], ["t-bcard-blank", "Blank"]] }, { id: "t-low-boards-passive", label: "Low boards", chip: "Passive", chips: true, also: [["t-low-boards-aggro", "Aggro"]] }], ["punchbag-t-pfr", "t-hero-fold", "t-cb-gu", { id: "t-xr-pfr-nut", label: "xR", chip: "Nut", chips: true, also: [["t-xr-pfr-bluff", "Bluff"]] }]) },
@@ -321,6 +329,7 @@ const LIVE_LAYOUT = [
       { id: "f-attack-adv", label: "Attack", chip: "Adv. Brd.", chips: true, also: [["f-attack-disadv", "Dis. Adv"]] },
       { id: "have-lead-f-draw", label: "Lead", chip: "Draw", chips: true, also: [["have-lead-f-merge", "Merge"], ["have-lead-f-strong", "Strong"], ["have-lead-f-have", "Have"], ["have-lead-f-bluff", "Bluff"]] },
     ] }] },
+    FLOP_SIZING_SECTION,
   ] },
   { title: "Turn Exploit", subs: [
     { label: "As PFR", rows: [{ lines: true, ids: [
@@ -1314,23 +1323,23 @@ function renderReadLabGroups(o) {
   $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
     const street = cat.title.split(" ")[0];
     const roles = cat.subs.map(sub => {
-      const groups = sections.get(sub.label ? street + " · " + sub.label.slice(3) : cat.title);
+      const groups = sections.get(sub.readLabSection || (sub.label ? street + " · " + sub.label.slice(3) : cat.title));
       if (!groups?.size) return "";
       const rows = sub.rows.map(row => {
         const lines = row.ids.map(item => {
-          const names = item.label === "Open" ? ["Open wS", "Open nS"] : [item.label];
+          const names = item.label === "Open" ? ["Open wS", "Open nS"] : [item.readLabGroup || item.label];
           return names.map(name => {
             const entries = groups.get(name);
             if (!entries) return "";
             groups.delete(name);
-            return line(name, entries, item);
+            return line(item.readLabGroup ? item.label : name, entries, item);
           }).join("");
         }).join("");
         return lines ? (row.label ? `<span class="rslabel">${esc(row.label)}</span>` : "") +
           `<div class="readlines">${lines}</div>` : "";
       }).join("");
       const rest = [...groups].map(([name, entries]) => line(name, entries)).join("");
-      return `<div class="roleblk">${sub.label ? `<div class="rolehead">${esc(sub.label)}</div>` : ""}` +
+      return `<div class="roleblk${sub.sizing ? " rl-sizing-block" : ""}">${sub.label ? `<div class="rolehead">${esc(sub.label)}</div>` : ""}` +
         rows + (rest ? `<div class="readlines">${rest}</div>` : "") + "</div>";
     }).join("");
     if (!roles) return "";
@@ -3956,6 +3965,12 @@ function renderOppReads(o) {
   /* Controls only — the label is the row's job now, so every read in the tree
      lines up in the same two columns. `compact` is the matrix cell. */
   const readBtn = (id, lbl, compact) => {
+    if (readTab === 'online' && id.startsWith('f-board-sizing-')) {
+      const e = est[id], n = e?.n || 0, k = e?.k || 0;
+      return `<button type="button" class="chip mini rl-sizing-auto"${n ? ` data-estdrill="${id}"` : ''}
+        title="${esc(FLOP_BOARD_SIZING.find(r => r.id === id).definition)}"><b>${esc(lbl)}</b>
+        <small>${n ? +e.pct.toFixed(1) + '%' : '—'} · ${k}/${n}</small></button>`;
+    }
     const st = reads[id];
     if (isPositionRead(id)) {
       const active = readIsActive(id, st);
@@ -4181,7 +4196,7 @@ function renderOppReads(o) {
         `<div class="rchead"><button class="rcfold" data-rcfold="${esc(cat.title)}"
            aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${esc(cat.title)}"></button>${title}${bc}` +
         (n ? `<span class="rcn">${n}</span>` : "") + `</div>` +
-        (shut ? "" : subs.filter((sb) => shown(sb).length).map((sb) => `<div class="roleblk">` +
+        (shut ? "" : subs.filter((sb) => shown(sb).length).map((sb) => `<div class="roleblk${sb.sizing ? " rl-sizing-block" : ""}">` +
           (sb.label ? `<div class="rolehead">${esc(sb.label)}</div>` : "") +
           shown(sb).map(rowHTML).join("") + `</div>`).join("")) + `</section>`;
     }).join("");

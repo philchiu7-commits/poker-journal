@@ -457,6 +457,13 @@ const readEstimates = (() => {
     return out;
   }
 
+  for (const spec of FLOP_BOARD_SIZING)
+    S({ id: spec.id, grp: 'Flop sizing', rule: 'F', imp: true, def: spec.definition,
+      ch: F => {
+        if (!Object.hasOwn(F, 'boardSizing')) F.boardSizing = flopBoardSizing(F.h, F.me);
+        const b = F.boardSizing;
+        return b && b.board === spec.board && b.pot === spec.pot ? { ok: b.size === spec.size, why: b.why } : null;
+      } });
   const cache = new Map();          // oppId → { sig, out }
   /* { id: { k, n, pct, rule, def, ev: [{ h, ok, why }] } } for one player,
      recomputed only when that player's hands change. */

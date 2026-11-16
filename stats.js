@@ -882,6 +882,34 @@ function betsVsPot(h) {
   }
   return out;
 }
+/* One sizing observation per hand: first flop wager, never a raise. */
+function flopBoardSizing(h, actor) {
+  const board = (h.board || []).slice(0, 3);
+  if (board.length !== 3 || !board.every(c => typeof c === "string" && /^[2-9TJQKA][cdhs]$/.test(c)) ||
+      new Set(board).size !== 3) return null;
+  const high = Math.max(...board.map(c => "23456789TJQKA".indexOf(c[0]) + 2));
+  const texture = high <= 9 ? "low" : high <= 11 ? "mid" : null;
+  if (!texture) return null;
+  const played = actsAsPlayed(h);
+  const pre = preflopActionsWithLevels(played.filter(a => a.street === "pre"), preflopEntryPosts(h).price);
+  const level = pre.at(-1)?.levelAfter;
+  const pot = level === 1 ? "srp" : level === 2 ? "3bp" : null;
+  if (!pot) return null;
+  const flop = played.filter(a => a.street === "flop");
+  const first = flop.find(a => SZ_AGG.has(a.act));
+  if (!first || first.actor !== actor || isAllInCall(h, first) ||
+      flop.slice(0, flop.indexOf(first)).some(a => a.actor === actor && a.act === "fold")) return null;
+  const source = first.src || first;
+  const priced = betsVsPot(h).filter(e => e.a === source).at(-1);
+  if (!priced || priced.bad || priced.raise) return null;
+  const ratio = priced.ratio ?? (priced.pot > 0 ? priced.bet / priced.pot : null);
+  if (!Number.isFinite(ratio) || ratio <= 0 || ratio > SZ_MAX_POT) return null;
+  const size = [[.29,25],[.415,33],[.58,50],[.705,66],[.875,75],[1.25,100]]
+    .find(([upper]) => ratio <= upper)?.[1] ?? null;
+  return { board: texture, pot, size, ratio,
+    why: `${board.join(' ')} · ${pot.toUpperCase()} · bet ${+(ratio * 100).toFixed(1)}% pot${size ? ' · B' + size : ' · over 125%'}` };
+}
+
 /* Was the hand value or a bluff on the street he bet it? Strength only — a
    read on his cards, never on his thinking. Two pair or better is value, and so
    is top or second pair. Everything under that — third pair, bottom pair, a

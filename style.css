@@ -1882,3 +1882,17 @@ button.estn:active { color: var(--accent); }
 .rl-edit-field { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0; }
 .rl-edit-field input { width:110px; }
 #rl-issue { display:block; width:100%; margin:12px 0; }
+
+/* Board sizing spans both role columns; pairs stay together on narrow screens. */
+#rl-results .roleblk.rl-sizing-block { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+.rl-sizing-auto { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.rl-sizing-auto small { color: var(--muted); font-size: 10px; font-weight: 400; }
+
+#rl-results .rl-sizing-block .rlctl, #od-tags .rl-sizing-block .rlctl {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 64px)); gap: 2px; }
+@media (max-width: 600px) {
+  #rl-results .rl-sizing-block .rl-read-row { grid-template-columns: 40px minmax(0, 1fr); }
+  #od-tags .rl-sizing-block { grid-template-columns: 40px minmax(0, 1fr); }
+  #rl-results .rl-sizing-block .rlctl, #od-tags .rl-sizing-block .rlctl {
+    grid-template-columns: repeat(3, minmax(0, 72px)); }
+}
