@@ -539,13 +539,35 @@ function normaliseActionOrder(hand) {
   return true;
 }
 
+const SQUID_PLAYER_FIELDS = ["squid", "squidPresence", "squidPresenceEvidence"];
+const SQUID_IMPORT_FIELDS = ["squidCountsVerified", "squidStartEvidence", "squidCapacityVerified"];
+function correctionSquidState(hand, ids) {
+  const pick = (value, keys) => Object.fromEntries(keys.filter(k => Object.hasOwn(value, k)).map(k => [k, copyRec(value[k])]));
+  const players = new Map(hand.villains.map(v => [v.opponentId, v]));
+  return { players: ids.map(id => pick(players.get(id), SQUID_PLAYER_FIELDS)),
+    summary: copyRec(hand.squid ?? null), imported: pick(hand.imported, SQUID_IMPORT_FIELDS) };
+}
+function validSquidState(state, count) {
+  const only = (value, keys) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).every(k => keys.includes(k));
+  return only(state, ["players", "summary", "imported"]) && Array.isArray(state.players) && state.players.length === count &&
+    (state.summary === null || only(state.summary, ["have", "left"])) &&
+    only(state.imported, SQUID_IMPORT_FIELDS) &&
+    ["squidCountsVerified", "squidCapacityVerified"].every(k => !Object.hasOwn(state.imported, k) || typeof state.imported[k] === "boolean") &&
+    state.players.every(v => only(v, SQUID_PLAYER_FIELDS) &&
+      (v.squid == null || Number.isInteger(v.squid) && v.squid >= 0) &&
+      (!Object.hasOwn(v, "squidPresence") || typeof v.squidPresence === "boolean") &&
+      (!Object.hasOwn(v, "squidPresenceEvidence") || Array.isArray(v.squidPresenceEvidence)) &&
+      !(v.squid != null && typeof v.squidPresence === "boolean" && (v.squid > 0) !== v.squidPresence)) &&
+    (!state.imported.squidCountsVerified || state.players.every(v => v.squid != null));
+}
+
 function correctedHand(current, correction) {
   if (!current || current.imported?.tableId !== correction.tableId ||
       current.imported?.roundId !== correction.roundId || current.hero)
     return { status: "skipped" };
 
   const hand = copyRec(current);
-  const { betting, board, squid, squidPresence } = correction;
+  const { betting, board, squid, squidPresence, squidState } = correction;
   if (!Array.isArray(hand.villains) || !Array.isArray(hand.actions)) return { status: "skipped" };
   const players = new Map(hand.villains.map(v => [v.opponentId, v]));
   const matchesPlayers = (ids) => ids.length === players.size && ids.every(id => players.has(id));
@@ -622,6 +644,27 @@ function correctedHand(current, correction) {
         return { status: "skipped" };
       hand.board = board.after.slice();
       hand.imported.sourceBoardReview = board.evidence;
+      changed = true;
+    }
+  }
+
+  if (squidState) {
+    // A reviewed withdrawal must remove stale values, not silently retain them.
+    // Match the entire squid-only before state, including its exact provenance.
+    const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === "object"
+      ? Object.fromEntries(Object.keys(value).sort().map(k => [k, stable(value[k])])) : value;
+    const same = (a, b) => equal(stable(a), stable(b));
+    const present = correctionSquidState(hand, correction.players);
+    if (!same(present, squidState.after)) {
+      if (!squidState.before.some(before => same(present, before))) return { status: "skipped" };
+      correction.players.forEach((id, i) => {
+        const player = hand.villains.find(v => v.opponentId === id);
+        for (const key of SQUID_PLAYER_FIELDS) delete player[key];
+        Object.assign(player, copyRec(squidState.after.players[i]));
+      });
+      hand.squid = copyRec(squidState.after.summary);
+      for (const key of SQUID_IMPORT_FIELDS) delete hand.imported[key];
+      Object.assign(hand.imported, copyRec(squidState.after.imported));
       changed = true;
     }
   }
@@ -715,6 +758,11 @@ function remapCorrectionPlayers(corrections, sourceOpponents, existing) {
 }
 
 async function importHandCorrections(corrections, src, sourceOpponents = []) {
+  const validRevision = c => !c.squid && !c.squidPresence &&
+    Array.isArray(c.squidState.before) && c.squidState.before.length > 0 &&
+    c.squidState.before.every(s => validSquidState(s, c.players.length)) &&
+    validSquidState(c.squidState.after, c.players.length) &&
+    Array.isArray(c.squidState.evidence) && c.squidState.evidence.length > 0;
   const validBoard = board => {
     const validCards = cards => Array.isArray(cards) && cards.length === 5 &&
       cards.every(c => c === null || typeof c === "string" && /^[2-9TJQKA][cdhs]$/.test(c));
@@ -731,7 +779,8 @@ async function importHandCorrections(corrections, src, sourceOpponents = []) {
   if (!Array.isArray(corrections) || new Set(corrections.map(c => c?.id)).size !== corrections.length ||
       corrections.some(c => !c?.id || !c.tableId || !c.roundId || !Array.isArray(c.players) ||
         new Set(c.players).size !== c.players.length ||
-        (!c.betting && !c.board && !c.squid && !c.squidPresence) ||
+        (!c.betting && !c.board && !c.squid && !c.squidPresence && !c.squidState) ||
+        (c.squidState != null && !validRevision(c)) ||
         (c.board != null && !validBoard(c.board)) || (c.squidPresence != null && !validPresence(c)) ||
         (c.squidRetraction != null && (!validPresence(c) ||
           !Array.isArray(c.squidRetraction.counts) || c.squidRetraction.counts.length !== c.players.length ||
