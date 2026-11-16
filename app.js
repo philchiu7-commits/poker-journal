@@ -1225,8 +1225,9 @@ function readLabChip(r, label, state, flags, overridden) {
   if (r.mode === "rate") {
     const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
     return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(r.definition)}">
-      ${label === "Frequency" ? "" : esc(label) + " · "}<b>${percent}</b><small class="rl-stats"> · ${r.k}/${r.n}</small>
-      ${flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : ""}</button>`;
+      <span class="rl-read-name">${esc(label || "Frequency")}</span>
+      <span class="rl-chip-meta"><small class="rl-stats">${percent} · ${r.k}/${r.n}</small>
+      ${flags ? `<small class="rl-flag">${flags} flagged</small>` : ""}</span></button>`;
   }
   const positive = state === "Yes" || state === "Strong Yes";
   const negative = state === "No" || state === "Hard No";
@@ -1236,18 +1237,22 @@ function readLabChip(r, label, state, flags, overridden) {
   if (r.mode === "manual") {
     const title = `${r.label}: ${state}. Tap to cycle Yes, No, and unset.`;
     return `<button type="button" class="${cls}" data-lab-manual="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
-      `${esc(label ? label + (state === "Unset" ? "" : " · " + state) : state === "Unset" ? "–" : state)}` +
+      `<span class="rl-read-name">${esc(label || (state === "Unset" ? "–" : state))}</span>` +
+      (label && state !== "Unset" ? ` <small class="rl-read-verdict">${esc(state)}</small>` : "") +
       (state === "Unset" ? "" : '<small class="rl-manual-badge">Manual</small>') + "</button>";
   }
   const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
   const verdictLabel = state !== "Not established" ? state : !r.n ? "No eligible hands" :
     r.positiveOnly ? `Needs ${r.min} examples` : `Small sample`;
   const title = `${r.label}: ${verdictLabel}${overridden ? " (manual)" : ""} · ${percent} · ${r.k}/${r.n}${r.combined ? " · Combined squid" : ""}`;
-  return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}">` +
-    `<span>${esc(label ? label + " · " + verdictLabel : verdictLabel)}</span>` +
+  const provisional = state === "Not established";
+  return `<button type="button" class="${cls} rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(title)}" aria-label="${esc(title)}">` +
+    (label || !provisional ? `<span class="rl-chip-head">${label ? `<span class="rl-read-name">${esc(label)}</span>` : ""}` +
+      (!provisional ? `<small class="rl-read-verdict">${esc(verdictLabel)}</small>` : "") + "</span>" : "") +
+    `<span class="rl-chip-meta">${provisional ? `<small class="rl-read-status">${esc(verdictLabel)}</small>` : ""}` +
     (overridden ? '<small class="rl-manual-badge">Manual</small>' : "") +
-    `<small class="rl-stats"> · ${percent} · ${r.k}/${r.n}</small>` +
-    (flags ? `<small class="rl-flag"> · ${flags} flagged</small>` : "") + "</button>";
+    `<small class="rl-stats">${percent} · ${r.k}/${r.n}</small>` +
+    (flags ? `<small class="rl-flag">${flags} flagged</small>` : "") + "</span></button>";
 }
 
 function renderReadLabGroups(o) {

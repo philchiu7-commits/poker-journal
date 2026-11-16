@@ -1770,6 +1770,19 @@ button.estn:active { color: var(--accent); }
 .rl-auto.sstrong .rl-stats { color: inherit; }
 .rl-flag { font-size: 10px; color: #efbf69; }
 .rl-auto.sstrong .rl-flag { color: inherit; }
+/* Read names lead; sample status and supporting numbers stay secondary. */
+#rl-results .rllab { color: var(--text); font-size: 14px; font-weight: 600; }
+#rl-results .rl-auto { display: inline-flex; flex-direction: column; align-items: flex-start;
+  gap: 3px; padding: 7px 11px; border-radius: 12px; }
+#rl-results .rl-chip-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
+#rl-results .rl-read-name { color: var(--text); font-size: 13px; font-weight: 650; line-height: 1.3; }
+#rl-results .on .rl-read-name { color: inherit; }
+#rl-results .rl-read-verdict { font-size: 11px; font-weight: 600; line-height: 1.3; }
+#rl-results .rl-chip-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+#rl-results .rl-read-status, #rl-results .rl-stats { color: var(--muted); font-size: 10px;
+  font-weight: 400; line-height: 1.35; }
+#rl-results .sstrong .rl-chip-meta { color: inherit; opacity: .7; }
+#rl-results .sstrong .rl-chip-meta > * { color: inherit; }
 .rl-sample-controls { margin: 10px 0; }
 .rl-verdict { margin: 0 0 12px; }
 .rl-verdict .chiprow { margin-top: 5px; }
