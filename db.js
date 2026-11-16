@@ -653,7 +653,35 @@ function correctedHand(current, correction) {
   return { status: "corrected", hand };
 }
 
-function importHandCorrections(corrections, src) {
+// Corrections carry source identities, but imported hands may now use a merged
+// profile. Resolve only unique names/aliases; never create or change profiles.
+function remapCorrectionPlayers(corrections, sourceOpponents, existing) {
+  const ids = new Set(existing.map(o => o.id));
+  const matches = name => {
+    const key = normName(name);
+    if (!key) return [];
+    const live = existing.filter(o => normName(o.name) === key);
+    return live.length ? live : existing.filter(o => (o.aliases || []).some(a => normName(a) === key));
+  };
+  const remap = new Map();
+  for (const o of sourceOpponents) {
+    if (ids.has(o.id)) continue;
+    const found = matches(o.name);
+    if (found.length === 1) remap.set(o.id, found[0].id);
+  }
+  return corrections.map(original => {
+    const c = copyRec(original);
+    const mapped = c.players.map(id => remap.get(id) || id);
+    // A collapsed/ambiguous roster must fail the existing identity guard.
+    if (new Set(mapped).size !== mapped.length) return c;
+    c.players = mapped;
+    for (const state of [c.betting?.before, c.betting?.after])
+      if (state) state.seats = state.seats.map(([id, pos]) => [remap.get(id) || id, pos]);
+    return c;
+  });
+}
+
+async function importHandCorrections(corrections, src, sourceOpponents = []) {
   const validBoard = board => {
     const validCards = cards => Array.isArray(cards) && cards.length === 5 &&
       cards.every(c => c === null || typeof c === "string" && /^[2-9TJQKA][cdhs]$/.test(c));
@@ -673,6 +701,7 @@ function importHandCorrections(corrections, src) {
         (!c.betting && !c.board && !c.squid && !c.squidPresence) ||
         (c.board != null && !validBoard(c.board)) || (c.squidPresence != null && !validPresence(c))))
     throw new Error("Invalid hand corrections file");
+  corrections = remapCorrectionPlayers(corrections, sourceOpponents, await dbAll("opponents"));
   const counts = { corrected: 0, skipped: 0, already: 0 };
   const receipt = {
     id: "imp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), src: src || "",
@@ -725,7 +754,7 @@ async function importJSON(data, src) {
   if (sd) throw new Error(`Short-deck hands — ${sd}. They belong in the short-deck journal.`);
   if (!data || data.app !== "poker-journal" || !Array.isArray(data.opponents))
     throw new Error("Not a poker-journal export file");
-  if (data.handCorrections != null) return importHandCorrections(data.handCorrections, src);
+  if (data.handCorrections != null) return importHandCorrections(data.handCorrections, src, data.opponents);
   const counts = { opponents: 0, merged: 0, hands: 0, sessions: 0, ranges: 0 };
   const rc = { id: "imp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     ts: Date.now(), src: src || "", counts,
