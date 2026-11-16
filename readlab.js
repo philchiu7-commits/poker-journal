@@ -132,6 +132,11 @@ const ReadLab = (() => {
     return H.kicker >= kickers[1];
   };
   const raiseDraw = (H, F) => H.hasDraw && !raiseStrong(H, F);
+  const flopRaiseBucket = F => {
+    const H = holding(F, 'flop');
+    if (!H || H.ignored) return 'unknown';
+    return raiseStrong(H, F) ? 'value' : raiseDraw(H, F) ? 'draw' : H.bluff ? 'bluff' : 'other';
+  };
   const betDecision = (F, street) => eq(F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const checkDecision = (F, street) => eq(!F.st[street].bet, F.st[street].bet ? 'Bet' : 'Checked');
   const responseDecision = (street, matches) => {
@@ -166,7 +171,8 @@ const ReadLab = (() => {
   const flopRaiseDecision = (F, kind) => {
     const flop = F.st.flop;
     if (kind !== 'all' && !!flop.xrChance !== (kind === 'xr')) return null;
-    return raiseDecision(flop);
+    const decision = raiseDecision(flop);
+    return decision?.ok ? { ...decision, bucket: flopRaiseBucket(F) } : decision;
   };
   const callDecision = street => responseDecision(street, act => act === 'call');
   const raised = ['Raised', 'Did not raise'];

@@ -1258,6 +1258,9 @@ function renderReadLabGroups(o) {
   }
   const sections = new Map();
   for (const r of readLabResults) {
+    // Keep the familiar layout while the shared reads pool every preflop role.
+    // Flop ratios are intentionally hidden, including the limped-pot ratios.
+    if (r.mix || r.id.startsWith("pfr-xr-")) continue;
     if (readLabSquid !== "all" && r.squid && r.squid !== readLabSquid) continue;
     const manual = r.mode === "manual";
     const stat = r.mix || r.mode === "rate";
@@ -1276,8 +1279,11 @@ function renderReadLabGroups(o) {
       label = group.slice(5) + " " + label;
       group = "Cbet";
     }
-    if (!sections.has(r.section)) sections.set(r.section, new Map());
-    const groups = sections.get(r.section);
+    const section = r.section === "Flop · All roles" ? "Flop · PFR" :
+      r.section === "River · All roles" ?
+        (["Bluff hands", "Rivers"].includes(group) ? "River · PFR" : "River · PFC") : r.section;
+    if (!sections.has(section)) sections.set(section, new Map());
+    const groups = sections.get(section);
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push({ r, label, state, flags, overridden });
   }
@@ -1304,14 +1310,7 @@ function renderReadLabGroups(o) {
 
   $("rl-results").innerHTML = LIVE_LAYOUT.map(cat => {
     const street = cat.title.split(" ")[0];
-    const allRoles = sections.get(street + " · All roles");
-    const allRoleRows = allRoles?.size ?
-      '<div class="roleblk"><div class="rolehead">All preflop roles</div><div class="readlines">' +
-      [...allRoles].map(([group, entries]) => {
-        const item = cat.subs.flatMap(sub => sub.rows.flatMap(row => row.ids)).find(item => item.label === group);
-        return line(group, entries, item);
-      }).join("") + "</div></div>" : "";
-    const roles = allRoleRows + cat.subs.map(sub => {
+    const roles = cat.subs.map(sub => {
       const groups = sections.get(sub.label ? street + " · " + sub.label.slice(3) : cat.title);
       if (!groups?.size) return "";
       const rows = sub.rows.map(row => {
@@ -1465,9 +1464,10 @@ function readLabDetail(id, combo = null, showAll = false) {
   }).sort((a, b) => (rangeCheck ? Number(a.ok) - Number(b.ok) : Number(b.ok) - Number(a.ok)) ||
     (b.h.ts || 0) - (a.h.ts || 0));
   const chartHands = rangeCheck ? evidence.map(e => ({ ...e, ok: !e.ok })) : evidence;
+  const holdingColors = rate && evidence.some(e => e.bucket);
   const [yes, no] = rangeCheck ? ["Led or probed", "Checked"] : r.action || ["Supports", "Other outcome"];
   const chart = evidence.length || !betsOnly
-    ? evidenceChartHTML(o, null, chartHands, yes, no, r.label, { labRule: id, combo })
+    ? evidenceChartHTML(o, null, chartHands, yes, no, r.label, { labRule: id, combo, holdingColors })
     : "";
   const countLabel = rangeCheck ? "checked" : r.action ? r.action[0].toLowerCase() : "supporting";
   const scopeToggle = rangeCheck ? `<div class="rl-sample-controls">
@@ -1477,8 +1477,9 @@ function readLabDetail(id, combo = null, showAll = false) {
     betsOnly ? `Flop probes and leads · ${rows.length} ${rows.length === 1 ? "hand" : "hands"}` : "Eligible hands";
   const rowHTML = rows.map(e => {
     const highlight = rangeCheck ? !e.ok : e.ok;
-    const label = highlight ? yes : no;
-    return `<div class="rl-evidence"><b class="${highlight ? "rl-hit" : "muted"}">${label}</b>
+    const holdingStyle = holdingColors && highlight ? READ_LAB_HOLDINGS[e.bucket] : null;
+    const label = (highlight ? yes : no) + (holdingStyle ? " · " + holdingStyle.label : "");
+    return `<div class="rl-evidence"><b class="${highlight ? "rl-hit" : "muted"}"${holdingStyle ? ` style="color:${holdingStyle.color}"` : ""}>${label}</b>
       <div class="muted sub2">${esc(e.why)}</div>${handRowHTML(e.h,o.id)}
       <button class="linkbtn" data-lab-flag="${esc(id)}" data-lab-hand="${esc(e.id)}">Flag this classification</button></div>`;
   }).join("");
@@ -2489,7 +2490,15 @@ function evidenceHandClass(cards) {
   return handClass(cards);
 }
 
-function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = {}) {
+const READ_LAB_HOLDINGS = {
+  value: { label: "Strong", color: "#43cf94" },
+  bluff: { label: "Bluff", color: "#ff777a" },
+  draw: { label: "Draw", color: "#f2c35d" },
+  other: { label: "Other holding", color: "#a8b5c8" },
+  unknown: { label: "Unclassified", color: "#b5a1e3" },
+};
+
+function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo, holdingColors = false } = {}) {
   const cells = {};
   let shown = 0;
   for (const x of hands) {
@@ -2497,8 +2506,12 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
     const hc = evidenceHandClass(v?.cards);
     if (!hc) continue;                          // never shown, or squid cards
     shown++;
-    const e = cells[hc] = cells[hc] || { did: 0, miss: 0, ids: [] };
+    const e = cells[hc] = cells[hc] || { did: 0, miss: 0, ids: [], holdings: {} };
     e[x.ok ? "did" : "miss"]++;
+    if (holdingColors && x.ok) {
+      const bucket = READ_LAB_HOLDINGS[x.bucket] ? x.bucket : "unknown";
+      e.holdings[bucket] = (e.holdings[bucket] || 0) + 1;
+    }
     e.ids.push(x.h.id);
   }
   /* Every entry in the stream is one chance, so the hit rate over these hands
@@ -2518,14 +2531,25 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
     const inm = mset && mset.has(hc);
     const cls = "rgcell rng ro" + (e && (e.did || (e.miss && mhue)) ? " inr" : "")
       + (e && e.miss && !mhue ? " opp" : "") + (inm ? " mdl" : "");
-    const tip = hc + (inm ? ` · in the ${modelPct}% model range` : "")
+    const holdingTip = e && holdingColors ? Object.entries(e.holdings)
+      .map(([bucket, count]) => ` · ${READ_LAB_HOLDINGS[bucket].label} ${count}×`).join("") : "";
+    const tip = hc + holdingTip + (inm ? ` · in the ${modelPct}% model range` : "")
       + (e ? ` · ${e.did ? `${yes} ${e.did}×` : ""}${e.did && e.miss ? " · " : ""}${
         e.miss ? `${no} ${e.miss}×` : ""} · tap for the hand${e.ids.length === 1 ? "" : "s"}` : "");
     /* Played two ways is two facts, the same as the Ranges grid: half the cell
        each rather than the stronger action swallowing the other. */
-    const fill = !e ? null : e.did && e.miss && mhue
+    const holdingFill = e && holdingColors && e.did ? (() => {
+      let used = 0;
+      const parts = Object.entries(e.holdings).map(([bucket, count]) => {
+        const start = 100 * used / e.did;
+        used += count;
+        return `${READ_LAB_HOLDINGS[bucket].color} ${start}% ${100 * used / e.did}%`;
+      });
+      return `linear-gradient(90deg,${parts.join(",")})`;
+    })() : null;
+    const fill = holdingFill || (!e ? null : e.did && e.miss && mhue
       ? `linear-gradient(90deg,${hue} 0 50%,${mhue} 50% 100%)`
-      : e.did ? hue : e.miss && mhue ? mhue : null;
+      : e.did ? hue : e.miss && mhue ? mhue : null);
     const style = fill ? ` style="--fill:${fill}"` : inm ? ` style="--mdl:${tint}"` : "";
     if (labRule && e) {
       return `<button type="button" class="${cls}"${style} data-lab-chart-rule="${esc(labRule)}" data-lab-combo="${hc}" aria-pressed="${combo === hc}" title="${esc(tip)}" aria-label="${esc(tip)}">${hc}</button>`;
@@ -2539,11 +2563,13 @@ function evidenceChartHTML(o, stat, hands, yes, no, label, { labRule, combo } = 
     : "";
   return `<div class="hudchart" data-hclabel="${esc(label || "")}"><div class="rggrid">${grid}</div></div>
     <div class="rglegend hudleg">
-      <span class="rglegitem"><span class="rgswatch" style="background:${hue}"></span>${esc(yes)}</span>
+      ${holdingColors ? Object.values(READ_LAB_HOLDINGS).map(item =>
+        `<span class="rglegitem"><span class="rgswatch" style="background:${item.color}"></span>${item.label}</span>`).join("") :
+        `<span class="rglegitem"><span class="rgswatch" style="background:${hue}"></span>${esc(yes)}</span>`}
       <span class="rglegitem"><span class="rgswatch${mhue ? "" : " hudoppsw"}"${
         mhue ? ` style="background:${mhue}"` : ""}></span>${esc(no)}</span>
       ${mleg}
-      <span class="rglegnote">${foot}${labRule ? " · Tap a square for its hands" : ""}${model
+      <span class="rglegnote">${foot}${holdingColors ? " · Colors show the holding when raising; split colors mean different hands in the same square" : ""}${labRule ? " · Tap a square for its hands" : ""}${model
         ? model.informed ? " · Model uses recorded decisions and similar hands" : " · Model uses the default hand ordering" : ""}</span></div>`;
 }
 /* One square off a chart: the hands behind it. A single hand opens straight

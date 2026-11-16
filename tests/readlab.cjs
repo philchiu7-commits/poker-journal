@@ -333,6 +333,11 @@ for (const [id, k, n] of [['pfr-xr-rate', 1, 1], ['pfc-xrr-rate', 6, 8], ['pfc-x
   assert.deepEqual([rule.k, rule.n, rule.pct], [k, n, 100 * k / n]);
 }
 assert.ok(find(rates, 'pfc-xr-rate').ev.some(e => e.id === 'caller-xr-unknown' && e.ok));
+assert.deepEqual(Array.from(find(rates, 'pfc-xrr-rate').ev.filter(e => e.ok), e => [e.id, e.bucket]), [
+  ['caller-xr-value', 'value'], ['caller-xr-air', 'bluff'], ['caller-xr-draw', 'draw'],
+  ['caller-xr-other', 'other'], ['caller-xr-unknown', 'unknown'], ['caller-direct-value', 'value'],
+]);
+assert.ok(find(rates, 'pfc-xrr-rate').ev.filter(e => !e.ok).every(e => !e.bucket));
 assert.equal(find(results([...raiseMixSample, callerFold], {squid:'have'}), 'pfc-xr-rate').n, 0);
 assert.equal(find(results([holdingRaise('limp', null, ['9c','5d','2h'], 'limp-xr')]), 'limp-xr-rate').k, 1);
 const limpedRaiseMix = results(raiseMixSample.concat([
