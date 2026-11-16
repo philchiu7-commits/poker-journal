@@ -1225,7 +1225,7 @@ function readLabChip(r, label, state, flags, overridden) {
   if (r.mode === "rate") {
     const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
     return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(r.definition)}">
-      <span class="rl-read-name">${esc(label || "Frequency")}</span>
+      <span class="rl-read-name">${esc(label === "xR" ? "xR%" : label || "Frequency")}</span>
       <span class="rl-chip-meta"><small class="rl-stats">${percent} · ${r.k}/${r.n}</small>
       ${flags ? `<small class="rl-flag">${flags} flagged</small>` : ""}</span></button>`;
   }
