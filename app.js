@@ -1263,9 +1263,10 @@ function renderReadLabGroups(o) {
   }
   const sections = new Map();
   for (const r of readLabResults) {
-    // Keep the familiar layout while the shared reads pool every preflop role.
-    // Flop ratios are intentionally hidden, including the limped-pot ratios.
-    if (r.mix || r.id.startsWith("pfr-xr-")) continue;
+    // Flop xR holdings stay role-specific. Put both role frequencies together,
+    // without the pooled or direct-raise frequency chips.
+    if (r.mix || r.id.startsWith("flop-xr-") ||
+        ["pfc-xrr-rate", "pfc-r-rate"].includes(r.id)) continue;
     if (readLabSquid !== "all" && r.squid && r.squid !== readLabSquid) continue;
     const manual = r.mode === "manual";
     const stat = r.mix || r.mode === "rate";
@@ -1284,8 +1285,8 @@ function renderReadLabGroups(o) {
       label = group.slice(5) + " " + label;
       group = "Cbet";
     }
-    const section = r.section === "Flop · All roles" ? "Flop · PFR" :
-      r.section === "River · All roles" ?
+    if (r.id === "pfr-xr-rate") group = "xR or R";
+    const section = r.id === "pfr-xr-rate" ? "Flop · PFC" : r.section === "River · All roles" ?
         (["Bluff hands", "Rivers"].includes(group) ? "River · PFR" : "River · PFC") : r.section;
     if (!sections.has(section)) sections.set(section, new Map());
     const groups = sections.get(section);

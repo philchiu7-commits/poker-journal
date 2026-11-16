@@ -267,12 +267,13 @@ const ReadLab = (() => {
     F => F.pfr && position(F, 'flop') === 'OOP' && F.st.flop.can && checkDecision(F, 'flop'),
     H => H.strong || (H.pair && H.above === 1), checked);
   const flopAllRoles = 'Flop · All roles';
+  const flopExploitXr = F => !limpMw(F) && flopRaiseDecision(F, 'xr');
   const flopXrHoldings = [
     ['Air', H => H.air], ['Draw', raiseDraw], ['BottomP / 2ndP', H => H.kind === 'pair'], ['Strong', raiseStrong],
   ];
   for (const [label, pred] of flopXrHoldings) {
     holdingCap('flop-xr-' + label, flopAllRoles, 'xR · ' + label, 'flop',
-      F => flopRaiseDecision(F, 'xr'), pred, ['Check-raised', 'Did not raise'], xrCapability);
+      flopExploitXr, pred, ['Check-raised', 'Did not raise'], xrCapability);
     holdingCap('pfr-xr-' + label, 'Flop · PFR', 'xR · ' + label, 'flop',
       F => F.pfr && post(F) && F.st.flop.xrChance && raiseDecision(F.st.flop),
       pred, ['Check-raised', 'Did not raise'], xrCapability);
@@ -286,7 +287,9 @@ const ReadLab = (() => {
     const definition = kind === 'xr' ? 'Flop check-raises out of chances to raise after checking.' :
       kind === 'r' ? 'Flop raises out of chances to raise without first checking.' :
       'Flop raises and check-raises out of all chances to raise.';
-    rate(id, section, label, definition, F => (!role || F[role] && post(F)) && flopRaiseDecision(F, kind),
+    const scope = role === 'pfr' ? ' As the last preflop raiser, in raised pots only.' :
+      role === 'pfc' ? ' As a preflop caller, in raised pots only.' : '';
+    rate(id, section, label, definition + scope, F => (!role || F[role] && post(F)) && flopRaiseDecision(F, kind),
       kind === 'xr' ? ['Check-raised', 'Did not raise'] : raised);
   }
   function flopRaiseMix(id, section, label, eligible, kind) {
@@ -299,12 +302,14 @@ const ReadLab = (() => {
       return { ok: bucket === 'value', bucket, why: H.why + (flop.xrChance ? ' · Check-raised' : ' · Raised without checking') };
     }, { mode: 'mix' });
   }
-  flopRaiseRate('flop-xr-rate', flopAllRoles, 'xR · xR', null, 'xr');
-  flopRaiseRate('pfr-xr-rate', 'Flop · PFR', 'xR · xR', 'pfr', 'xr');
+  rate('flop-xr-rate', flopAllRoles, 'xR · xR',
+    'Flop check-raises out of chances to raise after checking.', flopExploitXr,
+    ['Check-raised', 'Did not raise']);
+  flopRaiseRate('pfr-xr-rate', 'Flop · PFR', 'xR · xR% PFR', 'pfr', 'xr');
   flopRaiseRate('pfc-xrr-rate', 'Flop · PFC', 'xR or R · Combined', 'pfc', 'all');
-  flopRaiseRate('pfc-xr-rate', 'Flop · PFC', 'xR or R · xR only', 'pfc', 'xr');
+  flopRaiseRate('pfc-xr-rate', 'Flop · PFC', 'xR or R · xR% PFC', 'pfc', 'xr');
   flopRaiseRate('pfc-r-rate', 'Flop · PFC', 'xR or R · R only', 'pfc', 'r');
-  flopRaiseMix('flop-xr-mix', flopAllRoles, 'xR · Mix', () => true, 'xr');
+  flopRaiseMix('flop-xr-mix', flopAllRoles, 'xR · Mix', F => !limpMw(F), 'xr');
   flopRaiseMix('limp-xr-mix', 'MWP Limp', 'xR · Mix', limpMw, 'xr');
   flopRaiseMix('pfr-xr-mix', 'Flop · PFR', 'xR · Mix', F => F.pfr && post(F), 'xr');
   const raisedPotCaller = F => F.pfc && post(F);
@@ -314,7 +319,7 @@ const ReadLab = (() => {
   for (const s of ['flop', 'turn']) {
     const section = s === 'flop' ? 'Flop · PFC' : 'Turn · PFC';
     const bxtChance = F => F.pfc && post(F) && F.st[s].bxtChance;
-    rate('bxt-rate-' + s, section, 'BXT · Frequency',
+    rate('bxt-rate-' + s, section, 'BXT · BXT%',
       'Bets out of opportunities after the prior aggressor checked on the ' + s + '.',
       F => bxtChance(F) && betDecision(F, s), bet);
     const bluffShare = F => {
@@ -536,6 +541,8 @@ const ReadLab = (() => {
     if (/^river-(hand|card|type)-/.test(r.id)) r.definition += ' Turn check-calls are excluded.';
     if ([flopAllRoles, riverAllRoles].includes(r.section) && r.mode !== 'manual')
       r.definition += ' Includes raisers, callers and limped pots.';
+    if (r.id.startsWith('flop-xr-'))
+      r.definition += ' Excludes multiway limped pots, which have their own MWP Limp reads.';
     if (r.id === 'river-raise') r.definition += ' Includes check-raises and reraises. Each hand counts once.';
     if (r.id === 'river-hand-FD') r.definition += ' Flush draw on both flop and turn that missed on the river.';
     if (r.id === 'river-hand-BDFD') r.definition += ' Backdoor flush draw on the flop that became a flush draw on the turn and missed on the river.';

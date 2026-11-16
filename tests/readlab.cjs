@@ -347,6 +347,15 @@ const limpedRaiseMix = results(raiseMixSample.concat([
 ]));
 assert.deepEqual(plain(find(limpedRaiseMix, 'limp-xr-mix').mix), {value:1, bluff:1, draw:1, other:0});
 assert.equal(find(limpedRaiseMix, 'pfc-xrr-mix').n, combinedRaiseMix.n);
+for (const before of mixes.filter(r => /^(flop-xr-|pfr-xr-|pfc-xr-)/.test(r.id))) {
+  const after = find(limpedRaiseMix, before.id);
+  assert.deepEqual([after.k, after.n], [before.k, before.n], before.id);
+  assert.ok(after.ev.every(e => !e.id.startsWith('limper-')), before.id);
+}
+assert.deepEqual(Array.from(find(limpedRaiseMix, 'pfr-xr-rate').ev, e => e.id), ['opener-xr-value']);
+assert.ok(find(limpedRaiseMix, 'pfc-xr-rate').ev.every(e => e.id.startsWith('caller-')));
+assert.equal(find(limpedRaiseMix, 'limp-xr-rate').k, 3);
+console.log('PASS: flop exploit xR excludes MWP Limp evidence and keeps PFR and PFC samples separate.');
 console.log('PASS: overall flop raise frequencies by role and type, with calls, folds, unknown cards and squid filtering.');
 
 function turnBarrel(id, cards, action, board = ['9c', '6d', '2s', '3s', null]) {
