@@ -1211,7 +1211,7 @@ function readLabChip(r, label, state, flags, overridden) {
     return [["yes", "Yes", "sgreen"], ["no", "No", "sred"]].map(([value, word, color]) => {
       const selected = state === word;
       return `<button type="button" class="chip mini${selected ? " on " + color : ""}" data-lab-manual="${esc(r.id)}"
-        data-lab-choice="${value}" aria-pressed="${selected}" aria-label="${esc(r.label + " " + word)}">${word}` +
+        data-lab-choice="${value}" aria-pressed="${selected}" aria-label="${esc(r.label + " " + word)}"><span class="rl-read-name">${word}</span>` +
         (selected ? '<small class="rl-manual-badge">Manual</small>' : "") + "</button>";
     }).join("");
   }
