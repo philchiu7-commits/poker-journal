@@ -462,7 +462,8 @@ const readEstimates = (() => {
       ch: F => {
         if (!Object.hasOwn(F, 'boardSizing')) F.boardSizing = flopBoardSizing(F.h, F.me);
         const b = F.boardSizing;
-        return b && b.board === spec.board && b.pot === spec.pot ? { ok: b.size === spec.size, why: b.why } : null;
+        return b && b.board === spec.board && b.pot === spec.pot && (!spec.kind || b.kind === spec.kind)
+          ? { ok: b.size === spec.size, why: b.why } : null;
       } });
   const cache = new Map();          // oppId → { sig, out }
   /* { id: { k, n, pct, rule, def, ev: [{ h, ok, why }] } } for one player,

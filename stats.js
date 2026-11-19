@@ -888,8 +888,7 @@ function flopBoardSizing(h, actor) {
   if (board.length !== 3 || !board.every(c => typeof c === "string" && /^[2-9TJQKA][cdhs]$/.test(c)) ||
       new Set(board).size !== 3) return null;
   const high = Math.max(...board.map(c => "23456789TJQKA".indexOf(c[0]) + 2));
-  const texture = high <= 9 ? "low" : high <= 11 ? "mid" : null;
-  if (!texture) return null;
+  const texture = high <= 9 ? "low" : high <= 11 ? "mid" : "high";
   const played = actsAsPlayed(h);
   const pre = preflopActionsWithLevels(played.filter(a => a.street === "pre"), preflopEntryPosts(h).price);
   const level = pre.at(-1)?.levelAfter;
@@ -906,8 +905,16 @@ function flopBoardSizing(h, actor) {
   if (!Number.isFinite(ratio) || ratio <= 0 || ratio > SZ_MAX_POT) return null;
   const size = [[.29,25],[.415,33],[.58,50],[.705,66],[.875,75],[1.25,100]]
     .find(([upper]) => ratio <= upper)?.[1] ?? null;
-  return { board: texture, pot, size, ratio,
-    why: `${board.join(' ')} · ${pot.toUpperCase()} · bet ${+(ratio * 100).toFixed(1)}% pot${size ? ' · B' + size : ' · over 125%'}` };
+  /* Value and bluff are a separate question from the unclassified size. No
+     cards, or cards that don't grade, leave kind empty so the old size id
+     still counts the bet and neither V nor B claims it. */
+  const seat = /^v(\d+)$/.exec(String(actor || ""));
+  const who = seat && (h.villains || [])[Number(seat[1])];
+  const hole = ((who && who.cards) || []).filter(Boolean);
+  const grade = madeClass(hole, board);
+  const kind = grade === "V" || grade === "V2" ? "v" : grade === "B" ? "b" : null;
+  return { board: texture, pot, size, ratio, kind,
+    why: `${board.join(' ')} · ${pot.toUpperCase()} · bet ${+(ratio * 100).toFixed(1)}% pot${size ? ' · B' + size : ' · over 125%'}${kind === "v" ? " · value" : kind === "b" ? " · bluff" : ""}` };
 }
 
 /* Was the hand value or a bluff on the street he bet it? Strength only — a

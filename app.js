@@ -169,12 +169,21 @@ const readChip = (id, state) => {
    doesn't. */
 const wb = (bet, x) => [{ label: "When Bet", lines: true, ids: bet }, { label: "When Check", lines: true, ids: x }];
 const FLOP_SIZING_SECTION = { readLabSection: 'Flop Sizing', sizing: true,
-  rows: ['low', 'mid'].map(board => ({ label: `${board === 'low' ? 'Low' : 'Mid'} Board Sizing`, lines: true,
-    ids: ['srp', '3bp'].map(pot => {
-      const specs = FLOP_BOARD_SIZING.filter(r => r.board === board && r.pot === pot);
-      return { id: specs[0].id, label: pot.toUpperCase(), readLabGroup: specs[0].group,
-        chip: specs[0].label, chips: true, also: specs.slice(1).map(r => [r.id, r.label]) };
-    }) })) };
+  rows: ['low', 'mid', 'high'].flatMap(board => [
+    { id: '', mark: '' },
+    { id: 'v', mark: 'V', aria: 'Value' },
+    { id: 'b', mark: 'B', aria: 'Bluff' },
+  ].map(kind => {
+    const name = board === 'low' ? 'Low' : board === 'mid' ? 'Mid' : 'High';
+    return { label: kind.mark ? `${name} ${kind.mark}` : `${name} Board Sizing`,
+      ...(kind.aria ? { aria: `${name} board sizing, ${kind.aria}`, title: kind.aria } : {}),
+      lines: true,
+      ids: ['srp', '3bp'].map(pot => {
+        const specs = FLOP_BOARD_SIZING.filter(r => r.board === board && r.pot === pot && (r.kind || '') === kind.id);
+        return { id: specs[0].id, label: pot.toUpperCase(), readLabGroup: specs[0].group,
+          chip: specs[0].label, chips: true, also: specs.slice(1).map(r => [r.id, r.label]) };
+      }) };
+  })) };
 const READ_LAYOUT = [
   /* No catch-all: this tab draws the streets and nothing else, so a read with
      no row here simply isn't on the Online tab. Every read still has a home on
@@ -1233,7 +1242,9 @@ function readLabChip(r, label, state, flags, overridden) {
   }
   if (r.mode === "rate") {
     const percent = r.pct == null ? "—" : +r.pct.toFixed(1) + "%";
-    return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(r.definition)}">
+    const access = r.id.startsWith("f-board-sizing-")
+      ? ` aria-label="${esc(`${r.label}, ${percent}, ${r.k} of ${r.n}`)}"` : "";
+    return `<button type="button" class="chip mini rl-auto" data-lab-rule="${esc(r.id)}" title="${esc(r.definition)}"${access}>
       <span class="rl-read-name">${esc(label === "xR" ? "xR%" : label || "Frequency")}</span>
       <span class="rl-chip-meta"><small class="rl-stats">${percent} · ${r.k}/${r.n}</small>
       ${flags ? `<small class="rl-flag">${flags} flagged</small>` : ""}</span></button>`;
@@ -1335,7 +1346,7 @@ function renderReadLabGroups(o) {
             return line(item.readLabGroup ? item.label : name, entries, item);
           }).join("");
         }).join("");
-        return lines ? (row.label ? `<span class="rslabel">${esc(row.label)}</span>` : "") +
+        return lines ? (row.label ? `<span class="rslabel"${row.aria ? ` aria-label="${esc(row.aria)}"` : ""}${row.title ? ` title="${esc(row.title)}"` : ""}>${esc(row.label)}</span>` : "") +
           `<div class="readlines">${lines}</div>` : "";
       }).join("");
       const rest = [...groups].map(([name, entries]) => line(name, entries)).join("");
@@ -4011,10 +4022,12 @@ function renderOppReads(o) {
      lines up in the same two columns. `compact` is the matrix cell. */
   const readBtn = (id, lbl, compact) => {
     if (readTab === 'online' && id.startsWith('f-board-sizing-')) {
+      const spec = FLOP_BOARD_SIZING.find(r => r.id === id);
       const e = est[id], n = e?.n || 0, k = e?.k || 0;
+      const pct = n ? +e.pct.toFixed(1) + '%' : '—';
       return `<button type="button" class="chip mini rl-sizing-auto"${n ? ` data-estdrill="${id}"` : ''}
-        title="${esc(FLOP_BOARD_SIZING.find(r => r.id === id).definition)}"><b>${esc(lbl)}</b>
-        <small>${n ? +e.pct.toFixed(1) + '%' : '—'} · ${k}/${n}</small></button>`;
+        title="${esc(spec.definition)}" aria-label="${esc(`${spec.group} ${lbl}, ${pct}, ${k} of ${n}`)}"><b>${esc(lbl)}</b>
+        <small>${pct} · ${k}/${n}</small></button>`;
     }
     const st = reads[id];
     if (isPositionRead(id)) {
@@ -4084,12 +4097,14 @@ function renderOppReads(o) {
       return `<div class="bubbles">${opts}${clr}</div>`;
     }
     // on a line the row label already names the read, so the chip shows the state
+    const sizingSpec = id.startsWith("f-board-sizing-") ? FLOP_BOARD_SIZING.find(r => r.id === id) : null;
+    const sizingAria = sizingSpec ? ` aria-label="${esc(sizingSpec.group + " " + lbl)}"` : "";
     return estBadge(id, lbl, !compact, compact
       ? `<button class="chip mini pline${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}"` +
-        ` title="${esc(lbl)}">${st ? esc(STATE_WORD[st] || st) : "–"}</button>`
+        ` title="${esc(lbl)}"${sizingAria}>${st ? esc(STATE_WORD[st] || st) : "–"}</button>`
       /* a chip whose word is Yes answers in the word as well as the colour:
          Yes / Yes! green, No / No! red (Phil, 2026-10-05) */
-      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}">${esc((lbl === "Yes" || lbl === "No") && STATE_WORD[st] ? STATE_WORD[st] : lbl)}</button>`);
+      : `<button class="chip mini${st ? " on " + STATE_CLASS[st] : ""}" data-tag="${id}"${sizingAria}>${esc((lbl === "Yes" || lbl === "No") && STATE_WORD[st] ? STATE_WORD[st] : lbl)}</button>`);
   };
   /* The hands' own answer beside Phil's: a % off the shown hands, tap for all.
      The hover lives on the words that name the read — the row label, a cap, or
@@ -4203,7 +4218,7 @@ function renderOppReads(o) {
           `<div class="rlctl${wide(x)}${gridCols(x) ? " rlgrid" : ""}"${gridCols(x) ? ` style="--cols:${gridCols(x)}"` : ""}>${body}</div>`;
       }).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
-      return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel">${esc(r.label)}</span>` : ""}` +
+      return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel"${r.aria ? ` aria-label="${esc(r.aria)}"` : ""}${r.title ? ` title="${esc(r.title)}"` : ""}>${esc(r.label)}</span>` : ""}` +
         (lines ? `<div class="readlines">${lines}</div>` : "") +
         (chips ? `<div class="chiprow readwrap">${chips}</div>` : "") +
         (lines || chips ? "" : `<span class="chipnote">—</span>`) + `</div>`;
