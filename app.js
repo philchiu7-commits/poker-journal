@@ -3327,6 +3327,51 @@ function isConvertibleNote(text) {
   return !!(v0.pos || (v0.cards || []).some(Boolean) || (d.board || []).some(Boolean) || (d.actions || []).length);
 }
 
+/* A saved exploit becomes one new note. The live record stays as it is until
+   commitExploitMove's save resolves — a failed put must not drop the exploit
+   or grow a second copy of the text. */
+function exploitToNote(o, expId, stamp) {
+  const exploits = Array.isArray(o.exploits) ? o.exploits : [];
+  const exp = exploits.find((x) => x && x.id === expId);
+  if (!exp || !String(exp.text ?? "").trim()) return null;
+  const note = { id: stamp.id, ts: stamp.ts, text: exp.text, handId: null };
+  const next = {
+    ...o,
+    notes: [note, ...(Array.isArray(o.notes) ? o.notes : [])],
+    exploits: exploits.filter((x) => x && x.id !== expId),
+    updatedAt: stamp.ts,
+  };
+  if (Array.isArray(o.featured) || o.pinnedExploit === expId) {
+    const featured = Array.isArray(o.featured)
+      ? o.featured
+      : [{ type: "exploit", id: o.pinnedExploit }];
+    next.featured = featured.filter((it) => !(it && it.type === "exploit" && it.id === expId));
+  }
+  if (o.pinnedExploit === expId) next.pinnedExploit = "";
+  return next;
+}
+async function commitExploitMove(o, expId, put, stamp) {
+  const key = String(o && o.id) + "\0" + String(expId);
+  if (commitExploitMove.pending.has(key)) return { ok: false, reason: "duplicate" };
+  const next = exploitToNote(o, expId, stamp);
+  if (!next) return { ok: false, reason: "missing" };
+  commitExploitMove.pending.add(key);
+  try {
+    await put("opponents", next);
+    o.notes = next.notes;
+    o.exploits = next.exploits;
+    o.updatedAt = next.updatedAt;
+    if (Array.isArray(next.featured)) o.featured = next.featured;
+    if (Object.prototype.hasOwnProperty.call(next, "pinnedExploit")) o.pinnedExploit = next.pinnedExploit;
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: "failed" };
+  } finally {
+    commitExploitMove.pending.delete(key);
+  }
+}
+commitExploitMove.pending = new Set();
+
 /* Short chip label for a long exploit when no explicit abbr is typed. */
 function autoShort(text) {
   const words = String(text || "").trim().split(/\s+/);
@@ -4798,6 +4843,7 @@ function renderOppDetail(id) {
             <button class="chip mini confcycle${(n.conf ?? 0) === 0 ? " off" : ""}" data-expconfcycle title="Confidence 0–5 · tap to cycle">${n.conf ?? 0}</button>
             <button class="chip mini pinbtn${onCard ? " on" : ""}" data-exphide title="Put this exploit on the opponent's front-page card">${onCard ? "👁 On front" : "＋ Front"}</button>
             <button class="chip mini adjbtn${n.adj ? " on" : ""}" data-expadj title="Does this player adjust when you use this?">Adj.</button>
+            <button class="chip mini expnote" data-exptonote title="Move to notes" aria-label="Move to notes">📝</button>
             <button class="chip mini" data-expedit>Edit</button>
             <button class="chip mini" data-expdel>Delete</button>
           </div></div>`;
@@ -8168,6 +8214,10 @@ function bindStatic() {
       const n = (o.exploits || []).find((x) => x.id === id);   // cycle 0→1→2→3→4→5→0 confidence
       if (n) { n.conf = (((n.conf ?? 0) + 1) % 6); o.updatedAt = Date.now(); await dbPut("opponents", o); }
       renderOppDetail(curOppId);
+    } else if (e.target.closest("[data-exptonote]")) {
+      const moved = await commitExploitMove(o, id, dbPut, { id: uid(), ts: Date.now() });
+      if (moved.ok) renderOppDetail(curOppId);
+      else if (moved.reason === "failed") toast("Couldn't move that exploit — it's still here");
     } else if (e.target.closest("[data-expdel]")) {
       if (!confirm("Delete this exploit?")) return;
       o.exploits = (o.exploits || []).filter((n) => n.id !== id);

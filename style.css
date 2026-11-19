@@ -205,6 +205,8 @@ button.danger {
 .noteitem .when { color: var(--muted); font-size: 11px; }
 .notetext { white-space: pre-wrap; word-break: break-word; }
 .noterowbtns { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+#od-exploits .noterowbtns { flex-wrap: wrap; }
+.chip.mini.expnote { padding: 5px 8px; }
 .noterowbtns .when { margin-right: auto; }
 textarea.noteedit { margin-bottom: 0; }
 #od-exsugg { margin-bottom: 6px; }
