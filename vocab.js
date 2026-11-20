@@ -68,13 +68,34 @@ const SIZING_STEP_BY_ID = Object.fromEntries([...SIZING_STEPS, SIZING_3BET_OVER]
 const SIZING_ROW_BY_ID = Object.fromEntries(SIZING_ROWS.map((r) => [r.id, r]));
 const SIZING_3BET_ROW_BY_ID = Object.fromEntries(SIZING_3BET_ROWS.map((r) => [r.id, r]));
 
-/* Shared definitions keep Live, Online and Read Lab sizing rows aligned. */
-const FLOP_BOARD_SIZING = ['low', 'mid'].flatMap(board => ['srp', '3bp'].flatMap(pot =>
-  [25, 33, 50, 66, 75, 100].map(size => ({
-    id: `f-board-sizing-${board}-${pot}-${size}`, board, pot, size,
-    group: `${board === 'low' ? 'Low' : 'Mid'} Board Sizing ${pot.toUpperCase()}`,
-    label: `B${size}`,
-    definition: `${board === 'low' ? '9-high or lower' : 'T-high or J-high'} flops in ${pot === 'srp' ? 'single-raised' : 'exactly 3-bet'} pots. Share of this player's first flop bets at this size, across all preflop roles and table sizes. Imported hands only; hole cards optional. Excludes raises, limped pots, 4-bet+ pots and unpriceable bets. Nearest size bucket: boundaries 29%, 41.5%, 58%, 70.5%, 87.5%, 125%. Bets above 125% stay in the denominator but not these six buckets.`
+/* Shared definitions keep Live, Online and Read Lab sizing rows aligned.
+   A size saved before Value/Bluff exists stays on `f-board-sizing-<board>-<pot>-<size>`.
+   That id has no kind, and nothing copies it onto the `-v-` or `-b-` ids. */
+const FLOP_BOARD_NAMES = { low: "Low", mid: "Mid", high: "High" };
+const FLOP_BOARD_TEXTURE = {
+  low: "9-high or lower",
+  mid: "T-high or J-high",
+  high: "Q-high or higher",
+};
+const FLOP_BOARD_KINDS = [
+  { id: "", word: "" },
+  { id: "v", word: "Value" },
+  { id: "b", word: "Bluff" },
+];
+const FLOP_BOARD_SIZING = ["low", "mid", "high"].flatMap(board => ["srp", "3bp"].flatMap(pot =>
+  FLOP_BOARD_KINDS.flatMap(kind => [25, 33, 50, 66, 75, 100].map(size => {
+    const sample = kind.id === "v"
+      ? "Share of this player's first flop value bets at this size. Value is two pair or better, or top or second pair made with his own cards; a draw with one of those pairs still counts as value. Graded from shown cards. Unknown or unreadable holdings are excluded."
+      : kind.id === "b"
+      ? "Share of this player's first flop bluff bets at this size. A bluff is no pair of his own, or a pair worse than second pair. Graded from shown cards. Unknown or unreadable holdings are excluded."
+      : "Share of this player's first flop bets at this size, across all preflop roles and table sizes. Imported hands only; hole cards optional.";
+    return {
+      id: `f-board-sizing-${board}-${pot}${kind.id ? "-" + kind.id : ""}-${size}`,
+      board, pot, kind: kind.id || null, size,
+      group: `${FLOP_BOARD_NAMES[board]} Board Sizing ${pot.toUpperCase()}${kind.word ? " " + kind.word : ""}`,
+      label: `B${size}`,
+      definition: `${FLOP_BOARD_TEXTURE[board]} flops in ${pot === "srp" ? "single-raised" : "exactly 3-bet"} pots. ${sample} Excludes raises, limped pots, 4-bet+ pots and unpriceable bets. Nearest size bucket: boundaries 29%, 41.5%, 58%, 70.5%, 87.5%, 125%. Bets above 125% stay in the denominator but not these six buckets.`,
+    };
   }))));
 
 const RANKS = "AKQJT98765432";

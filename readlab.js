@@ -182,11 +182,16 @@ const ReadLab = (() => {
   const rate = (id, section, label, definition, test, action) =>
     add(id, section, label, definition + ' Includes imported hands with unknown hole cards.', test, { mode: 'rate', action });
   for (const spec of FLOP_BOARD_SIZING)
-    rate(spec.id, 'Flop Sizing', `${spec.group} · ${spec.label}`, spec.definition, F => {
-      if (!Object.hasOwn(F, 'boardSizing')) F.boardSizing = flopBoardSizing(F.h, F.me);
-      const b = F.boardSizing;
-      return b && b.board === spec.board && b.pot === spec.pot ? eq(b.size === spec.size, b.why) : null;
-    }, ['This size', 'Other size']);
+    add(spec.id, 'Flop Sizing', `${spec.group} · ${spec.label}`,
+      spec.definition + (spec.kind
+        ? ' Shown cards only; unknown or unreadable holdings are not counted as Value or Bluff.'
+        : ' Includes imported hands with unknown hole cards.'),
+      F => {
+        if (!Object.hasOwn(F, 'boardSizing')) F.boardSizing = flopBoardSizing(F.h, F.me);
+        const b = F.boardSizing;
+        return b && b.board === spec.board && b.pot === spec.pot && (!spec.kind || b.kind === spec.kind)
+          ? eq(b.size === spec.size, b.why) : null;
+      }, { mode: 'rate', action: ['This size', 'Other size'] });
   const validHole = cards => cards.length === 2 && cards[0] !== cards[1] &&
     cards.every(c => /^[2-9TJQKA][cdhs]$/.test(c));
   const quiet=(F,s)=>F.st[s].through;
