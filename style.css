@@ -1892,6 +1892,11 @@ button.estn:active { color: var(--accent); }
 
 #rl-results .rl-sizing-block .rlctl, #od-tags .rl-sizing-block .rlctl {
   display: grid; grid-template-columns: repeat(6, minmax(0, 64px)); gap: 2px; }
+.rl-sizing-block .szboard { grid-column: 1 / -1; text-transform: none; font-size: 13px;
+  font-weight: 800; letter-spacing: .02em; color: var(--text); padding: 4px 0 0; }
+.rl-sizing-block .szboard.next { margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rl-sizing-block .rslabel.szkind,
+#rl-results .rl-sizing-block .rslabel.szkind { text-transform: none; }
 @media (max-width: 600px) {
   #rl-results .rl-sizing-block .rl-read-row { grid-template-columns: 40px minmax(0, 1fr); }
   #od-tags .rl-sizing-block { grid-template-columns: 40px minmax(0, 1fr); }

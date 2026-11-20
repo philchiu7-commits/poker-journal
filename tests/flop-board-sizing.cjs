@@ -102,13 +102,15 @@ for (const layout of ['READ_LAYOUT', 'LIVE_LAYOUT']) {
 }
 const rows = JSON.parse(JSON.stringify(run('FLOP_SIZING_SECTION.rows')));
 const visible = rows.filter(row => !row.hidden);
-assert.deepEqual(visible.map(r => r.label), [
-  'Low Value', 'Low Bluff',
-  'Mid Value', 'Mid Bluff',
-  'High Value', 'High Bluff',
+assert.deepEqual(visible.filter(r => r.head).map(r => [r.head, r.label]), [
+  ['Low Board', 'Value'],
+  ['Mid Board', 'Value'],
+  ['High Board', 'Value'],
 ]);
-assert.ok(visible.every(r => !/\b[VB]\b/.test(r.label) && !/Board Sizing/.test(r.label)));
-assert.equal(rows.some(r => r.hidden && !r.label), true);
+assert.deepEqual(visible.map(r => r.label), ['Value', 'Bluff', 'Value', 'Bluff', 'Value', 'Bluff']);
+assert.ok(visible.every(r => !/\b[VB]\b/.test(r.label) && !/Board Sizing/.test(r.label || '')));
+assert.ok(visible.filter(r => r.label === 'Bluff').every(r => !r.head));
+assert.equal(rows.some(r => r.hidden && !r.label && !r.head), true);
 for (const row of rows) assert.deepEqual(row.ids.map(item => item.label), ['SRP', '3BP']);
 const named = new Set(rows.flatMap(row => row.ids.map(item => item.readLabGroup)));
 for (const spec of Object.values(specById)) assert.ok(named.has(spec.group), spec.group);
