@@ -87,27 +87,35 @@ assert.notEqual(specById['f-board-sizing-low-srp-50'].id, specById['f-board-sizi
 
 const idOf = (x) => Array.isArray(x) ? x[0] : x && typeof x === 'object' ? (x.subs ? idOf(x.subs[0]) : x.id) : x;
 const idsOf = (x) => x && x.subs ? x.subs.map(idOf) : [idOf(x), ...((x && x.also) || []).map(idOf)];
+const legacyIds = Object.values(specById).filter(spec => !spec.kind).map(spec => spec.id).sort();
+const kindIds = Object.values(specById).filter(spec => spec.kind).map(spec => spec.id).sort();
 for (const layout of ['READ_LAYOUT', 'LIVE_LAYOUT']) {
-  const ids = [];
-  for (const cat of run(layout)) for (const sub of cat.subs) for (const row of sub.rows || [])
-    for (const item of row.ids || []) ids.push(...idsOf(item));
-  const sizing = ids.filter(id => String(id).startsWith('f-board-sizing-'));
-  assert.deepEqual(sizing.slice().sort(), Object.keys(specById).sort(), layout);
-  assert.equal(new Set(sizing).size, sizing.length, layout);
+  const shown = [], hidden = [];
+  for (const cat of run(layout)) for (const sub of cat.subs) for (const row of sub.rows || []) {
+    const ids = (row.ids || []).flatMap(idsOf).filter(id => String(id).startsWith('f-board-sizing-'));
+    (row.hidden ? hidden : shown).push(...ids);
+    assert.equal(cat.catchAll || cat.cat || false, false, layout + ' ' + cat.title);
+  }
+  assert.deepEqual(shown.slice().sort(), kindIds, layout);
+  assert.deepEqual(hidden.slice().sort(), legacyIds, layout);
+  assert.equal(new Set(shown.concat(hidden)).size, shown.length + hidden.length, layout);
 }
 const rows = JSON.parse(JSON.stringify(run('FLOP_SIZING_SECTION.rows')));
-assert.deepEqual(rows.map(r => r.label), [
-  'Low Board Sizing', 'Low V', 'Low B',
-  'Mid Board Sizing', 'Mid V', 'Mid B',
-  'High Board Sizing', 'High V', 'High B',
+const visible = rows.filter(row => !row.hidden);
+assert.deepEqual(visible.map(r => r.label), [
+  'Low Value', 'Low Bluff',
+  'Mid Value', 'Mid Bluff',
+  'High Value', 'High Bluff',
 ]);
-assert.equal(rows.find(r => r.label === 'Low V').aria, 'Low board sizing, Value');
-assert.equal(rows.find(r => r.label === 'High B').aria, 'High board sizing, Bluff');
-assert.equal(rows.find(r => r.label === 'Mid Board Sizing').aria, undefined);
+assert.ok(visible.every(r => !/\b[VB]\b/.test(r.label) && !/Board Sizing/.test(r.label)));
+assert.equal(rows.some(r => r.hidden && !r.label), true);
 for (const row of rows) assert.deepEqual(row.ids.map(item => item.label), ['SRP', '3BP']);
 const named = new Set(rows.flatMap(row => row.ids.map(item => item.readLabGroup)));
 for (const spec of Object.values(specById)) assert.ok(named.has(spec.group), spec.group);
 assert.equal(named.size, new Set(Object.values(specById).map(spec => spec.group)).size);
+const hiddenGroups = new Set(rows.filter(row => row.hidden).flatMap(row => row.ids.map(item => item.readLabGroup)));
+for (const spec of Object.values(specById).filter(spec => !spec.kind)) assert.ok(hiddenGroups.has(spec.group), spec.group);
+for (const spec of Object.values(specById).filter(spec => spec.kind)) assert.equal(hiddenGroups.has(spec.group), false, spec.group);
 const rules = Object.fromEntries(run("ReadLab.evaluate('nobody',[])").map(r => [r.id, r]));
 for (const spec of Object.values(specById)) {
   const rule = rules[spec.id];
