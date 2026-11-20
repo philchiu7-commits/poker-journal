@@ -169,21 +169,21 @@ const readChip = (id, state) => {
    doesn't. */
 const wb = (bet, x) => [{ label: "When Bet", lines: true, ids: bet }, { label: "When Check", lines: true, ids: x }];
 const FLOP_SIZING_SECTION = { readLabSection: 'Flop Sizing', sizing: true,
-  rows: ['low', 'mid', 'high'].flatMap(board => [
-    { id: '', mark: '' },
-    { id: 'v', mark: 'V', aria: 'Value' },
-    { id: 'b', mark: 'B', aria: 'Bluff' },
-  ].map(kind => {
+  rows: ['low', 'mid', 'high'].flatMap(board => {
     const name = board === 'low' ? 'Low' : board === 'mid' ? 'Mid' : 'High';
-    return { label: kind.mark ? `${name} ${kind.mark}` : `${name} Board Sizing`,
-      ...(kind.aria ? { aria: `${name} board sizing, ${kind.aria}`, title: kind.aria } : {}),
-      lines: true,
-      ids: ['srp', '3bp'].map(pot => {
-        const specs = FLOP_BOARD_SIZING.filter(r => r.board === board && r.pot === pot && (r.kind || '') === kind.id);
-        return { id: specs[0].id, label: pot.toUpperCase(), readLabGroup: specs[0].group,
-          chip: specs[0].label, chips: true, also: specs.slice(1).map(r => [r.id, r.label]) };
-      }) };
-  })) };
+    const line = (kind) => ['srp', '3bp'].map(pot => {
+      const specs = FLOP_BOARD_SIZING.filter(r => r.board === board && r.pot === pot && (r.kind || '') === kind);
+      return { id: specs[0].id, label: pot.toUpperCase(), readLabGroup: specs[0].group,
+        chip: specs[0].label, chips: true, also: specs.slice(1).map(r => [r.id, r.label]) };
+    });
+    /* The unclassified sizes stay placed, on a hidden row, so a saved read keeps
+       its id and a catch-all cannot file it under Other. The row is not drawn. */
+    return [
+      { label: `${name} Value`, lines: true, ids: line('v') },
+      { label: `${name} Bluff`, lines: true, ids: line('b') },
+      { hidden: true, lines: true, ids: line('') },
+    ];
+  }) };
 const READ_LAYOUT = [
   /* No catch-all: this tab draws the streets and nothing else, so a read with
      no row here simply isn't on the Online tab. Every read still has a home on
@@ -1337,6 +1337,13 @@ function renderReadLabGroups(o) {
       const groups = sections.get(sub.readLabSection || (sub.label ? street + " · " + sub.label.slice(3) : cat.title));
       if (!groups?.size) return "";
       const rows = sub.rows.map(row => {
+        if (row.hidden) {
+          for (const item of row.ids) {
+            const names = item.label === "Open" ? ["Open wS", "Open nS"] : [item.readLabGroup || item.label];
+            for (const name of names) groups.delete(name);
+          }
+          return "";
+        }
         const lines = row.ids.map(item => {
           const names = item.label === "Open" ? ["Open wS", "Open nS"] : [item.readLabGroup || item.label];
           return names.map(name => {
