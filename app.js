@@ -168,8 +168,10 @@ const readChip = (id, state) => {
    plain reads into a chip strip underneath just looks broken next to one that
    doesn't. */
 const wb = (bet, x) => [{ label: "When Bet", lines: true, ids: bet }, { label: "When Check", lines: true, ids: x }];
+const sizingHeadHTML = (row) => row.head
+  ? `<div class="szboard${row.next ? " next" : ""}">${esc(row.head)}</div>` : "";
 const FLOP_SIZING_SECTION = { readLabSection: 'Flop Sizing', sizing: true,
-  rows: ['low', 'mid', 'high'].flatMap(board => {
+  rows: ['low', 'mid', 'high'].flatMap((board, i) => {
     const name = board === 'low' ? 'Low' : board === 'mid' ? 'Mid' : 'High';
     const line = (kind) => ['srp', '3bp'].map(pot => {
       const specs = FLOP_BOARD_SIZING.filter(r => r.board === board && r.pot === pot && (r.kind || '') === kind);
@@ -179,8 +181,8 @@ const FLOP_SIZING_SECTION = { readLabSection: 'Flop Sizing', sizing: true,
     /* The unclassified sizes stay placed, on a hidden row, so a saved read keeps
        its id and a catch-all cannot file it under Other. The row is not drawn. */
     return [
-      { label: `${name} Value`, lines: true, ids: line('v') },
-      { label: `${name} Bluff`, lines: true, ids: line('b') },
+      { head: `${name} Board`, next: i > 0, label: 'Value', lines: true, ids: line('v') },
+      { label: 'Bluff', lines: true, ids: line('b') },
       { hidden: true, lines: true, ids: line('') },
     ];
   }) };
@@ -1353,7 +1355,8 @@ function renderReadLabGroups(o) {
             return line(item.readLabGroup ? item.label : name, entries, item);
           }).join("");
         }).join("");
-        return lines ? (row.label ? `<span class="rslabel"${row.aria ? ` aria-label="${esc(row.aria)}"` : ""}${row.title ? ` title="${esc(row.title)}"` : ""}>${esc(row.label)}</span>` : "") +
+        return lines ? sizingHeadHTML(row) +
+          (row.label ? `<span class="rslabel szkind"${row.aria ? ` aria-label="${esc(row.aria)}"` : ""}${row.title ? ` title="${esc(row.title)}"` : ""}>${esc(row.label)}</span>` : "") +
           `<div class="readlines">${lines}</div>` : "";
       }).join("");
       const rest = [...groups].map(([name, entries]) => line(name, entries)).join("");
@@ -4225,7 +4228,8 @@ function renderOppReads(o) {
           `<div class="rlctl${wide(x)}${gridCols(x) ? " rlgrid" : ""}"${gridCols(x) ? ` style="--cols:${gridCols(x)}"` : ""}>${body}</div>`;
       }).join("");
       const chips = items.filter((x) => !asLine(x)).map((x) => readBtn(idOf(x), labelOf(x), false)).join("");
-      return `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel"${r.aria ? ` aria-label="${esc(r.aria)}"` : ""}${r.title ? ` title="${esc(r.title)}"` : ""}>${esc(r.label)}</span>` : ""}` +
+      return sizingHeadHTML(r) +
+        `<div class="readsub${r.sep ? " sep" : ""}">${r.label ? `<span class="rslabel szkind"${r.aria ? ` aria-label="${esc(r.aria)}"` : ""}${r.title ? ` title="${esc(r.title)}"` : ""}>${esc(r.label)}</span>` : ""}` +
         (lines ? `<div class="readlines">${lines}</div>` : "") +
         (chips ? `<div class="chiprow readwrap">${chips}</div>` : "") +
         (lines || chips ? "" : `<span class="chipnote">—</span>`) + `</div>`;
